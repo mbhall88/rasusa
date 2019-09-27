@@ -15,3 +15,10 @@ script:
   - cargo fmt -- --check
   - cargo clippy
   - cargo test
+
+notifications:
+  email:
+    recipients:
+      - michael@mbh.sh
+    on_success: never # default: change
+    on_failure: always # default: always
