@@ -36,7 +36,7 @@ fn parse_genome_size(s: String) -> Result<u64, String> {
     };
     let size = match captures.name("size") {
         Some(x) => x.as_str().parse::<f64>().unwrap(),
-        None => 0 as f64,
+        None => f64::from(0),
     };
     let metric_suffix = match captures.name("sfx") {
         Some(x) if "b".contains(x.as_str()) => Ok(MetricSuffix::Base),
