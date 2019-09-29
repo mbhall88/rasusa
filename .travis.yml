@@ -1,6 +1,6 @@
 language: rust
 cache: cargo
-dist: bionic
+dist: xenial
 os:
   - linux
   - osx
@@ -39,9 +39,6 @@ script:
 
 after_success: |
   PKG_NAME="rasusa"
-  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-    /usr/local/bin/pip install six
-  fi
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
   tar xzf master.tar.gz &&
   cd kcov-master &&
