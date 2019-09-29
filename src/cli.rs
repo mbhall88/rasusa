@@ -34,10 +34,12 @@ fn parse_genome_size(s: String) -> Result<u64, String> {
         Some(cap) => cap,
         None => return Err("No matches found in genome size string".to_string()),
     };
-    let size = match captures.name("size") {
-        Some(x) => x.as_str().parse::<f64>().unwrap(),
-        None => f64::from(0),
-    };
+    let size = captures
+        .name("size")
+        .unwrap()
+        .as_str()
+        .parse::<f64>()
+        .unwrap();
     let metric_suffix = match captures.name("sfx") {
         Some(x) if "b".contains(x.as_str()) => Ok(MetricSuffix::Base),
         Some(x) if "kb".contains(x.as_str()) => Ok(MetricSuffix::Kilo),
@@ -70,12 +72,12 @@ fn parse_coverage(arg: String) -> Result<u32, String> {
             );
         }
     };
-    match captures.name("covg") {
-        Some(x) => Ok(x.as_str().parse::<f64>().unwrap() as u32),
-        None => {
-            Err("Coverage should be an int or float and can end in an x character.".to_string())
-        }
-    }
+    Ok(captures
+        .name("covg")
+        .unwrap()
+        .as_str()
+        .parse::<f64>()
+        .unwrap() as u32)
 }
 
 fn is_coverage_valid(arg: String) -> Result<(), String> {
