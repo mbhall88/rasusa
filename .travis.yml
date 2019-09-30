@@ -1,19 +1,14 @@
 language: rust
 cache: cargo
-dist: xenial
-os:
-  - linux
-  - osx
+dist: bionic
+os: linux
 rust:
   - stable
   - beta
   - nightly
 sudo: true
 before_install:
-  - |
-    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-      sudo apt-get update
-    fi
+  - sudo apt-get update
 addons:
   apt:
     packages:
@@ -24,10 +19,6 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
-  homebrew:
-    packages:
-      - kcov
-    update: true
 matrix:
   allow_failures:
     - rust: nightly
@@ -43,19 +34,17 @@ script:
 
 after_success: |
   PKG_NAME="rasusa"
-  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-    wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-    tar xzf master.tar.gz &&
-    cd kcov-master &&
-    mkdir build &&
-    cd build &&
-    cmake .. &&
-    make &&
-    make install DESTDIR=../../kcov-build &&
-    cd ../.. &&
-    rm -rf kcov-master
-    export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
-  fi
+  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+  tar xzf master.tar.gz &&
+  cd kcov-master &&
+  mkdir build &&
+  cd build &&
+  cmake .. &&
+  make &&
+  make install DESTDIR=../../kcov-build &&
+  cd ../.. &&
+  rm -rf kcov-master
+  export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
   for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file" || exit 1; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
