@@ -14,9 +14,6 @@ before_install:
     if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
       sudo apt-get update
     fi
-    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-     pip install six
-    fi
 addons:
   apt:
     packages:
@@ -27,6 +24,9 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
+  homebrew:
+    packages:
+      - kcov
 matrix:
   allow_failures:
     - rust: nightly
@@ -42,18 +42,20 @@ script:
 
 after_success: |
   PKG_NAME="rasusa"
-
-  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-  tar xzf master.tar.gz &&
-  cd kcov-master &&
-  mkdir build &&
-  cd build &&
-  cmake .. &&
-  make &&
-  make install DESTDIR=../../kcov-build &&
-  cd ../.. &&
-  rm -rf kcov-master &&
-  for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
+  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+    wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+    tar xzf master.tar.gz &&
+    cd kcov-master &&
+    mkdir build &&
+    cd build &&
+    cmake .. &&
+    make &&
+    make install DESTDIR=../../kcov-build &&
+    cd ../.. &&
+    rm -rf kcov-master
+    export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
+  fi
+  for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
 
