@@ -14,6 +14,9 @@ before_install:
     if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
       sudo apt-get update
     fi
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+      brew update
+    fi
 addons:
   apt:
     packages:
@@ -55,7 +58,7 @@ after_success: |
     rm -rf kcov-master
     export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
   fi
-  for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
+  for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file" || exit 1; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
 
