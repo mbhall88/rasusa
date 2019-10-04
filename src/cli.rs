@@ -16,7 +16,7 @@ pub struct Cli {
     #[structopt(short = "o", long = "output", parse(from_os_str))]
     output: Option<PathBuf>,
 
-    /// Size of the genome to calculate coverage with respect to. This can be either an integer or an integer/float with a metric suffix. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
+    /// Size of the genome to calculate coverage with respect to. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
     #[structopt(short = "g", long = "genome-size")]
     genome_size: GenomeSize,
 
