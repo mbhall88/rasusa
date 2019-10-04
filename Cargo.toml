@@ -10,5 +10,6 @@ travis-ci = { repository = "mbhall88/rasusa" }
 codecov = { repository = "mbhall88/rasusa", branch = "master", service = "github" }
 
 [dependencies]
-clap = {version = "~2.27.0", features = ["yaml"]}
+structopt = "0.3.2"
+clap = "2.33.0"
 regex = "1"

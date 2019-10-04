@@ -1,10 +1,37 @@
-extern crate clap;
-
-use clap::{App, Arg, ArgMatches};
 use regex::Regex;
-use std::ffi::OsString;
 use std::ops::Mul;
+use std::path::PathBuf;
 use std::str::FromStr;
+use structopt::StructOpt;
+
+/// Randomly sub-sample reads to a specified coverage
+#[derive(Debug, StructOpt)]
+#[structopt()]
+pub struct Cli {
+    /// The fast{a,q} file to sub-sample.
+    #[structopt(short = "i", long = "input", parse(from_os_str))]
+    input: PathBuf,
+
+    /// Output file, stdout if not present.
+    #[structopt(short = "o", long = "output", parse(from_os_str))]
+    output: Option<PathBuf>,
+
+    /// Size of the genome to calculate coverage with respect to. This can be either an integer or an integer/float with a metric suffix. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
+    #[structopt(short = "g", long = "genome-size")]
+    genome_size: GenomeSize,
+
+    /// The desired coverage to sub-sample the reads to.
+    #[structopt(short = "c", long = "coverage")]
+    coverage: Coverage,
+
+    /// Random seed to use.
+    #[structopt(short = "s", long = "seed")]
+    seed: Option<u64>,
+
+    /// Switch on verbosity
+    #[structopt(short)]
+    verbose: bool,
+}
 
 #[derive(PartialEq, Debug)]
 enum MetricSuffix {
@@ -29,7 +56,7 @@ impl Mul<MetricSuffix> for f64 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialOrd, PartialEq)]
 struct GenomeSize(u64);
 
 impl PartialEq<u64> for GenomeSize {
@@ -70,7 +97,7 @@ impl FromStr for GenomeSize {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialOrd, PartialEq)]
 struct Coverage(u32);
 
 impl PartialEq<u32> for Coverage {
@@ -103,68 +130,118 @@ impl FromStr for Coverage {
     }
 }
 
-pub fn parse_args<'a, I, T>(args: I) -> ArgMatches<'a>
-where
-    I: IntoIterator<Item = T>,
-    T: Into<OsString> + Clone,
-{
-    App::new("rasusa")
-        .version("0.1.0")
-        .author("Michael B. Hall <michael@mbh.sh>")
-        .about("Randomly sub-sample reads to a specified coverage")
-        .arg(
-            Arg::with_name("input")
-                .short("i")
-                .long("input")
-                .value_name("INPUT")
-                .help("The fastq file to sub-sample.")
-                .required(true)
-                .takes_value(true)
-                .display_order(1),
-        )
-        .arg(
-            Arg::with_name("genome_size")
-                .short("g")
-                .long("genome-size")
-                .value_name("GENOME SIZE")
-                .help(
-                    // todo: fix formatting of text in terminal
-                    "Size of the genome to calculate coverage with respect to. \
-                     This can be either an integer or an integer/float with a metric suffix. \
-                     An Example of this is 4.3kb will indicate a genome size of 4300. \
-                     Other examples include 7Tb, 9.1gb, 90MB, 6009 etc.",
-                )
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("coverage")
-                .short("c")
-                .long("coverage")
-                .value_name("COVG")
-                .help("The desired coverage to sub-sample the reads to.")
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("v")
-                .short("v")
-                .multiple(true)
-                .help("Sets the level of verbosity"),
-        )
-        .get_matches_from(args)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_args_given_raises_error() {
+        let passed_args = vec!["rasusa"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::MissingRequiredArgument;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn no_input_file_given_raises_error() {
+        let passed_args = vec!["rasusa", "-c", "30", "-g", "3mb"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::MissingRequiredArgument;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn no_coverage_given_raises_error() {
+        let passed_args = vec!["rasusa", "-i", "in.fq", "-g", "3mb"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::MissingRequiredArgument;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn invalid_coverage_given_raises_error() {
+        let passed_args = vec!["rasusa", "-i", "in.fq", "-g", "3mb", "-c", "foo"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ValueValidation;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn no_genome_size_given_raises_error() {
+        let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::MissingRequiredArgument;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn invalid_genome_size_given_raises_error() {
+        let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8jb"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ValueValidation;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn invalid_seed_given_raises_error() {
+        let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "foo"];
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ValueValidation;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn all_valid_args_parsed_as_expected() {
+        let passed_args = vec![
+            "rasusa",
+            "-i",
+            "in.fq",
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert_eq!(args.input, PathBuf::from_str("in.fq").unwrap());
+        assert_eq!(args.coverage, Coverage(5));
+        assert_eq!(args.genome_size, GenomeSize(8_000_000));
+        assert_eq!(args.seed, Some(88));
+        assert_eq!(args.output, PathBuf::from_str("my/output/file.fq").ok())
+    }
 
     #[test]
     fn float_multiply_with_base_unit() {
         let actual = 4.5 * MetricSuffix::Base;
         let expected = 4.5;
 
-        assert_eq!(actual, expected)
+        let diff = (actual.abs() - expected).abs();
+        assert!(diff < std::f64::EPSILON)
     }
 
     #[test]

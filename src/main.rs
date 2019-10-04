@@ -1,7 +1,8 @@
 mod cli;
 
-pub use crate::cli::parse_args;
+pub use crate::cli::Cli;
+use structopt::StructOpt;
 
 fn main() {
-    let args = cli::parse_args(std::env::args());
+    let _args = Cli::from_args();
 }
