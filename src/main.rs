@@ -1,5 +1,4 @@
 mod cli;
-
 pub use crate::cli::Cli;
 use structopt::StructOpt;
 

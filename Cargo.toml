@@ -13,3 +13,4 @@ codecov = { repository = "mbhall88/rasusa", branch = "master", service = "github
 structopt = "0.3.2"
 clap = "2.33.0"
 regex = "1"
+snafu = "0.5.0"

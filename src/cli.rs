@@ -1,4 +1,5 @@
 use regex::Regex;
+use snafu::Snafu;
 use std::ops::Mul;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -33,6 +34,19 @@ pub struct Cli {
     verbose: bool,
 }
 
+#[derive(Debug, Snafu, PartialEq)]
+enum Invalid {
+    #[snafu(display("{} is not a valid metric suffix", suffix))]
+    MetricSuffixString { suffix: String },
+    #[snafu(display(
+        "{} is not a valid genome size. Valid forms include 4gb, 3000, 8.7Kb etc.",
+        genome_size
+    ))]
+    GenomeSizeString { genome_size: String },
+    #[snafu(display("{} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character", coverage))]
+    CoverageValue { coverage: String },
+}
+
 #[derive(PartialEq, Debug)]
 enum MetricSuffix {
     Base,
@@ -40,6 +54,27 @@ enum MetricSuffix {
     Mega,
     Giga,
     Tera,
+}
+
+impl FromStr for MetricSuffix {
+    type Err = Invalid;
+
+    fn from_str(suffix: &str) -> Result<Self, Self::Err> {
+        let suffix_lwr = suffix.to_lowercase();
+        let metric_suffix = match suffix_lwr.as_str() {
+            s if "b".contains(s) => MetricSuffix::Base,
+            s if "kb".contains(s) => MetricSuffix::Kilo,
+            s if "mb".contains(s) => MetricSuffix::Mega,
+            s if "gb".contains(s) => MetricSuffix::Giga,
+            s if "tb".contains(s) => MetricSuffix::Tera,
+            _ => {
+                return Err(Invalid::MetricSuffixString {
+                    suffix: suffix.to_string(),
+                });
+            }
+        };
+        Ok(metric_suffix)
+    }
 }
 
 impl Mul<MetricSuffix> for f64 {
@@ -66,17 +101,18 @@ impl PartialEq<u64> for GenomeSize {
 }
 
 impl FromStr for GenomeSize {
-    type Err = String;
+    type Err = Invalid;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let text = s.to_lowercase();
         let re = Regex::new(r"(?P<size>[0-9]*\.?[0-9]+)(?P<sfx>\w*)$").unwrap();
         let captures = match re.captures(text.as_str()) {
             Some(cap) => cap,
-            None => return Err(
-                "Invalid genome size format. Accepted formats include: 4000, 4mb, 7Gb, 6.7Kb etc."
-                    .to_string(),
-            ),
+            None => {
+                return Err(Invalid::GenomeSizeString {
+                    genome_size: s.to_string(),
+                });
+            }
         };
         let size = captures
             .name("size")
@@ -85,13 +121,12 @@ impl FromStr for GenomeSize {
             .parse::<f64>()
             .unwrap();
         let metric_suffix = match captures.name("sfx") {
-            Some(x) if "b".contains(x.as_str()) => MetricSuffix::Base,
-            Some(x) if "kb".contains(x.as_str()) => MetricSuffix::Kilo,
-            Some(x) if "mb".contains(x.as_str()) => MetricSuffix::Mega,
-            Some(x) if "gb".contains(x.as_str()) => MetricSuffix::Giga,
-            Some(x) if "tb".contains(x.as_str()) => MetricSuffix::Tera,
-            None => MetricSuffix::Base,
-            _ => return Err("Invalid metric suffix.".to_string()),
+            Some(suffix) => MetricSuffix::from_str(suffix.as_str())?,
+            None => {
+                return Err(Invalid::MetricSuffixString {
+                    suffix: "".to_string(),
+                });
+            }
         };
         Ok(GenomeSize((size * metric_suffix) as u64))
     }
@@ -371,6 +406,64 @@ mod tests {
     fn float_ending_in_x_coverage_returns_int() {
         let actual = Coverage::from_str("1.9X").unwrap();
         let expected = 1 as u32;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn mega_suffix_from_string() {
+        let actual = MetricSuffix::from_str("MB").unwrap();
+        let expected = MetricSuffix::Mega;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn kilo_suffix_from_string() {
+        let actual = MetricSuffix::from_str("kB").unwrap();
+        let expected = MetricSuffix::Kilo;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn giga_suffix_from_string() {
+        let actual = MetricSuffix::from_str("Gb").unwrap();
+        let expected = MetricSuffix::Giga;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn tera_suffix_from_string() {
+        let actual = MetricSuffix::from_str("tb").unwrap();
+        let expected = MetricSuffix::Tera;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn base_suffix_from_string() {
+        let actual = MetricSuffix::from_str("B").unwrap();
+        let expected = MetricSuffix::Base;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn empty_string_is_base_metric_suffix() {
+        let suffix = String::from("");
+        let actual = MetricSuffix::from_str(suffix.as_str()).unwrap();
+        let expected = MetricSuffix::Base;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn invalid_suffix_raises_error() {
+        let suffix = String::from("ub");
+        let actual = MetricSuffix::from_str(suffix.as_str()).unwrap_err();
+        let expected = Invalid::MetricSuffixString { suffix };
 
         assert_eq!(actual, expected)
     }
