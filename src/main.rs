@@ -1,11 +1,14 @@
 mod cli;
+mod file_type;
 pub use crate::cli::Cli;
+pub use crate::file_type::FileType;
 use structopt::StructOpt;
 
 fn main() {
-    let _args = Cli::from_args();
-    // todo:
+    let args = Cli::from_args();
     // determine if file is fasta or fastq
+    let _input_type = FileType::from_path(&args.input);
+    // todo:
     // get reader for fastx file
     // iterate over fastx file and store read lengths with read index
     // calculate target total length

@@ -11,31 +11,31 @@ use structopt::StructOpt;
 pub struct Cli {
     /// The fast{a,q} file to sub-sample.
     #[structopt(short = "i", long = "input", parse(from_os_str))]
-    input: PathBuf,
+    pub input: PathBuf,
 
     /// Output file, stdout if not present.
     #[structopt(short = "o", long = "output", parse(from_os_str))]
-    output: Option<PathBuf>,
+    pub output: Option<PathBuf>,
 
     /// Size of the genome to calculate coverage with respect to. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
     #[structopt(short = "g", long = "genome-size")]
-    genome_size: GenomeSize,
+    pub genome_size: GenomeSize,
 
     /// The desired coverage to sub-sample the reads to.
     #[structopt(short = "c", long = "coverage")]
-    coverage: Coverage,
+    pub coverage: Coverage,
 
     /// Random seed to use.
     #[structopt(short = "s", long = "seed")]
-    seed: Option<u64>,
+    pub seed: Option<u64>,
 
     /// Switch on verbosity
     #[structopt(short)]
-    verbose: bool,
+    pub verbose: bool,
 }
 
 #[derive(Debug, Snafu, PartialEq)]
-enum Invalid {
+pub enum Invalid {
     #[snafu(display("{} is not a valid metric suffix", suffix))]
     MetricSuffixString { suffix: String },
     #[snafu(display(
@@ -92,7 +92,7 @@ impl Mul<MetricSuffix> for f64 {
 }
 
 #[derive(Debug, PartialOrd, PartialEq)]
-struct GenomeSize(u64);
+pub struct GenomeSize(u64);
 
 impl PartialEq<u64> for GenomeSize {
     fn eq(&self, other: &u64) -> bool {
@@ -133,7 +133,7 @@ impl FromStr for GenomeSize {
 }
 
 #[derive(Debug, PartialOrd, PartialEq)]
-struct Coverage(u32);
+pub struct Coverage(u32);
 
 impl PartialEq<u32> for Coverage {
     fn eq(&self, other: &u32) -> bool {
