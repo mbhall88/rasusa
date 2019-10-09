@@ -15,3 +15,9 @@ clap = "2.33.0"
 regex = "1"
 snafu = "0.5.0"
 bio = "0.29.0"
+failure = "0.1.5"
+exitfailure = "0.5.1"
+
+[dev-dependencies]
+assert_cmd = "0.10"
+predicates = "1"

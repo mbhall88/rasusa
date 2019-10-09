@@ -2,12 +2,14 @@ mod cli;
 mod fastx;
 pub use crate::cli::Cli;
 pub use crate::fastx::FileType;
+use exitfailure::ExitFailure;
+//use failure::ResultExt;
 use structopt::StructOpt;
 
-fn main() {
+fn main() -> Result<(), ExitFailure> {
     let args = Cli::from_args();
     // determine if file is fasta or fastq
-    let _input_type = FileType::from_path(&args.input);
+    let _input_type = FileType::from_path(&args.input)?;
     // todo:
     // get reader for fastx file
     // iterate over fastx file and store read lengths with read index
@@ -22,4 +24,5 @@ fn main() {
     // iterate over fastx with index counter
     //     if index in bitvector is true: output read
     //     if index == StopIdx: break
+    Ok(())
 }
