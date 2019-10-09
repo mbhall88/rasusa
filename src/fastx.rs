@@ -2,6 +2,19 @@ use snafu::Snafu;
 use std::path::Path;
 use std::str::FromStr;
 
+trait PathExt {
+    fn is_compressed(&self) -> bool;
+}
+
+impl PathExt for Path {
+    fn is_compressed(&self) -> bool {
+        match self.extension() {
+            Some(p) => p == "gz",
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum FileType {
     Fasta,
@@ -24,10 +37,8 @@ impl FromStr for FileType {
 
 impl FileType {
     pub(crate) fn from_path(path: &Path) -> Result<FileType, Invalid> {
-        let is_compressed = match path.to_str() {
-            Some(p) if p.ends_with("gz") => true,
-            _ => false,
-        };
+        let is_compressed = path.is_compressed();
+
         let uncompressed_path = if is_compressed {
             path.with_extension("")
         } else {
@@ -148,5 +159,19 @@ mod tests {
         };
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn path_is_compressed() {
+        let path = Path::new("this/is/compres.gz");
+
+        assert!(path.is_compressed())
+    }
+
+    #[test]
+    fn path_is_not_compressed() {
+        let path = Path::new("this/is/compres.fa");
+
+        assert!(!path.is_compressed())
     }
 }

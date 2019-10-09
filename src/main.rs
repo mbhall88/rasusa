@@ -1,7 +1,7 @@
 mod cli;
-mod file_type;
+mod fastx;
 pub use crate::cli::Cli;
-pub use crate::file_type::FileType;
+pub use crate::fastx::FileType;
 use structopt::StructOpt;
 
 fn main() {
