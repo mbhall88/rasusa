@@ -1,7 +1,7 @@
 mod cli;
 mod fastx;
 pub use crate::cli::Cli;
-pub use crate::fastx::FileType;
+pub use crate::fastx::Fastx;
 use exitfailure::ExitFailure;
 //use failure::ResultExt;
 use structopt::StructOpt;
@@ -9,9 +9,10 @@ use structopt::StructOpt;
 fn main() -> Result<(), ExitFailure> {
     let args = Cli::from_args();
     // determine if file is fasta or fastq
-    let _input_type = FileType::from_path(&args.input)?;
+    let _input_fastx = Fastx::from_path(&args.input)?;
     // todo:
     // get reader for fastx file
+    // get file handle for output file/stdout
     // iterate over fastx file and store read lengths with read index
     // calculate target total length
     // initialise bitvector to length of number of reads

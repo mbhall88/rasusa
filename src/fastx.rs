@@ -1,5 +1,5 @@
 use snafu::Snafu;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 trait PathExt {
@@ -57,6 +57,26 @@ impl FileType {
                 filepath: String::from(path.to_str().unwrap()),
             }),
         }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Fastx {
+    path: PathBuf,
+    filetype: FileType,
+    is_compressed: bool,
+}
+
+impl Fastx {
+    pub fn from_path(path: &Path) -> Result<Self, Invalid> {
+        let filetype = FileType::from_path(&path)?;
+        let is_compressed = path.is_compressed();
+
+        Ok(Fastx {
+            path: path.to_path_buf(),
+            filetype,
+            is_compressed,
+        })
     }
 }
 
@@ -173,5 +193,30 @@ mod tests {
         let path = Path::new("this/is/compres.fa");
 
         assert!(!path.is_compressed())
+    }
+
+    #[test]
+    fn fastx_from_fasta() {
+        let path = Path::new("data/my.fa");
+
+        let actual = Fastx::from_path(path).unwrap();
+        let expected = Fastx {
+            path: path.to_path_buf(),
+            filetype: FileType::Fasta,
+            is_compressed: false,
+        };
+
+        assert_eq!(actual, expected)
+    }
+    #[test]
+    fn fastx_from_non_fastaq_fails() {
+        let path = Path::new("data/my.gz");
+
+        let actual = Fastx::from_path(path).unwrap_err();
+        let expected = Invalid::UnknownFileType {
+            filepath: String::from(path.to_str().unwrap()),
+        };
+
+        assert_eq!(actual, expected)
     }
 }
