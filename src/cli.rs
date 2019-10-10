@@ -120,14 +120,8 @@ impl FromStr for GenomeSize {
             .as_str()
             .parse::<f64>()
             .unwrap();
-        let metric_suffix = match captures.name("sfx") {
-            Some(suffix) => MetricSuffix::from_str(suffix.as_str())?,
-            None => {
-                return Err(Invalid::MetricSuffixString {
-                    suffix: "".to_string(),
-                });
-            }
-        };
+        let metric_suffix = MetricSuffix::from_str(captures.name("sfx").unwrap().as_str())?;
+
         Ok(GenomeSize((size * metric_suffix) as u64))
     }
 }
@@ -142,16 +136,16 @@ impl PartialEq<u32> for Coverage {
 }
 
 impl FromStr for Coverage {
-    type Err = String;
+    type Err = Invalid;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let re = Regex::new(r"^(?P<covg>[0-9]*\.?[0-9]+)(?i)x?$").unwrap();
         let captures = match re.captures(s) {
             Some(cap) => cap,
             None => {
-                return Err(
-                    "Coverage should be an int or float and can end in an x character.".to_string(),
-                );
+                return Err(Invalid::CoverageValue {
+                    coverage: s.to_string(),
+                });
             }
         };
         Ok(Coverage(
@@ -337,16 +331,23 @@ mod tests {
 
     #[test]
     fn invalid_suffix_returns_err() {
-        let actual = GenomeSize::from_str(".77uB");
+        let genome_size = String::from(".77uB");
+        let actual = GenomeSize::from_str(genome_size.as_str()).unwrap_err();
+        let expected = Invalid::MetricSuffixString {
+            suffix: String::from("ub"),
+        };
 
-        assert!(actual.is_err());
+        assert_eq!(actual, expected);
     }
 
     #[test]
     fn empty_string_returns_error() {
-        let actual = GenomeSize::from_str("");
+        let actual = GenomeSize::from_str("").unwrap_err();
+        let expected = Invalid::GenomeSizeString {
+            genome_size: String::from(""),
+        };
 
-        assert!(actual.is_err());
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -374,16 +375,22 @@ mod tests {
 
     #[test]
     fn empty_coverage_returns_err() {
-        let actual = Coverage::from_str("");
+        let coverage = String::from("");
 
-        assert!(actual.is_err())
+        let actual = Coverage::from_str(coverage.as_str()).unwrap_err();
+        let expected = Invalid::CoverageValue { coverage };
+
+        assert_eq!(actual, expected)
     }
 
     #[test]
     fn non_number_coverage_returns_err() {
-        let actual = Coverage::from_str("foo");
+        let coverage = String::from("foo");
 
-        assert!(actual.is_err())
+        let actual = Coverage::from_str(coverage.as_str()).unwrap_err();
+        let expected = Invalid::CoverageValue { coverage };
+
+        assert_eq!(actual, expected)
     }
 
     #[test]
