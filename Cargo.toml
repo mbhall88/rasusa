@@ -17,7 +17,9 @@ snafu = "0.5.0"
 bio = "0.29.0"
 failure = "0.1.5"
 exitfailure = "0.5.1"
+flate2 = "1.0.12"
 
 [dev-dependencies]
 assert_cmd = "0.10"
 predicates = "1"
+tempfile = "3.1.0"

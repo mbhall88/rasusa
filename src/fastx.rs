@@ -1,4 +1,7 @@
+use flate2::bufread::MultiGzDecoder;
 use snafu::Snafu;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -25,6 +28,9 @@ pub enum FileType {
 pub enum Invalid {
     #[snafu(display("File type of {} is not fasta or fastq", filepath))]
     UnknownFileType { filepath: String },
+
+    #[snafu(display("Input file could not be open: {}", error))]
+    CouldNottOpenInputFile { error: String },
 }
 
 impl FromStr for FileType {
@@ -78,12 +84,31 @@ impl Fastx {
             is_compressed,
         })
     }
+
+    pub fn open(&self) -> Result<Box<dyn std::io::Read>, Invalid> {
+        let file = match File::open(&self.path) {
+            Ok(fh) => fh,
+            Err(err) => {
+                return Err(Invalid::CouldNottOpenInputFile {
+                    error: err.to_string(),
+                });
+            }
+        };
+        let file_handle = BufReader::new(file);
+
+        if self.is_compressed {
+            Ok(Box::new(MultiGzDecoder::new(file_handle)))
+        } else {
+            Ok(Box::new(file_handle))
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
+    use std::io::{Read, Write};
+    use tempfile::Builder;
 
     #[test]
     fn fasta_extension_returns_fasta_filetype() {
@@ -208,6 +233,7 @@ mod tests {
 
         assert_eq!(actual, expected)
     }
+
     #[test]
     fn fastx_from_non_fastaq_fails() {
         let path = Path::new("data/my.gz");
@@ -216,6 +242,47 @@ mod tests {
         let expected = Invalid::UnknownFileType {
             filepath: String::from(path.to_str().unwrap()),
         };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn open_invalid_input_file_raises_error() {
+        let path = Path::new("i/dont/exist.fa");
+        let fastx = Fastx::from_path(path).unwrap();
+
+        let actual = fastx.open().err().unwrap();
+        let expected = Invalid::CouldNottOpenInputFile {
+            error: String::from("No such file or directory (os error 2)"),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn open_valid_fastq_file() {
+        let text = "@read1\nACGT\n+\n!!!!";
+        let mut file = Builder::new().suffix(".fastq").tempfile().unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+        let mut reader = Fastx::from_path(file.path()).unwrap().open().unwrap();
+
+        let mut actual = String::new();
+        reader.read_to_string(&mut actual).unwrap();
+
+        assert_eq!(actual, text)
+    }
+
+    #[test]
+    fn open_valid_compressed_fastq_file() {
+        let test_file = Path::new("tests/cases/file1.fq.gz");
+        let fastx = Fastx::from_path(test_file).unwrap();
+        let reader = fastx.open();
+        let mut reader = reader.unwrap();
+        let mut s = String::new();
+        reader.read_to_string(&mut s).unwrap();
+
+        let actual = s;
+        let expected = "@read1\nACGT\n+\n!!!!\n";
 
         assert_eq!(actual, expected)
     }
