@@ -1,7 +1,9 @@
 use flate2::bufread::MultiGzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use snafu::Snafu;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -30,7 +32,10 @@ pub enum Invalid {
     UnknownFileType { filepath: String },
 
     #[snafu(display("Input file could not be open: {}", error))]
-    CouldNottOpenInputFile { error: String },
+    OpenInputFile { error: String },
+
+    #[snafu(display("Output file could not be created: {}", error))]
+    CreateOutputFile { error: String },
 }
 
 impl FromStr for FileType {
@@ -89,7 +94,7 @@ impl Fastx {
         let file = match File::open(&self.path) {
             Ok(fh) => fh,
             Err(err) => {
-                return Err(Invalid::CouldNottOpenInputFile {
+                return Err(Invalid::OpenInputFile {
                     error: err.to_string(),
                 });
             }
@@ -98,6 +103,27 @@ impl Fastx {
 
         if self.is_compressed {
             Ok(Box::new(MultiGzDecoder::new(file_handle)))
+        } else {
+            Ok(Box::new(file_handle))
+        }
+    }
+
+    pub fn create(&self) -> Result<Box<dyn std::io::Write>, Invalid> {
+        let file = match File::create(&self.path) {
+            Ok(fh) => fh,
+            Err(err) => {
+                return Err(Invalid::CreateOutputFile {
+                    error: err.to_string(),
+                });
+            }
+        };
+        let file_handle = BufWriter::new(file);
+
+        if self.is_compressed {
+            Ok(Box::new(GzEncoder::new(
+                file_handle,
+                Compression::default(),
+            )))
         } else {
             Ok(Box::new(file_handle))
         }
@@ -252,7 +278,7 @@ mod tests {
         let fastx = Fastx::from_path(path).unwrap();
 
         let actual = fastx.open().err().unwrap();
-        let expected = Invalid::CouldNottOpenInputFile {
+        let expected = Invalid::OpenInputFile {
             error: String::from("No such file or directory (os error 2)"),
         };
 
@@ -285,5 +311,37 @@ mod tests {
         let expected = "@read1\nACGT\n+\n!!!!\n";
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn create_invalid_output_file_raises_error() {
+        let path = Path::new("invalid/out/path.fq");
+
+        let actual = Fastx::from_path(&path).unwrap().create().err().unwrap();
+        let expected = Invalid::CreateOutputFile {
+            error: "No such file or directory (os error 2)".to_string(),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn create_valid_output_file_and_can_write_to_it() {
+        let file = Builder::new().suffix(".fastq").tempfile().unwrap();
+        let mut writer = Fastx::from_path(file.path()).unwrap().create().unwrap();
+
+        let actual = writer.write(b"foo\nbar");
+
+        assert!(actual.is_ok())
+    }
+
+    #[test]
+    fn create_valid_compressed_output_file_and_can_write_to_it() {
+        let file = Builder::new().suffix(".fastq.gz").tempfile().unwrap();
+        let mut writer = Fastx::from_path(file.path()).unwrap().create().unwrap();
+
+        let actual = writer.write(b"foo\nbar");
+
+        assert!(actual.is_ok())
     }
 }
