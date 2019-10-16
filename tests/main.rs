@@ -17,7 +17,7 @@ fn invalid_input_file() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn input_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::main_binary()?;
-    cmd.args(vec!["-i file/doesnt/exist.fa", "-g", "5mb", "-c", "20"]);
+    cmd.args(vec!["-i", "file/doesnt/exist.fa", "-g", "5mb", "-c", "20"]);
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("No such file"));
@@ -29,7 +29,8 @@ fn input_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
 fn output_file_in_nonexistant_dir() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::main_binary()?;
     cmd.args(vec![
-        "-i tests/cases/file1.fq.gz",
+        "-i",
+        "tests/cases/file1.fq.gz",
         "-g",
         "5mb",
         "-c",
@@ -40,6 +41,23 @@ fn output_file_in_nonexistant_dir() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("No such file"));
+
+    Ok(())
+}
+
+#[test]
+fn valid_inputs_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::main_binary()?;
+    cmd.args(vec![
+        "-i",
+        "tests/cases/file1.fq.gz",
+        "-g",
+        "5mb",
+        "-c",
+        "20",
+    ]);
+
+    cmd.assert().success();
 
     Ok(())
 }

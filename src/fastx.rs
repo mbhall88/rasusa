@@ -1,3 +1,4 @@
+use bio::io::{fasta, fastq};
 use flate2::bufread::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -74,7 +75,7 @@ impl FileType {
 #[derive(Debug, PartialEq)]
 pub struct Fastx {
     path: PathBuf,
-    filetype: FileType,
+    pub filetype: FileType,
     is_compressed: bool,
 }
 
@@ -127,6 +128,21 @@ impl Fastx {
         } else {
             Ok(Box::new(file_handle))
         }
+    }
+
+    pub fn read_lengths(&self) -> Result<Vec<u32>, Invalid> {
+        let file_handle = self.open()?;
+        let read_lengths = match self.filetype {
+            FileType::Fasta => fasta::Reader::new(file_handle)
+                .records()
+                .map(|record| record.unwrap().seq().len() as u32)
+                .collect(),
+            FileType::Fastq => fastq::Reader::new(file_handle)
+                .records()
+                .map(|record| record.unwrap().seq().len() as u32)
+                .collect(),
+        };
+        Ok(read_lengths)
     }
 }
 
@@ -343,5 +359,44 @@ mod tests {
         let actual = writer.write(b"foo\nbar");
 
         assert!(actual.is_ok())
+    }
+
+    #[test]
+    fn get_read_lengths_for_empty_fasta_returns_empty_vector() {
+        let text = "";
+        let mut file = Builder::new().suffix(".fa").tempfile().unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(file.path()).unwrap();
+
+        let actual = fastx.read_lengths().unwrap();
+        let expected: Vec<u32> = Vec::new();
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn get_read_lengths_for_fasta() {
+        let text = ">read1\nACGT\n>read2\nG";
+        let mut file = Builder::new().suffix(".fa").tempfile().unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(file.path()).unwrap();
+
+        let actual = fastx.read_lengths().unwrap();
+        let expected: Vec<u32> = vec![4, 1];
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn get_read_lengths_for_fastq() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
+        let mut file = Builder::new().suffix(".fq").tempfile().unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(file.path()).unwrap();
+
+        let actual = fastx.read_lengths().unwrap();
+        let expected: Vec<u32> = vec![4, 1];
+
+        assert_eq!(actual, expected)
     }
 }
