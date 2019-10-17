@@ -126,6 +126,14 @@ impl FromStr for GenomeSize {
     }
 }
 
+impl Mul<Coverage> for GenomeSize {
+    type Output = u64;
+
+    fn mul(self, rhs: Coverage) -> Self::Output {
+        self.0 * u64::from(rhs.0)
+    }
+}
+
 #[derive(Debug, PartialOrd, PartialEq)]
 pub struct Coverage(u32);
 
@@ -156,6 +164,14 @@ impl FromStr for Coverage {
                 .parse::<f64>()
                 .unwrap() as u32,
         ))
+    }
+}
+
+impl Mul<GenomeSize> for Coverage {
+    type Output = u64;
+
+    fn mul(self, rhs: GenomeSize) -> Self::Output {
+        u64::from(self.0) * rhs.0
     }
 }
 
@@ -471,6 +487,28 @@ mod tests {
         let suffix = String::from("ub");
         let actual = MetricSuffix::from_str(suffix.as_str()).unwrap_err();
         let expected = Invalid::MetricSuffixString { suffix };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn multiply_genome_size_by_coverage() {
+        let genome_size = GenomeSize::from_str("4.2kb").unwrap();
+        let covg = Coverage::from_str("10").unwrap();
+
+        let actual = genome_size * covg;
+        let expected: u64 = 42_000;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn multiply_coverage_by_genome_size() {
+        let genome_size = GenomeSize::from_str("4.2kb").unwrap();
+        let covg = Coverage::from_str("10").unwrap();
+
+        let actual = covg * genome_size;
+        let expected: u64 = 42_000;
 
         assert_eq!(actual, expected)
     }
