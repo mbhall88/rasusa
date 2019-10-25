@@ -1,8 +1,11 @@
 mod cli;
 mod fastx;
+mod subsampler;
 
 pub use crate::cli::Cli;
 pub use crate::fastx::{Fastx, FileType};
+pub use crate::subsampler::SubSampler;
+
 use exitfailure::ExitFailure;
 use std::io::stdout;
 use structopt::StructOpt;
@@ -17,9 +20,16 @@ fn main() -> Result<(), ExitFailure> {
         None => Box::new(stdout()),
     };
 
-    let _target_total_bases: u64 = args.genome_size * args.coverage;
+    let target_total_bases: u64 = args.genome_size * args.coverage;
 
-    let _read_lengths = input_fastx.read_lengths()?;
+    let read_lengths = input_fastx.read_lengths()?;
+
+    let subsampler = SubSampler {
+        target_total_bases,
+        seed: args.seed,
+    };
+
+    let _reads_to_keep = subsampler.indices(&read_lengths);
 
     Ok(())
 }
