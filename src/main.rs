@@ -15,7 +15,7 @@ fn main() -> Result<(), ExitFailure> {
 
     let input_fastx = Fastx::from_path(&args.input)?;
 
-    let _output_file_handle = match args.output {
+    let mut output_file_handle = match args.output {
         Some(path) => Fastx::from_path(&path)?.create()?,
         None => Box::new(stdout()),
     };
@@ -29,7 +29,12 @@ fn main() -> Result<(), ExitFailure> {
         seed: args.seed,
     };
 
-    let _reads_to_keep = subsampler.indices(&read_lengths);
+    let mut reads_to_keep = subsampler.indices(&read_lengths);
+
+    if let Err(err) = input_fastx.filter_reads_into(&mut reads_to_keep, &mut output_file_handle) {
+        // todo: add logging warning
+        println!("{:?}", err);
+    }
 
     Ok(())
 }

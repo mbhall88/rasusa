@@ -3,8 +3,9 @@ use flate2::bufread::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use snafu::Snafu;
+use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -37,6 +38,12 @@ pub enum Invalid {
 
     #[snafu(display("Output file could not be created: {}", error))]
     CreateOutputFile { error: String },
+
+    #[snafu(display("Some expected indices were not in the input file"))]
+    IndicesNotFound {},
+
+    #[snafu(display("Could not write to output file: {}", error))]
+    WriteFailed { error: String },
 }
 
 impl FromStr for FileType {
@@ -109,7 +116,7 @@ impl Fastx {
         }
     }
 
-    pub fn create(&self) -> Result<Box<dyn std::io::Write>, Invalid> {
+    pub fn create(&self) -> Result<Box<dyn Write>, Invalid> {
         let file = match File::create(&self.path) {
             Ok(fh) => fh,
             Err(err) => {
@@ -144,12 +151,92 @@ impl Fastx {
         };
         Ok(read_lengths)
     }
+
+    pub fn filter_reads_into<T: ?Sized + Write>(
+        &self,
+        reads_to_keep: &mut HashSet<u32>,
+        write_to: &mut T,
+    ) -> Result<(), Invalid> {
+        let file_handle = self.open()?;
+        match self.filetype {
+            FileType::Fasta => {
+                let records = fasta::Reader::new(file_handle)
+                    .records()
+                    .map(|r| r.unwrap());
+                for (i, record) in records.enumerate() {
+                    let i = &(i as u32);
+                    if reads_to_keep.contains(&i) {
+                        let header = match record.desc() {
+                            Some(d) => format!("{} {}", record.id(), d),
+                            None => record.id().to_string(),
+                        };
+                        if let Err(e) = write!(
+                            write_to,
+                            ">{}\n{}\n",
+                            header,
+                            std::str::from_utf8(record.seq()).unwrap()
+                        ) {
+                            return Err(Invalid::WriteFailed {
+                                error: e.to_string(),
+                            });
+                        }
+                        reads_to_keep.remove(&i);
+                    }
+                    if reads_to_keep.is_empty() {
+                        break;
+                    }
+                }
+                if reads_to_keep.is_empty() {
+                    Ok(())
+                } else {
+                    Err(Invalid::IndicesNotFound {})
+                }
+            }
+            FileType::Fastq => {
+                let records = fastq::Reader::new(file_handle)
+                    .records()
+                    .map(|r| r.unwrap());
+                for (i, record) in records.enumerate() {
+                    let i = &(i as u32);
+                    if reads_to_keep.contains(&i) {
+                        let header = match record.desc() {
+                            Some(d) => format!("{} {}", record.id(), d),
+                            None => record.id().to_string(),
+                        };
+                        // todo: once rust-bio record Display trait is fixed, clean up this write
+                        if let Err(e) = write!(
+                            write_to,
+                            "@{}\n{}\n+\n{}\n",
+                            header,
+                            std::str::from_utf8(record.seq()).unwrap(),
+                            std::str::from_utf8(record.qual()).unwrap(),
+                        ) {
+                            return Err(Invalid::WriteFailed {
+                                error: e.to_string(),
+                            });
+                        }
+                        reads_to_keep.remove(&i);
+                    }
+                    if reads_to_keep.is_empty() {
+                        break;
+                    }
+                }
+                if reads_to_keep.is_empty() {
+                    Ok(())
+                } else {
+                    Err(Invalid::IndicesNotFound {})
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use std::io::{Read, Write};
+    use std::iter::FromIterator;
     use tempfile::Builder;
 
     #[test]
@@ -396,6 +483,157 @@ mod tests {
 
         let actual = fastx.read_lengths().unwrap();
         let expected: Vec<u32> = vec![4, 1];
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_reads_empty_indices_no_output() {
+        let text = "@read1\nACGT\n+\n!!!!";
+        let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![]);
+        let output = Builder::new().suffix(".fastq").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let mut out_fh = output_fastx.create().unwrap();
+        let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+
+        assert!(filter_result.is_ok());
+
+        let mut actual = String::new();
+        output_fastx
+            .open()
+            .unwrap()
+            .read_to_string(&mut actual)
+            .unwrap();
+        let expected = String::new();
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_fastq_reads_one_index_matches_only_read() {
+        let text = "@read1\nACGT\n+\n!!!!\n";
+        let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
+        let output = Builder::new().suffix(".fastq").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        {
+            let mut out_fh = output_fastx.create().unwrap();
+            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            assert!(filter_result.is_ok());
+        }
+
+        let actual = std::fs::read_to_string(output).unwrap();
+        let expected = text;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_fasta_reads_one_index_matches_only_read() {
+        let text = ">read1\nACGT\n";
+        let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
+        let output = Builder::new().suffix(".fa").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        {
+            let mut out_fh = output_fastx.create().unwrap();
+            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            assert!(filter_result.is_ok());
+        }
+
+        let actual = std::fs::read_to_string(output).unwrap();
+        let expected = text;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_fastq_reads_one_index_matches_one_of_two_reads() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
+        let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
+        let output = Builder::new().suffix(".fastq").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        {
+            let mut out_fh = output_fastx.create().unwrap();
+            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            assert!(filter_result.is_ok());
+        }
+
+        let actual = std::fs::read_to_string(output).unwrap();
+        let expected = "@read2\nCCCC\n+\n$$$$\n";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_fastq_reads_two_indices_matches_first_and_last_reads() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nA\n+\n$\n";
+        let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let output = Builder::new().suffix(".fastq").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        {
+            let mut out_fh = output_fastx.create().unwrap();
+            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            assert!(filter_result.is_ok());
+        }
+
+        let actual = std::fs::read_to_string(output).unwrap();
+        let expected = "@read1\nACGT\n+\n!!!!\n@read3\nA\n+\n$\n";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_fasta_reads_one_index_out_of_range() {
+        let text = ">read1 length=4\nACGT\n>read2\nCCCC\n";
+        let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let output = Builder::new().suffix(".fa").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        {
+            let mut out_fh = output_fastx.create().unwrap();
+            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            assert!(filter_result.is_err());
+        }
+
+        let actual = std::fs::read_to_string(output).unwrap();
+        let expected = ">read1 length=4\nACGT\n";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn filter_fastq_reads_one_index_out_of_range() {
+        let text = "@read1 length=4\nACGT\n+\n!!!!\n@read2\nC\n+\n^\n";
+        let mut input = Builder::new().suffix(".fq").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path()).unwrap();
+        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let output = Builder::new().suffix(".fq").tempfile().unwrap();
+        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        {
+            let mut out_fh = output_fastx.create().unwrap();
+            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            assert!(filter_result.is_err());
+        }
+
+        let actual = std::fs::read_to_string(output).unwrap();
+        let expected = "@read1 length=4\nACGT\n+\n!!!!\n";
 
         assert_eq!(actual, expected)
     }
