@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::StructOpt;
 
-/// Randomly sub-sample reads to a specified coverage
+/// Randomly sub-sample reads to a specified coverage.
 #[derive(Debug, StructOpt)]
 #[structopt()]
 pub struct Cli {
@@ -29,7 +29,7 @@ pub struct Cli {
     #[structopt(short = "s", long = "seed")]
     pub seed: Option<u64>,
 
-    /// Switch on verbosity
+    /// Switch on verbosity.
     #[structopt(short)]
     pub verbose: bool,
 }

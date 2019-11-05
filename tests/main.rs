@@ -61,3 +61,25 @@ fn valid_inputs_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn input_and_output_filetypes_different_raises_no_errors_but_warns(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::main_binary()?;
+    cmd.args(vec![
+        "-i",
+        "tests/cases/file1.fq.gz",
+        "-g",
+        "5mb",
+        "-c",
+        "20",
+        "-o",
+        "/tmp/out.fasta",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("file types are not the same"));
+
+    Ok(())
+}
