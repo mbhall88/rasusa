@@ -34,19 +34,25 @@ pub struct Cli {
     pub verbose: bool,
 }
 
+/// A collection of custom errors relating to the command line interface for this package.
 #[derive(Debug, Snafu, PartialEq)]
 pub enum Invalid {
+    /// Indicates that a string cannot be parsed into a [`MetricSuffix`](#metricsuffix).
     #[snafu(display("{} is not a valid metric suffix", suffix))]
     MetricSuffixString { suffix: String },
+    /// Indicates that a string cannot be parsed into a [`GenomeSize`](#genomesize).
     #[snafu(display(
         "{} is not a valid genome size. Valid forms include 4gb, 3000, 8.7Kb etc.",
         genome_size
     ))]
     GenomeSizeString { genome_size: String },
+    /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
     #[snafu(display("{} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character", coverage))]
     CoverageValue { coverage: String },
 }
 
+/// A metric suffix is a unit suffix used to indicate the multiples of (in this case) base pairs.
+/// For instance, the metric suffix 'Kb' refers to kilobases. Therefore, 6.9kb means 6900 base pairs.
 #[derive(PartialEq, Debug)]
 enum MetricSuffix {
     Base,
@@ -56,6 +62,15 @@ enum MetricSuffix {
     Tera,
 }
 
+/// Parses a string into a `MetricSuffix`.
+///
+/// # Example
+/// ```rust
+/// let s = "5.5mb";
+/// let metric_suffix = MetricSuffix::from_str(s);
+///
+/// assert_eq!(metric_suffix, MetricSuffix::Mega)
+/// ```
 impl FromStr for MetricSuffix {
     type Err = Invalid;
 
@@ -77,6 +92,16 @@ impl FromStr for MetricSuffix {
     }
 }
 
+/// Allow for multiplying a `f64` by a `MetricSuffix`.
+///
+/// # Example
+///
+/// ```rust
+/// let metric_suffix = MetricSuffix::Mega;
+/// let x: f64 = 5.5;
+///
+/// assert_eq!(x * metric_suffix, 5_500_000)
+/// ```
 impl Mul<MetricSuffix> for f64 {
     type Output = Self;
 
@@ -91,15 +116,33 @@ impl Mul<MetricSuffix> for f64 {
     }
 }
 
+/// An object for collecting together methods for working with the genome size parameter for this
+/// package.
 #[derive(Debug, PartialOrd, PartialEq)]
 pub struct GenomeSize(u64);
 
+/// Allow for comparison of a `u64` and a `GenomeSize`.
+///
+/// # Example
+///
+/// ```rust
+/// assert!(GenomeSize(10) == 10)
+/// ```
 impl PartialEq<u64> for GenomeSize {
     fn eq(&self, other: &u64) -> bool {
         self.0 == *other
     }
 }
 
+/// Parses a string into a `GenomeSize`.
+///
+/// # Example
+/// ```rust
+/// let s = "5.5mb";
+/// let genome_size = GenomeSize::from_str(s);
+///
+/// assert_eq!(genome_size, GenomeSize(5_500_000))
+/// ```
 impl FromStr for GenomeSize {
     type Err = Invalid;
 
@@ -126,6 +169,16 @@ impl FromStr for GenomeSize {
     }
 }
 
+/// Allow for multiplying a `GenomeSize` by a [`Coverage`](#coverage).
+///
+/// # Example
+///
+/// ```rust
+/// let genome_size = GenomeSize(100);
+/// let covg = Coverage(5);
+///
+/// assert_eq!(genome_size * covg, 500)
+/// ```
 impl Mul<Coverage> for GenomeSize {
     type Output = u64;
 
@@ -134,15 +187,33 @@ impl Mul<Coverage> for GenomeSize {
     }
 }
 
+/// An object for collecting together methods for working with the coverage parameter for this
+/// package.
 #[derive(Debug, PartialOrd, PartialEq)]
 pub struct Coverage(u32);
 
+/// Allow for comparison of a `u32` and a `Coverage`.
+///
+/// # Example
+///
+/// ```rust
+/// assert!(Coverage(10) == 10)
+/// ```
 impl PartialEq<u32> for Coverage {
     fn eq(&self, other: &u32) -> bool {
         self.0 == *other
     }
 }
 
+/// Parses a string into a `Coverage`.
+///
+/// # Example
+/// ```rust
+/// let s = "100x";
+/// let covg = Coverage::from_str(s);
+///
+/// assert_eq!(covg, Coverage(100))
+/// ```
 impl FromStr for Coverage {
     type Err = Invalid;
 
@@ -167,6 +238,16 @@ impl FromStr for Coverage {
     }
 }
 
+/// Allow for multiplying a `Coverage` by a [`GenomeSize`](#genomesize).
+///
+/// # Example
+///
+/// ```rust
+/// let covg = Coverage(5);
+/// let genome_size = GenomeSize(100);
+///
+/// assert_eq!(covg * genome_size, 500)
+/// ```
 impl Mul<GenomeSize> for Coverage {
     type Output = u64;
 
