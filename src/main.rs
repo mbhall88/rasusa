@@ -12,6 +12,12 @@ use log::{debug, info, warn};
 use std::io::stdout;
 use structopt::StructOpt;
 
+/// Sets up the logging based on whether you want verbose logging or not. If `verbose` is `false`
+/// then info, warning, and error messages will be printed. If `verbose` is `true` then debug
+/// messages will also be printed.
+///
+/// # Errors
+/// Will error if `fern` fails to apply the logging setup.
 fn setup_logger(verbose: bool) -> Result<(), fern::InitError> {
     let colors = ColoredLevelConfig::new()
         .warn(Color::Yellow)
