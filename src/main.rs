@@ -77,6 +77,7 @@ fn main() -> Result<(), ExitFailure> {
         target_total_bases
     );
 
+    info!("Gathering read lengths...");
     let read_lengths = input_fastx.read_lengths()?;
     info!("{} reads detected", read_lengths.len());
 
