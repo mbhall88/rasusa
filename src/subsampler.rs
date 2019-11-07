@@ -1,15 +1,42 @@
+use rand::prelude::*;
 use std::collections::HashSet;
 
-use rand::prelude::*;
-
+/// A `Struct` for dealing with the randomised part of sub-sampling.
 pub struct SubSampler {
+    /// Number of bases to sub-sample down to.    
     pub target_total_bases: u64,
+    /// Random seed to use for sub-sampling. If `None` is used, then the random number generator
+    /// will be seeded by the operating system.
     pub seed: Option<u64>,
 }
 
 impl SubSampler {
+    /// Returns a vector of indices for elements in `v`, but shuffled.
+    ///
+    /// # Note
+    ///
+    /// If the file has more than 4,294,967,296 reads, this function's behaviour is undefined.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let v: Vec<u64> = vec![55, 1];
+    /// let sampler = SubSampler {
+    ///     target_total_bases: 100,
+    ///     seed: None,
+    /// };
+    /// let mut num_times_shuffled = 0;
+    /// let iterations = 500;
+    /// for _ in 0..iterations {
+    ///     let idxs = sampler.shuffled_indices(&v);
+    ///     if idxs == vec![1, 0] {
+    ///         num_times_shuffled += 1;
+    ///     }
+    /// }
+    /// // chances of shuffling the same way 100 times in a row is 3.054936363499605e-151
+    /// assert!(num_times_shuffled > 0 && num_times_shuffled < iterations)
+    /// ```
     fn shuffled_indices<T>(&self, v: &[T]) -> Vec<u32> {
-        // todo: ensure it is noted in the docs that if a file has more than 2**32 reads it will return undefined results
         let mut indices: Vec<u32> = (0..v.len() as u32).collect();
         let mut rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
@@ -20,6 +47,23 @@ impl SubSampler {
         indices
     }
 
+    /// Sub-samples `lengths` to the desired `target_total_bases` specified in the `SubSampler` and
+    /// returns the indices for the reads that were selected.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let v: Vec<u32> = vec![50, 50, 50];
+    /// let sampler = SubSampler {
+    ///     target_total_bases: 100,
+    ///     seed: Some(1),
+    /// };
+    /// let actual = sampler.indices(&v);
+    ///
+    /// assert_eq!(actual.len(), 2);
+    /// assert!(actual.contains(&1));
+    /// assert!(actual.contains(&2))
+    /// ```
     pub fn indices(&self, lengths: &[u32]) -> HashSet<u32> {
         let mut indices = self.shuffled_indices(&lengths).into_iter();
         let mut to_keep: HashSet<u32> = HashSet::new();
