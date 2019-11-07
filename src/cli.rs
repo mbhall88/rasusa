@@ -40,12 +40,14 @@ pub enum Invalid {
     /// Indicates that a string cannot be parsed into a [`MetricSuffix`](#metricsuffix).
     #[snafu(display("{} is not a valid metric suffix", suffix))]
     MetricSuffixString { suffix: String },
+
     /// Indicates that a string cannot be parsed into a [`GenomeSize`](#genomesize).
     #[snafu(display(
         "{} is not a valid genome size. Valid forms include 4gb, 3000, 8.7Kb etc.",
         genome_size
     ))]
     GenomeSizeString { genome_size: String },
+
     /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
     #[snafu(display("{} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character", coverage))]
     CoverageValue { coverage: String },
@@ -62,18 +64,18 @@ enum MetricSuffix {
     Tera,
 }
 
-/// Parses a string into a `MetricSuffix`.
-///
-/// # Example
-/// ```rust
-/// let s = "5.5mb";
-/// let metric_suffix = MetricSuffix::from_str(s);
-///
-/// assert_eq!(metric_suffix, MetricSuffix::Mega)
-/// ```
 impl FromStr for MetricSuffix {
     type Err = Invalid;
 
+    /// Parses a string into a `MetricSuffix`.
+    ///
+    /// # Example
+    /// ```rust
+    /// let s = "5.5mb";
+    /// let metric_suffix = MetricSuffix::from_str(s);
+    ///
+    /// assert_eq!(metric_suffix, MetricSuffix::Mega)
+    /// ```
     fn from_str(suffix: &str) -> Result<Self, Self::Err> {
         let suffix_lwr = suffix.to_lowercase();
         let metric_suffix = match suffix_lwr.as_str() {
@@ -134,18 +136,18 @@ impl PartialEq<u64> for GenomeSize {
     }
 }
 
-/// Parses a string into a `GenomeSize`.
-///
-/// # Example
-/// ```rust
-/// let s = "5.5mb";
-/// let genome_size = GenomeSize::from_str(s);
-///
-/// assert_eq!(genome_size, GenomeSize(5_500_000))
-/// ```
 impl FromStr for GenomeSize {
     type Err = Invalid;
 
+    /// Parses a string into a `GenomeSize`.
+    ///
+    /// # Example
+    /// ```rust
+    /// let s = "5.5mb";
+    /// let genome_size = GenomeSize::from_str(s);
+    ///
+    /// assert_eq!(genome_size, GenomeSize(5_500_000))
+    /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let text = s.to_lowercase();
         let re = Regex::new(r"(?P<size>[0-9]*\.?[0-9]+)(?P<sfx>\w*)$").unwrap();
@@ -205,18 +207,18 @@ impl PartialEq<u32> for Coverage {
     }
 }
 
-/// Parses a string into a `Coverage`.
-///
-/// # Example
-/// ```rust
-/// let s = "100x";
-/// let covg = Coverage::from_str(s);
-///
-/// assert_eq!(covg, Coverage(100))
-/// ```
 impl FromStr for Coverage {
     type Err = Invalid;
 
+    /// Parses a string into a `Coverage`.
+    ///
+    /// # Example
+    /// ```rust
+    /// let s = "100x";
+    /// let covg = Coverage::from_str(s);
+    ///
+    /// assert_eq!(covg, Coverage(100))
+    /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let re = Regex::new(r"^(?P<covg>[0-9]*\.?[0-9]+)(?i)x?$").unwrap();
         let captures = match re.captures(s) {

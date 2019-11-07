@@ -9,11 +9,22 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+/// A an "extension" trait to allow for extending the [`std::path::Path`](https://doc.rust-lang.org/nightly/std/path/struct.Path.html) struct.
 trait PathExt {
     fn is_compressed(&self) -> bool;
 }
 
 impl PathExt for Path {
+    /// Determine of a `Path` is for a compressed file. This is based on whether the path ends with
+    /// the extension `.gz`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let path = std::path::Path::new("output.fq.gz");
+    ///
+    /// assert!(path.is_compressed())
+    /// ```
     fn is_compressed(&self) -> bool {
         match self.extension() {
             Some(p) => p == "gz",
@@ -22,26 +33,33 @@ impl PathExt for Path {
     }
 }
 
+/// An `Enum` that collates the different, allowed, file types.
 #[derive(Debug, PartialEq)]
 pub enum FileType {
     Fasta,
     Fastq,
 }
 
+/// A collection of custom errors relating to the working with files for this package.
 #[derive(Debug, Snafu, PartialEq)]
 pub enum Invalid {
+    /// Indicates that the file is not one of the allowed file types as specified by [`FileType`](#filetype).
     #[snafu(display("File type of {} is not fasta or fastq", filepath))]
     UnknownFileType { filepath: String },
 
+    /// Indicates that the specified input file could not be opened.
     #[snafu(display("Input file could not be open: {}", error))]
     OpenInputFile { error: String },
 
+    /// Indicates that the specified output file could not be created.
     #[snafu(display("Output file could not be created: {}", error))]
     CreateOutputFile { error: String },
 
+    /// Indicates that some indices we expected to find in the input file weren't found.
     #[snafu(display("Some expected indices were not in the input file"))]
     IndicesNotFound {},
 
+    /// Indicates that writing to the output file failed.
     #[snafu(display("Could not write to output file: {}", error))]
     WriteFailed { error: String },
 }
@@ -49,12 +67,32 @@ pub enum Invalid {
 impl FromStr for FileType {
     type Err = Invalid;
 
+    /// Parses a string into a `FileType`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let s = "input.fa";
+    /// let filetype = FileType::from_str(s);
+    ///
+    /// assert_eq!(filetype, FileType::Fasta)
+    /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_path(Path::new(s))
     }
 }
 
 impl FileType {
+    /// Parses a `std::path::Path` into a `FileType`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let path = std::path::Path::new("infile.fastq.gz");
+    /// let filetype = FileType::from_path(path);
+    ///
+    /// assert_eq!(filetype, FileType::Fastq)
+    /// ```
     pub(crate) fn from_path(path: &Path) -> Result<FileType, Invalid> {
         let is_compressed = path.is_compressed();
 
@@ -79,14 +117,36 @@ impl FileType {
     }
 }
 
+/// A `Struct` used for seamlessly dealing with either compressed or uncompressed fasta/fastq files.
 #[derive(Debug, PartialEq)]
 pub struct Fastx {
+    /// The path for the file.
     path: PathBuf,
+    /// The [`FileType`](#filetype) of the file.
     pub filetype: FileType,
+    /// Is the file compressed?
     is_compressed: bool,
 }
 
 impl Fastx {
+    /// Create a `Fastx` object from a `std::path::Path`.
+    ///
+    /// # Errors
+    /// If the file type is not known then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// returned.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let path = std::path::Path::new("input.fa.gz");
+    /// let fastx = Fastx::from_path(path);
+    /// let expected = Fastx{
+    ///     path: std::path::PathBuf::new("input.fa.gz"),
+    ///     filetype: FileType::Fasta,
+    ///     is_compressed: true
+    /// };
+    /// assert_eq!(fastx, expected)
+    /// ```
     pub fn from_path(path: &Path) -> Result<Self, Invalid> {
         let filetype = FileType::from_path(&path)?;
         let is_compressed = path.is_compressed();
@@ -98,6 +158,22 @@ impl Fastx {
         })
     }
 
+    /// Open the file associated with this `Fastx` object for reading.
+    ///
+    /// # Errors
+    /// If the file cannot be opened then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// returned.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let path = std::path::Path::new("input.fa.gz");
+    /// let fastx = Fastx::from_path(path);
+    /// { // this scoping means the file handle is closed afterwards.
+    ///     let file_handle = fastx.open()?;
+    ///     // do something with the file handle
+    /// }
+    /// ```
     pub fn open(&self) -> Result<Box<dyn std::io::Read>, Invalid> {
         let file = match File::open(&self.path) {
             Ok(fh) => fh,
@@ -116,6 +192,22 @@ impl Fastx {
         }
     }
 
+    /// Create the file associated with this `Fastx` object for writing.
+    ///
+    /// # Errors
+    /// If the file cannot be created then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// returned.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let path = std::path::Path::new("output.fa.gz");
+    /// let fastx = Fastx::from_path(path);
+    /// { // this scoping means the file handle is closed afterwards.
+    ///     let file_handle = fastx.create()?;
+    ///     write!(file_handle, ">read1\nACGT\n")?
+    /// }
+    /// ```
     pub fn create(&self) -> Result<Box<dyn Write>, Invalid> {
         let file = match File::create(&self.path) {
             Ok(fh) => fh,
@@ -137,6 +229,23 @@ impl Fastx {
         }
     }
 
+    /// Returns a vector containing the lengths of all the reads in the file.
+    ///
+    /// # Errors
+    /// If the file cannot be opened then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// returned.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
+    /// let mut file = tempfile::Builder::new().suffix(".fq").tempfile().unwrap();
+    /// file.write_all(text.as_bytes()).unwrap();
+    /// let fastx = Fastx::from_path(file.path()).unwrap();
+    /// let actual = fastx.read_lengths().unwrap();
+    /// let expected: Vec<u32> = vec![4, 1];
+    /// assert_eq!(actual, expected)
+    /// ```
     pub fn read_lengths(&self) -> Result<Vec<u32>, Invalid> {
         let file_handle = self.open()?;
         let read_lengths = match self.filetype {
@@ -152,6 +261,37 @@ impl Fastx {
         Ok(read_lengths)
     }
 
+    /// Writes reads, with indices contained within `reads_to_keep`, to the specified handle
+    /// `write_to`.
+    ///
+    /// # Errors
+    /// This function could raise an `Err` instance of [`Invalid`](#invalid) in the following
+    /// circumstances:
+    /// -   If the file (of `self`) cannot be opened.
+    /// -   If writing to `write_to` fails.
+    /// -   If, after iterating through all reads in the file, there is still elements left in
+    /// `reads_to_keep`. *Note: in this case, this function still writes all reads where indices
+    /// were found in the file.*
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
+    /// let mut input = tempfile::Builder::new().suffix(".fastq").tempfile().unwrap();
+    /// input.write_all(text.as_bytes()).unwrap();
+    /// let fastx = Fastx::from_path(input.path()).unwrap();
+    /// let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
+    /// let output = Builder::new().suffix(".fastq").tempfile().unwrap();
+    /// let output_fastx = Fastx::from_path(output.path()).unwrap();
+    /// {
+    ///     let mut out_fh = output_fastx.create().unwrap();
+    ///     let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+    ///     assert!(filter_result.is_ok());
+    /// }
+    /// let actual = std::fs::read_to_string(output).unwrap();
+    /// let expected = "@read2\nCCCC\n+\n$$$$\n";
+    /// assert_eq!(actual, expected)
+    /// ```
     pub fn filter_reads_into<T: ?Sized + Write>(
         &self,
         reads_to_keep: &mut HashSet<u32>,
