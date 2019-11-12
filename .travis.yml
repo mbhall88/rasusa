@@ -27,39 +27,28 @@ install:
   - rustup component add rustfmt
   - rustup component add clippy
 
+script:
+  - cargo fmt -- --check
+  - cargo clippy -- -D warnings
+  - cargo build
+  - cargo test --all
 
-jobs:
-  include:
-    - stage: "Format"
-      script: cargo fmt -- --check
-    - stage: "Lint"
-      script: cargo clippy -- -D warnings
-    - stage: "Build"
-      script: cargo build
-    - stage: "Test"
-      script: cargo test
-      after_success: |
-        PKG_NAME="rasusa"
-        wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-        tar xzf master.tar.gz &&
-        cd kcov-master &&
-        mkdir build &&
-        cd build &&
-        cmake .. &&
-        make &&
-        make install DESTDIR=../../kcov-build &&
-        cd ../.. &&
-        rm -rf kcov-master
-        export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
-        for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file" || exit 1; done &&
-        bash <(curl -s https://codecov.io/bash) &&
-        echo "Uploaded code coverage"
-
-stages:
-  - "Format"
-  - "Lint"
-  - "Build"
-  - "Test"
+after_success: |
+  PKG_NAME="rasusa"
+  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+  tar xzf master.tar.gz &&
+  cd kcov-master &&
+  mkdir build &&
+  cd build &&
+  cmake .. &&
+  make &&
+  make install DESTDIR=../../kcov-build &&
+  cd ../.. &&
+  rm -rf kcov-master
+  export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
+  for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file" || exit 1; done &&
+  bash <(curl -s https://codecov.io/bash) &&
+  echo "Uploaded code coverage"
 
 notifications:
   email:
