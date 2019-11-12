@@ -3,6 +3,7 @@ cache: cargo
 dist: bionic
 os: linux
 rust:
+  - 1.38.0  # min. guaranteed working version
   - stable
   - beta
   - nightly
