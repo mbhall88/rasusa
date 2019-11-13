@@ -1,6 +1,6 @@
 use regex::Regex;
 use snafu::Snafu;
-use std::ops::Mul;
+use std::ops::{Div, Mul};
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::StructOpt;
@@ -120,7 +120,7 @@ impl Mul<MetricSuffix> for f64 {
 
 /// An object for collecting together methods for working with the genome size parameter for this
 /// package.
-#[derive(Debug, PartialOrd, PartialEq)]
+#[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
 pub struct GenomeSize(u64);
 
 /// Allow for comparison of a `u64` and a `GenomeSize`.
@@ -189,9 +189,30 @@ impl Mul<Coverage> for GenomeSize {
     }
 }
 
+/// Allow for dividing a `u64` by a `GenomeSize`.
+///
+/// # Example
+///
+/// ```rust
+/// let x: u64 = 210;
+/// let size = GenomeSize(200);
+///
+/// let actual = x / size;
+/// let expected = 1.05;
+///
+/// assert_eq!(actual, expected)
+/// ```
+impl Div<GenomeSize> for u64 {
+    type Output = f64;
+
+    fn div(self, rhs: GenomeSize) -> Self::Output {
+        (self as f64) / (rhs.0 as f64)
+    }
+}
+
 /// An object for collecting together methods for working with the coverage parameter for this
 /// package.
-#[derive(Debug, PartialOrd, PartialEq)]
+#[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
 pub struct Coverage(u32);
 
 /// Allow for comparison of a `u32` and a `Coverage`.
@@ -594,5 +615,17 @@ mod tests {
         let expected: u64 = 42_000;
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn divide_u64_by_genome_size() {
+        let x: u64 = 210;
+        let size = GenomeSize(200);
+
+        let actual = x / size;
+        let expected = 1.05;
+
+        let diff = (actual.abs() - expected).abs();
+        assert!(diff < std::f64::EPSILON)
     }
 }

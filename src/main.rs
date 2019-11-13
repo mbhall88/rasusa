@@ -90,9 +90,18 @@ fn main() -> Result<(), ExitFailure> {
     info!("Keeping {} reads", reads_to_keep.len());
     debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
+    let total_kept_bases: u64 = reads_to_keep
+        .iter()
+        .map(|&i| read_lengths[i as usize])
+        .fold(0, |acc, x| acc + u64::from(x));
+    let actual_covg = total_kept_bases / args.genome_size;
+    info!("Actual coverage of reads being kept is {:.2}x", actual_covg);
+
     if let Err(err) = input_fastx.filter_reads_into(&mut reads_to_keep, &mut output_file_handle) {
         warn!("{:?}", err);
     }
+
+    info!("Done.");
 
     Ok(())
 }
