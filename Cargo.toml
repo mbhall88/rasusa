@@ -5,6 +5,7 @@ version = "0.1.0"
 authors = ["Michael Hall <michael@mbh.sh>"]
 edition = "2018"
 repository = "https://github.com/mbhall88/rasusa"
+homepage = "https://github.com/mbhall88/rasusa"
 readme = "README.md"
 keywords = ["bioinformatics", "subsampling", "fastq", "fasta", "coverage"]
 categories = ["science", "command-line-utilities"]
