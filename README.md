@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.org/mbhall88/rasusa.svg?branch=master)](https://travis-ci.org/mbhall88/rasusa)
 [![codecov](https://codecov.io/gh/mbhall88/rasusa/branch/master/graph/badge.svg)](https://codecov.io/gh/mbhall88/rasusa)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
