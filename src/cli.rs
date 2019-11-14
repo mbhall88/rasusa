@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::StructOpt;
 
-/// Randomly sub-sample reads to a specified coverage.
+/// Randomly subsample reads to a specified coverage.
 #[derive(Debug, StructOpt)]
 #[structopt()]
 pub struct Cli {

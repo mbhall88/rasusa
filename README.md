@@ -201,7 +201,7 @@ Adding this optional flag will make the logging more verbose. By default, loggin
 $ rasusa --help
 
 rasusa 0.1.0
-Randomly sub-sample reads to a specified coverage.
+Randomly subsample reads to a specified coverage.
 
 USAGE:
     rasusa [FLAGS] [OPTIONS] --coverage <coverage> --genome-size <genome-size> --input <input>
