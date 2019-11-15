@@ -5,18 +5,18 @@ set -ex
 main() {
     cross fmt -- --check
     cross clippy --all-features --all-targets -- -D warnings
-    cross build --target "$TARGET"
-    cross build --target "$TARGET" --release
+    cross build
+    cross build --release
 
     if [ ! -z $DISABLE_TESTS ]; then
         return
     fi
 
-    cross test --target "$TARGET" --all
-    cross test --target "$TARGET" --release --all
+    cross test --all
+    cross test --release --all
 
-    cross run --target "$TARGET" -- --help
-    cross run --target "$TARGET" --release -- --help
+    cross run -- --help
+    cross run --release -- --help
 }
 
 # we don't run the "test phase" when doing deploys
