@@ -2,3 +2,4 @@
 **/*.rs.bk
 .idea/
 code_coverage_report.sh
+data
