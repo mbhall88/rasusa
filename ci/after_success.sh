@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # This script takes care of uploading code coverage to codecov
 
 set -ex
@@ -13,13 +14,14 @@ main() {
   make install DESTDIR=../../kcov-build &&
   cd ../.. &&
   rm -rf kcov-master
-  export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
-  for file in target/debug/"$PROJECT_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file" || exit 1; done &&
+  PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
+  export PATH
+  for file in target/debug/"$PROJECT_NAME"-*; do [ -x "$file" ] || continue; mkdir -p "target/cov/$(basename "$file")"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename "$file")" "$file" || exit 1; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
 }
 
 # we don't run kcov on osx and only run on stable
-if [[ -z "$TRAVIS_OS_NAME" = "linux" && "$TRAVIS_RUST_VERSION" = "stable" ]]; then
+if [[ "$TRAVIS_OS_NAME" == linux && "$TRAVIS_RUST_VERSION" == stable ]]; then
     main
 fi
