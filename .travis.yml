@@ -76,6 +76,14 @@ deploy:
       condition: $TARGET = x86_64-unknown-linux-musl
       branch: master
       tags: true
+  - provider: cargo
+    on:
+      tags: true
+      branch: master
+      condition: $TARGET = x86_64-unknown-linux-musl
+    token:
+      secure: jPvxYnImwNcYaqoOzq9GHahkkCID8KdOUDf/qsohNsUsUzKmy039EGtyCcav9oPQAe/4KqPmDvS1KJBoR3C/WBHnT1exSq0ZUIxvTxwodC2akjECvfoXrz3cMSqz1J0BSmf7r/mW0ZJITFLBvu1GCy+7oB4BecS9d8pgP9lIJ8ftp4FmdoFBAQKEfjfMc8RW9hXWOfXT2RgIf22UVP7I+gibdkMU4Rdk2IuQZyAv2PcSJVY6+2aQchIN28BGHS0GI0mH8YqsH9fJiSLvvv/sKgdUjcEEcnqwt9N/430y3QP9Nd4jRLWCAJBppBxwj47fGxMPvQBpKVCj4Xm6nrzRXjSv0DaLVRuM10fGeK2gDNPe/zgLYfuSwDSl6Fe+SFindWzl03CiJGCOAgT1NDLjXfMbBYuTWa2prO8qv3aXl19FDmCcDwh5Mb1A9rPnwJCaCqo+90OMpGnPEwuXPcxGezaj69UGtXr0qskLlpj1V0ib1yZk5KpVF6jxOLYbOJWb6NVj9dyoKXnHI6XC2CZIZxbClqXcZhbpnSbqPtHldeW0Y8g5Izm8IDB9WqdkUatH3JNpcQrBhFaTPyFHTZ8klzc7oUekCm48b/ncivHtlGloqbGf/x7RclbFpqa+pYjaU8SGs3jk2IBLf96q6r64AFuyp1oqKpnexTJ6VVR/CRU=
+
 
 cache: cargo
 before_cache:
