@@ -1,18 +1,25 @@
+# Based on the "trust" template v0.1.2
+# https://github.com/japaric/trust/tree/v0.1.2
 language: rust
-cache: cargo
-dist: bionic
-os: linux
 rust:
   - 1.38.0  # min. guaranteed working version
   - stable
   - beta
   - nightly
-sudo: true
-before_install:
-  - sudo apt-get update
+dist: bionic
+services: docker
+sudo: required
+
+env:
+  global:
+    - PROJECT_NAME: rasusa
+    - RUST_BACKTRACE: full
+
 addons:
   apt:
+    update: true
     packages:
+      # Dependencies for kcov
       - libcurl4-openssl-dev
       - libelf-dev
       - libdw-dev
@@ -20,36 +27,57 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
+      - musl-tools  # For building MUSL static builds on Linux.
+
 matrix:
-  allow_failures:
-    - rust: nightly
   fast_finish: true
+  include:
+    - os: linux
+      env: TARGET=x86_64-unknown-linux-musl
+    - os: osx
+      env: TARGET=x86_64-apple-darwin
+
+before_install:
+  - set -e
+  - rustup self update
+
 install:
-  - rustup component add rustfmt
-  - rustup component add clippy
+  - sh ci/install.sh
+  - source ~/.cargo/env || true
 
 script:
-  - cargo fmt -- --check
-  - cargo clippy --all-features --all-targets -- -D warnings
-  - cargo build
-  - cargo test --all
+  - bash ci/script.sh
 
-after_success: |
-  PKG_NAME="rasusa"
-  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-  tar xzf master.tar.gz &&
-  cd kcov-master &&
-  mkdir build &&
-  cd build &&
-  cmake .. &&
-  make &&
-  make install DESTDIR=../../kcov-build &&
-  cd ../.. &&
-  rm -rf kcov-master
-  export PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
-  for file in target/debug/"$PKG_NAME"-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file" || exit 1; done &&
-  bash <(curl -s https://codecov.io/bash) &&
-  echo "Uploaded code coverage"
+after_script: set +e
+
+after_success:
+  - bash ci/after_success.sh
+
+before_deploy:
+  - sh ci/before_deploy.sh
+
+deploy:
+  provider: releases
+  file_glob: true
+  file: $PROJECT_NAME-$TRAVIS_TAG-$TARGET.*
+  skip_cleanup: true
+  on:
+    condition: $TRAVIS_RUST_VERSION = stable
+    branch: master
+    tags: true
+  api_key:
+    secure: "i7dLFxAv1V+ODvwIPQJQ33iO5aoL4R7rjYNPZ7mkf6AB15MbDnYkly7MpsaTxfQmUPoBBpuHFXGEVInXfBfm/8hqrY2D0EBsr3yhBaTgLfuXf2kIj9LX+BSHqO2/JXmKWeLZcFa2aFrBXz154818vCzvvcR0r0HIBQgOA5gtU46uSXSyOqDAqrF4eRuLEXt2SYmgCRGi265j3+mm9wYjCLbHJT34bkMJQa4kqygnMDBTi4yblAWR1PqGvFWi2Ot4yAikHgg+bbNZRdRZzCBhkgozhvSI2syyli/l0P6fjqR4GhnrLKHyyy4vGAf+Zad/GL45MEbh5qmV8vLkmE39OZgQ/GT73Psl01PGohFe13CdAXf9/zZanmVMXHguYkAXDUnaHlMIbz/KEkjlWJqf7yWU6c/7Hh7DSvYtQp28G7s4CN5qR89a6esl7F2UdkFrpScQMUme8PVhwV6a6DW5ZDlPIZk31rWTBJvk321kyT5VyEuQ7nf2yYdJaOP+2bsbQrF0def4m4ZJ6NuxI2mD8ozqgR4pi2DI6ELyVQ9QQWcsk/KZJdgn/h+I2POQDoMvHcMfxPGn8uk7Dt092t9knvaLAC5vInd4M/4iauBMJdKdHBwJelHVUHvhs4qUQT1mLDPyCqQq7Dngabvytw/pITeFN+PDpdmNbsbPAc340fY="
+
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+branches:
+  only:
+    # release tags
+    - /^v\d+\.\d+\.\d+.*$/
+    - master
 
 notifications:
   email:
