@@ -9,7 +9,6 @@ homepage = "https://github.com/mbhall88/rasusa"
 readme = "README.md"
 keywords = ["bioinformatics", "subsampling", "fastq", "fasta", "coverage"]
 categories = ["science", "command-line-utilities"]
-license = "MIT"
 license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
