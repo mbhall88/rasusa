@@ -7,7 +7,12 @@ main() {
     fi
 
     rustup component add rustfmt
-    rustup component add clippy
+    
+    if [ "$TRAVIS_RUST_VERSION" = nightly ]; then
+        rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+    else
+        rustup component add clippy
+    fi
     # This fetches latest stable release of cross
     tag=$(git ls-remote --tags --refs --exit-code https://github.com/japaric/cross \
                        | cut -d/ -f3 \
