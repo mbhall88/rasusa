@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # This script takes care of uploading code coverage to codecov
 
-set -eux
+set -ex
 
 main() {
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&

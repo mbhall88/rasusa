@@ -2,7 +2,7 @@
 # This script takes care of building the crate, packaging it for release, and building
 # a docker image from the specified release binary
 
-set -eux
+set -ex
 
 build_docker() {
     DOCKER_BIN="target/docker"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # This script takes care of testing
 
-set -eux
+set -ex
 
 main() {
     cross fmt -- --check

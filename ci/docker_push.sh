@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -eux
+set -ex
 
 docker push "${IMAGE_NAME}:latest"
 docker push "${IMAGE_NAME}:${TRAVIS_TAG}"
