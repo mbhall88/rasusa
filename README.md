@@ -17,6 +17,7 @@
   - [`singularity`](#singularity)
   - [`docker`](#docker)
   - [`homebrew`](#homebrew)
+  - [Release binaries](#release-binaries)
   - [Build locally](#build-locally)
 - [Usage](#usage)
   - [Basic usage](#basic-usage)
@@ -57,6 +58,8 @@ So, depending on your circumstances, an unbiased subsample of your reads might b
 
 ## Install
 
+Some of these installation options require the [`rust` toolchain][rust], which is extremely easy to set up. However, if you do not wish to install `rust` then there are a number of options available.
+
 ### `cargo`
 
 Prerequisite: [`rust` toolchain][rust]
@@ -96,6 +99,21 @@ Prerequisite: [`homebrew`][homebrew]
 ```sh
 # not implemented yet
 ```
+
+### Release binaries
+
+These binaries _do not_ require that you have the `rust` toolchain installed.
+
+Currently, there are two pre-compiled binaries available:
+- Linux kernel `x86_64-unknown-linux-musl` (works on most Linux distributions I tested)
+- OSX kernel `x86_64-apple-darwin` (works for any post-2007 Mac)
+
+```sh
+# not implemented yet
+```
+
+If these binaries do not work on your system please raise an issue and I will potentially
+add some additional kernels.
 
 ### Build locally
 
