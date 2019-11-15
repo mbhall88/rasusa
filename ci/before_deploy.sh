@@ -2,7 +2,7 @@
 # This script takes care of building the crate, packaging it for release, and building
 # a docker image from the specified release binary
 
-set -ex
+set -eux
 
 build_docker() {
     DOCKER_BIN="target/docker"
@@ -37,7 +37,7 @@ main() {
 
     cross build --target "$TARGET" --release
 
-    if [ "$TARGET" = x86_64-unknown-linux-musl ]; then
+    if [ "$TRAVIS_OS_NAME" = linux ]; then
         build_docker
     fi
 

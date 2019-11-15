@@ -1,11 +1,8 @@
 #!/usr/bin/env sh
-set -ex
+set -eux
 
 main() {
-    if [ "$TRAVIS_OS_NAME" = linux ]; then
-        target=x86_64-unknown-linux-musl
-    else
-        target=x86_64-apple-darwin
+    if [ "$TRAVIS_OS_NAME" = osx ]; then
         alias sort='gsort'  # for `sort --sort-version`, from brew's coreutils.
     fi
 
@@ -22,7 +19,7 @@ main() {
            --force \
            --git japaric/cross \
            --tag "$tag" \
-           --target "$target"
+           --target "$TARGET"
 }
 
 main
