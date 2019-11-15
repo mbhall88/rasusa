@@ -34,8 +34,10 @@ matrix:
   include:
     - os: linux
       env: TARGET=x86_64-unknown-linux-musl
+      rust: stable
     - os: osx
       env: TARGET=x86_64-apple-darwin
+      rust: stable
 
 before_install:
   - set -e
