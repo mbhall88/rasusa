@@ -65,7 +65,7 @@ deploy:
     file: $PROJECT_NAME-$TRAVIS_TAG-$TARGET.*
     skip_cleanup: true
     on:
-      condition: $TRAVIS_RUST_VERSION = stable
+      condition: env(TARGET) IS present
       tags: true
     api_key:
       secure: "i7dLFxAv1V+ODvwIPQJQ33iO5aoL4R7rjYNPZ7mkf6AB15MbDnYkly7MpsaTxfQmUPoBBpuHFXGEVInXfBfm/8hqrY2D0EBsr3yhBaTgLfuXf2kIj9LX+BSHqO2/JXmKWeLZcFa2aFrBXz154818vCzvvcR0r0HIBQgOA5gtU46uSXSyOqDAqrF4eRuLEXt2SYmgCRGi265j3+mm9wYjCLbHJT34bkMJQa4kqygnMDBTi4yblAWR1PqGvFWi2Ot4yAikHgg+bbNZRdRZzCBhkgozhvSI2syyli/l0P6fjqR4GhnrLKHyyy4vGAf+Zad/GL45MEbh5qmV8vLkmE39OZgQ/GT73Psl01PGohFe13CdAXf9/zZanmVMXHguYkAXDUnaHlMIbz/KEkjlWJqf7yWU6c/7Hh7DSvYtQp28G7s4CN5qR89a6esl7F2UdkFrpScQMUme8PVhwV6a6DW5ZDlPIZk31rWTBJvk321kyT5VyEuQ7nf2yYdJaOP+2bsbQrF0def4m4ZJ6NuxI2mD8ozqgR4pi2DI6ELyVQ9QQWcsk/KZJdgn/h+I2POQDoMvHcMfxPGn8uk7Dt092t9knvaLAC5vInd4M/4iauBMJdKdHBwJelHVUHvhs4qUQT1mLDPyCqQq7Dngabvytw/pITeFN+PDpdmNbsbPAc340fY="

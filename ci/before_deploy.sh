@@ -8,7 +8,7 @@ build_docker() {
     DOCKER_BIN="target/docker"
 
     mkdir -p "$DOCKER_BIN"
-    cp "target/${TARGET}/release/${PROJECT_NAME}" "{DOCKER_BIN}/${PROJECT_NAME}"
+    cp "target/${TARGET}/release/${PROJECT_NAME}" "${DOCKER_BIN}/${PROJECT_NAME}"
 
     docker build --tag "$IMAGE_NAME" .
 
