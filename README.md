@@ -65,7 +65,7 @@ Some of these installation options require the [`rust` toolchain][rust], which i
 Prerequisite: [`rust` toolchain][rust]
 
 ```sh
-# not implemented yet
+cargo install rasusa
 ```
 
 ### `conda`
@@ -81,7 +81,16 @@ Prerequisite: [`conda`][conda]
 Prerequisite: [`singularity`][singularity]
 
 ```sh
-# not implemented yet
+URI="docker://mbhall88/rasusa"
+singularity exec "$URI" rasusa --help
+```
+
+The above will use the latest version. If you want to specify a version then use a tag
+like so.
+
+```sh
+VERSION="0.1.0"
+URI="docker://mbhall88/rasusa:${VERSION}"
 ```
 
 ### `docker`
@@ -89,7 +98,8 @@ Prerequisite: [`singularity`][singularity]
 Prerequisite: [`docker`][docker]
 
 ```sh
-# not implemented yet
+docker pull mbhall88/rasusa
+docker run mbhall88/rasusa rasusa --help
 ```
 
 ### `homebrew`
@@ -108,8 +118,11 @@ Currently, there are two pre-compiled binaries available:
 - Linux kernel `x86_64-unknown-linux-musl` (works on most Linux distributions I tested)
 - OSX kernel `x86_64-apple-darwin` (works for any post-2007 Mac)
 
+An example of downloading one of these binaries using `wget`
 ```sh
-# not implemented yet
+URL="https://github.com/mbhall88/rasusa/releases/download/0.1.0/rasusa-0.1.0-x86_64-unknown-linux-musl.tar.gz"
+wget "$URL" -O - | tar -xzf -
+./rasusa --help
 ```
 
 If these binaries do not work on your system please raise an issue and I will potentially
