@@ -97,8 +97,7 @@ URI="docker://mbhall88/rasusa"
 singularity exec "$URI" rasusa --help
 ```
 
-The above will use the latest version. If you want to specify a version then use a tag
-like so.
+The above will use the latest version. If you want to specify a version then use a [tag][dockerhub] like so.
 
 ```sh
 VERSION="0.1.0"
@@ -113,6 +112,10 @@ Prerequisite: [`docker`][docker]
 docker pull mbhall88/rasusa
 docker run mbhall88/rasusa rasusa --help
 ```
+
+You can find all the available tags on the [Docker Hub repository][dockerhub].
+
+[dockerhub]: https://hub.docker.com/r/mbhall88/rasusa
 
 ### `homebrew`
 
