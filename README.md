@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/mbhall88/rasusa.svg?branch=master)](https://travis-ci.org/mbhall88/rasusa)
 [![codecov](https://codecov.io/gh/mbhall88/rasusa/branch/master/graph/badge.svg)](https://codecov.io/gh/mbhall88/rasusa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
+[![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
 
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
@@ -63,6 +63,8 @@ Some of these installation options require the [`rust` toolchain][rust], which i
 
 ### `cargo`
 
+[![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
+
 Prerequisite: [`rust` toolchain][rust]
 
 ```sh
@@ -71,11 +73,20 @@ cargo install rasusa
 
 ### `conda`
 
-Prerequisite: [`conda`][conda]
+[![Conda (channel only)](https://img.shields.io/conda/vn/bioconda/rasusa)](https://anaconda.org/bioconda/rasusa)
+[![bioconda version](https://anaconda.org/bioconda/rasusa/badges/platforms.svg)](https://anaconda.org/bioconda/rasusa)
+
+Prerequisite: [`conda`][conda] (and bioconda channel [correctly set up][channels])
 
 ```sh
-# not implemented yet
+conda install rasusa
 ```
+
+Thank you to Devon Ryan ([@dpryan79][dpryan79]) for [help debugging the bioconda recipe][pr-help].
+
+[channels]: https://bioconda.github.io/user/install.html#set-up-channels
+[dpryan79]: https://github.com/dpryan79
+[pr-help]: https://github.com/bioconda/bioconda-recipes/pull/18690
 
 ### `singularity`
 
