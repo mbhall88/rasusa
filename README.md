@@ -4,6 +4,7 @@
 [![codecov](https://codecov.io/gh/mbhall88/rasusa/branch/master/graph/badge.svg)](https://codecov.io/gh/mbhall88/rasusa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3546168.svg)](https://doi.org/10.5281/zenodo.3546168)
 
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
@@ -32,6 +33,8 @@
     - [Verbosity](#verbosity)
   - [Full usage](#full-usage)
 - [Contributing](#contributing)
+- [Citing](#citing)
+  - [Bibtex](#bibtex)
 
 <!-- /code_chunk_output -->
 
@@ -121,9 +124,20 @@ You can find all the available tags on the [Docker Hub repository][dockerhub].
 
 Prerequisite: [`homebrew`][homebrew]
 
+The `homebrew` installation is done via the [homebrew-bio tap][brew-tap].
+
 ```sh
-# not implemented yet
+brew tap brewsci/bio
+brew install rasusa
 ```
+
+or
+
+```sh
+brew install brewsci/bio/rasusa
+```
+
+[brew-tap]: https://github.com/brewsci/homebrew-bio
 
 ### Release binaries
 
@@ -277,3 +291,25 @@ For changes to be accepted, they must pass the CI and coverage checks. These inc
 -   Code coverage has not reduced. If you want to check coverage before pushing changes, I use [`kcov`][kcov].
 
 [kcov]: https://github.com/SimonKagstrom/kcov
+
+## Citing
+
+If you use `rasusa` in your research, it would be very much appreciated if you could cite it.
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3546168.svg)](https://doi.org/10.5281/zenodo.3546168)
+
+> Hall, Michael B. Rasusa: Randomly subsample sequencing reads to a specified coverage. (2019). doi:10.5281/zenodo.3546168
+
+### Bibtex
+
+```Bibtex
+@article{
+    rasusa2019,
+    title={Rasusa: Randomly subsample sequencing reads to a specified coverage},
+    DOI={10.5281/zenodo.3546168},
+    publisher={Zenodo},
+    author={Hall, Michael B.},
+    year={2019},
+    month={Nov}
+}
+```
