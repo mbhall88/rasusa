@@ -22,9 +22,6 @@ main() {
 }
 
 # we don't run kcov on osx and only run on stable
-echo "$TRAVIS_OS_NAME"
-echo "$TRAVIS_RUST_VERSION"
-
 if [[ "$TRAVIS_OS_NAME" == linux && "$TRAVIS_RUST_VERSION" == stable ]]; then
     main
 fi
