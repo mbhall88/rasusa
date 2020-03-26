@@ -48,17 +48,19 @@ fn setup_logger(verbose: bool) -> Result<(), fern::InitError> {
 }
 
 fn main() -> Result<(), ExitFailure> {
-    let args = Cli::from_args();
+    let args: Cli = Cli::from_args();
+    args.validate_input_output_combination()?;
 
     setup_logger(args.verbose)?;
 
     debug!("{:?}", args);
 
-    let input_fastx = Fastx::from_path(&args.input)?;
+    let input_fastx = Fastx::from_path(&args.input[0])?;
 
-    let mut output_file_handle = match args.output {
-        Some(path) => {
-            let out_fastx = Fastx::from_path(&path)?;
+    let mut output_file_handle = match args.output.len() {
+        0 => Box::new(stdout()),
+        _ => {
+            let out_fastx = Fastx::from_path(&args.output[0])?;
             if out_fastx.filetype != input_fastx.filetype {
                 warn!(
                     "Input ({:?}) and output ({:?}) file types are not the same. \
@@ -68,7 +70,6 @@ fn main() -> Result<(), ExitFailure> {
             }
             out_fastx.create()?
         }
-        None => Box::new(stdout()),
     };
 
     let target_total_bases: u64 = args.genome_size * args.coverage;

@@ -10,12 +10,18 @@ use structopt::StructOpt;
 #[structopt()]
 pub struct Cli {
     /// The fast{a,q} file to sub-sample.
-    #[structopt(short = "i", long = "input", parse(from_os_str))]
-    pub input: PathBuf,
+    #[structopt(
+        short = "i",
+        long = "input",
+        parse(from_os_str),
+        multiple = true,
+        required = true
+    )]
+    pub input: Vec<PathBuf>,
 
     /// Output file, stdout if not present.
-    #[structopt(short = "o", long = "output", parse(from_os_str))]
-    pub output: Option<PathBuf>,
+    #[structopt(short = "o", long = "output", parse(from_os_str), multiple = true)]
+    pub output: Vec<PathBuf>,
 
     /// Size of the genome to calculate coverage with respect to. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
     #[structopt(short = "g", long = "genome-size")]
@@ -32,6 +38,37 @@ pub struct Cli {
     /// Switch on verbosity.
     #[structopt(short)]
     pub verbose: bool,
+}
+
+impl Cli {
+    /// Checks there is a valid and equal number of `--input` and `--output` arguments given.
+    ///
+    /// # Errors
+    /// An [`Invalid::InputOutputCombination`](#invalid) is returned for the following:
+    /// - Either `--input` or `--output` are passed more than twice
+    /// - An unequal number of `--input` and `--output` are passed. The only exception to
+    /// this is if one `--input` and zero `--output` are passed, in which case, the output
+    /// will be sent to STDOUT.
+    pub fn validate_input_output_combination(&self) -> Result<(), Invalid> {
+        let out_len = self.output.len();
+        let in_len = self.input.len();
+
+        if in_len > 2 {
+            let msg = String::from("Got more than 2 files for input.");
+            return Err(Invalid::InputOutputCombination { msg });
+        }
+        if out_len > 2 {
+            let msg = String::from("Got more than 2 files for output.");
+            return Err(Invalid::InputOutputCombination { msg });
+        }
+        match (in_len as isize - out_len as isize) as isize {
+            diff if diff == 1 && in_len == 1 => Ok(()),
+            diff if diff != 0 => Err(Invalid::InputOutputCombination {
+                msg: format!("Got {} --input but {} --output", in_len, out_len),
+            }),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// A collection of custom errors relating to the command line interface for this package.
@@ -51,6 +88,10 @@ pub enum Invalid {
     /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
     #[snafu(display("{} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character", coverage))]
     CoverageValue { coverage: String },
+
+    /// Indicates a bad combination of input and output files was passed.
+    #[snafu(display("{}", msg))]
+    InputOutputCombination { msg: String },
 }
 
 /// A metric suffix is a unit suffix used to indicate the multiples of (in this case) base pairs.
@@ -377,11 +418,194 @@ mod tests {
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
-        assert_eq!(args.input, PathBuf::from_str("in.fq").unwrap());
+        assert_eq!(args.input[0], PathBuf::from_str("in.fq").unwrap());
         assert_eq!(args.coverage, Coverage(5));
         assert_eq!(args.genome_size, GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
-        assert_eq!(args.output, PathBuf::from_str("my/output/file.fq").ok())
+        assert_eq!(
+            args.output[0],
+            PathBuf::from_str("my/output/file.fq").unwrap()
+        )
+    }
+
+    #[test]
+    fn all_valid_args_with_two_inputs_parsed_as_expected() {
+        let passed_args = vec![
+            "rasusa",
+            "-i",
+            "in.fq",
+            "in2.fq",
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let expected_input = vec![
+            PathBuf::from_str("in.fq").unwrap(),
+            PathBuf::from_str("in2.fq").unwrap(),
+        ];
+        assert_eq!(args.input, expected_input);
+        assert_eq!(args.coverage, Coverage(5));
+        assert_eq!(args.genome_size, GenomeSize(8_000_000));
+        assert_eq!(args.seed, Some(88));
+        assert_eq!(
+            args.output[0],
+            PathBuf::from_str("my/output/file.fq").unwrap()
+        )
+    }
+
+    #[test]
+    fn all_valid_args_with_two_inputs_using_flag_twice_parsed_as_expected() {
+        let passed_args = vec![
+            "rasusa",
+            "-i",
+            "in.fq",
+            "-i",
+            "in2.fq",
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let expected_input = vec![
+            PathBuf::from_str("in.fq").unwrap(),
+            PathBuf::from_str("in2.fq").unwrap(),
+        ];
+        assert_eq!(args.input, expected_input);
+        assert_eq!(args.coverage, Coverage(5));
+        assert_eq!(args.genome_size, GenomeSize(8_000_000));
+        assert_eq!(args.seed, Some(88));
+        assert_eq!(
+            args.output[0],
+            PathBuf::from_str("my/output/file.fq").unwrap()
+        )
+    }
+
+    #[test]
+    fn three_inputs_raises_error() {
+        let passed_args = vec![
+            "rasusa",
+            "-i",
+            "in.fq",
+            "-i",
+            "in.fq",
+            "-i",
+            "in.fq",
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
+        let expected = Invalid::InputOutputCombination {
+            msg: String::from("Got more than 2 files for input."),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn three_outputs_raises_error() {
+        let passed_args = vec![
+            "rasusa",
+            "-i",
+            "in.fq",
+            "-i",
+            "in.fq",
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+            "-o",
+            "out.fq",
+            "-o",
+            "out.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
+        let expected = Invalid::InputOutputCombination {
+            msg: String::from("Got more than 2 files for output."),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn one_input_no_output_is_ok() {
+        let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88"];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let actual = args.validate_input_output_combination();
+
+        assert!(actual.is_ok())
+    }
+
+    #[test]
+    fn two_inputs_one_output_raises_error() {
+        let passed_args = vec![
+            "rasusa", "-i", "in.fq", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88", "-o",
+            "out.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
+        let expected = Invalid::InputOutputCombination {
+            msg: String::from("Got 2 --input but 1 --output"),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn one_input_two_outputs_raises_error() {
+        let passed_args = vec![
+            "rasusa", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o",
+            "out.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
+        let expected = Invalid::InputOutputCombination {
+            msg: String::from("Got 1 --input but 2 --output"),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn two_input_two_outputs_is_ok() {
+        let passed_args = vec![
+            "rasusa", "-i", "in.fq", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88", "-o",
+            "out.fq", "-o", "out.fq",
+        ];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        let actual = args.validate_input_output_combination();
+
+        assert!(actual.is_ok())
     }
 
     #[test]
