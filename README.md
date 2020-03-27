@@ -366,16 +366,9 @@ COVG=20
 NUM_READS=147052
 SEQTK_CMD_1="seqtk sample -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
 SEQTK_CMD_2="seqtk sample -2 -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
-RASUSA_CMD="./rasusa TB_GENOME_SIZE=4411532
-COVG=20
-NUM_READS=147052
-SEQTK_CMD_1="seqtk sample -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
-SEQTK_CMD_2="seqtk sample -2 -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
-RASUSA_CMD="./rasusa -i r1.fq r2.fq -c $COVG -g $TB_GENOME_SIZE -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
-hyperfine --warmup 3 --runs 10 --export-markdown results.md \
-     "$SEQTK_CMD_1" "$SEQTK_CMD_2" "$RASUSA_CMD"  -i r1.fq r2.fq -c $COVG -g $TB_GENOME_SIZE -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
+RASUSA_CMD="rasusa -i r1.fq r2.fq -c $COVG -g $TB_GENOME_SIZE -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
 hyperfine --warmup 3 --export-markdown results.md \
-     "$SEQTK_CMD_1" "$SEQTK_CMD_2" "$RASUSA_CMD" 
+     "$SEQTK_CMD_1" "$SEQTK_CMD_2" "$RASUSA_CMD"
 ```
 
 #### Results
