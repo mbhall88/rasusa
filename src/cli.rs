@@ -9,7 +9,8 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt()]
 pub struct Cli {
-    /// The fast{a,q} file to sub-sample.
+    /// The fast{a,q} file(s) to subsample. For paired Illumina you may either pass this flag twice
+    /// `-i r1.fq -i r2.fq` or give two files consecutively `-i r1.fq r2.fq`.
     #[structopt(
         short = "i",
         long = "input",
@@ -19,7 +20,10 @@ pub struct Cli {
     )]
     pub input: Vec<PathBuf>,
 
-    /// Output file, stdout if not present.
+    /// Output file(s), stdout if not present. For paired Illumina you may either pass this flag twice
+    /// `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the
+    /// pairs is assumed to be the same as that given for --input. This option is required for paired
+    /// input.
     #[structopt(short = "o", long = "output", parse(from_os_str), multiple = true)]
     pub output: Vec<PathBuf>,
 
