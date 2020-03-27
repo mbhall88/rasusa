@@ -6,12 +6,11 @@ main() {
         alias sort='gsort'  # for `sort --sort-version`, from brew's coreutils.
     fi
 
-    rustup component add rustfmt
-
     if [ "$TRAVIS_RUST_VERSION" = nightly ]; then
         rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+        rustup component add rustfmt --toolchain=nightly || cargo install --git https://github.com/rust-lang/rustfmt/ --force rustfmt   
     else
-        rustup component add clippy
+        rustup component add clippy rustfmt
     fi
     # This fetches latest stable release of cross
     tag=$(git ls-remote --tags --refs --exit-code https://github.com/japaric/cross \
