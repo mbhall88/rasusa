@@ -37,7 +37,7 @@ main() {
 
     cross build --target "$TARGET" --release
 
-    if [[ "$TRAVIS_OS_NAME" = linux ]]; then
+    if [ "$TRAVIS_OS_NAME" = linux ]; then
         build_docker
     fi
 
