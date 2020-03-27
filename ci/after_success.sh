@@ -16,7 +16,7 @@ main() {
   rm -rf kcov-master
   PATH=$(realpath ./kcov-build/usr/local/bin):"$PATH"
   export PATH
-  for file in target/debug/"$PROJECT_NAME"-*; do [ -x "$file" ] || continue; mkdir -p "target/cov/$(basename "$file")"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename "$file")" "$file" || exit 1; done &&
+  for file in target/debug/"$PROJECT_NAME"-*; do [[ -x "$file" ]] || continue; mkdir -p "target/cov/$(basename "$file")"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename "$file")" "$file" || exit 1; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
 }
