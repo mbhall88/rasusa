@@ -7,8 +7,9 @@ main() {
     fi
 
     if [ "$TRAVIS_RUST_VERSION" = nightly ]; then
+        rustup toolchain remove stable && rustup toolchain add stable
         rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
-        rustup component add rustfmt --toolchain=nightly || cargo install --git https://github.com/rust-lang/rustfmt/ --force rustfmt   
+        rustup component add rustfmt --toolchain nightly
     else
         rustup component add clippy rustfmt
     fi
