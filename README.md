@@ -319,9 +319,9 @@ For changes to be accepted, they must pass the CI and coverage checks. These inc
 
 If you use `rasusa` in your research, it would be very much appreciated if you could cite it.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3546168.svg)](https://doi.org/10.5281/zenodo.3546168)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3731394.svg)](https://doi.org/10.5281/zenodo.3731394)
 
-> Hall, Michael B. Rasusa: Randomly subsample sequencing reads to a specified coverage. (2019). doi:10.5281/zenodo.3546168
+> Hall, Michael B. Rasusa: Randomly subsample sequencing reads to a specified coverage. (2019). doi:10.5281/zenodo.3731394
 
 ### Bibtex
 
@@ -329,7 +329,7 @@ If you use `rasusa` in your research, it would be very much appreciated if you c
 @article{
     rasusa2019,
     title={Rasusa: Randomly subsample sequencing reads to a specified coverage},
-    DOI={10.5281/zenodo.3546168},
+    DOI={10.5281/zenodo.3731394},
     publisher={Zenodo},
     author={Hall, Michael B.},
     year={2019},
