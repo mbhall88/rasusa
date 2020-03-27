@@ -98,7 +98,7 @@ singularity exec "$URI" rasusa --help
 The above will use the latest version. If you want to specify a version then use a [tag][dockerhub] like so.
 
 ```sh
-VERSION="0.1.0"
+VERSION="0.2.0"
 URI="docker://mbhall88/rasusa:${VERSION}"
 ```
 
@@ -144,7 +144,7 @@ Currently, there are two pre-compiled binaries available:
 
 An example of downloading one of these binaries using `wget`
 ```sh
-URL="https://github.com/mbhall88/rasusa/releases/download/0.1.0/rasusa-0.1.0-x86_64-unknown-linux-musl.tar.gz"
+URL="https://github.com/mbhall88/rasusa/releases/download/0.2.0/rasusa-0.2.0-x86_64-unknown-linux-musl.tar.gz"
 wget "$URL" -O - | tar -xzf -
 ./rasusa --help
 ```
@@ -276,7 +276,7 @@ Adding this optional flag will make the logging more verbose. By default, loggin
 ```text
 $ rasusa --help
 
-rasusa 0.1.0
+rasusa 0.2.0
 Randomly subsample reads to a specified coverage.
 
 USAGE:
