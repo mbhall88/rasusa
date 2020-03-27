@@ -8,10 +8,8 @@
 
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
-<!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=4 orderedList=false} -->
-
-<!-- code_chunk_output -->
-
+[TOC]:#
+# Table of Contents
 - [Motivation](#motivation)
 - [Install](#install)
   - [`cargo`](#cargo)
@@ -24,23 +22,20 @@
 - [Usage](#usage)
   - [Basic usage](#basic-usage)
   - [Required parameters](#required-parameters)
-    - [Input](#input)
-    - [Coverage](#coverage)
-    - [Genome size](#genome-size)
   - [Optional parameters](#optional-parameters)
-    - [Output](#output)
-    - [Random seed](#random-seed)
-    - [Verbosity](#verbosity)
   - [Full usage](#full-usage)
 - [Contributing](#contributing)
 - [Citing](#citing)
   - [Bibtex](#bibtex)
 
-<!-- /code_chunk_output -->
 
 ## Motivation
 
-I couldn't find a tool for subsampling reads that met my requirements. All the strategies I could find fell short as they either just wanted a number or  percentage of reads to subsample to or, if they did subsample to a coverage, they assume all reads are the same size (i.e Illumina). As I mostly work with long-read data this posed a problem if I wanted to subsample a file to certain coverage, as length of reads was never taken into account.  
+I couldn't find a tool for subsampling reads that met my requirements. All the strategies  
+I could find fell short as they either just wanted a number or  percentage of reads to  
+subsample to or, if they did subsample to a coverage, they assume all reads are the same  
+size (i.e Illumina). As I mostly work with long-read data this posed a problem if I wanted  
+to subsample a file to certain coverage, as length of reads was never taken into account.  
 `rasusa` addresses this shortcoming.
 
 A workaround I had been using for a while was using [`filtlong`][filtlong]. It was simple enough, I just figure out the number of bases I need to achieve a (theoretical) coverage for my sample. Say I have a fastq from an _E. coli_ sample with 5 million reads and I want to subset it to 50x coverage. I just need to multiply the expected size of the sample's genome, 4.6 million base pairs, by the coverage I want and I have my target bases - 230 million base pairs. In `filtlong`, I can do the following
@@ -184,11 +179,19 @@ cargo test --all
 
 ### Basic usage
 
-```sh
+```
 rasusa --input in.fq --coverage 30 --genome-size 4.6mb
 ```
 
-The above command will output the subsampled file to `stdout`. For more details on the above options, and additional options, see below.
+The above command will output the subsampled file to `stdout`.
+
+Or, if you have paired Illumina
+
+```
+rasusa -i r1.fq -i r2.fq --coverage 30 --genome-size 4g -o out.r1.fq -o out.r2.fq
+```
+
+For more details on the above options, and additional options, see below.
 
 ### Required parameters
 
@@ -198,8 +201,11 @@ There are three required options to run `rasusa`.
 
 ##### `-i`, `--input`
 
-This option specifies the file containing the reads you would like to subsample.
-The file must be valid fasta or fastq format and can be compressed (with a tool such as `gzip`).
+This option specifies the file(s) containing the reads you would like to subsample.
+The file(s) must be valid fasta or fastq format and can be compressed (with a tool such as `gzip`).  
+Illumina paired files can be passed in two ways.
+1. Using `--input` twice `-i r1.fq -i r2.fq`
+2. Using `--input` once, but passing both files immediately after `-i r1.fq r2.fq`
 
 _**Note**: The file format is (lazily) determined from the file name._ File suffixes that are deemed valid are:
 
@@ -236,8 +242,18 @@ Genome size can be passed in many ways. As a plain old integer (1600), or with a
 
 ##### `-o`, `--output`
 
-By default, `rasusa` will output the subsampled file to `stdout`. If you would prefer to specify an output file path, then use this option. If you add the compression suffix `.gz` to the file path then the output will be compressed for you.  
-_Note: The output will always be in the same format as the input. You cannot pass fastq as input and ask for fasta as output. If this poses a problem for you, please raise an issue, and I will implement this feature if/when possible._
+NOTE: This parameter is required if passing paired Illumina data.
+
+By default, `rasusa` will output the subsampled file to `stdout` (if one file is given). If you would prefer  
+to specify an output file path, then use this option. If you add the compression suffix  
+`.gz` to the file path then the output will be compressed for you.
+
+Output for Illumina paired files can be specified in the same manner as [`--input`](#input)
+1. Using `--output` twice `-o out.r1.fq -o out.r2.fq`
+2. Using `--output` once, but passing both files immediately after `-o out.r1.fq out.r2.fq`
+
+The ordering of the output files is assumed to be the same as the input.  
+_Note: The output will always be in the same format as the input. You cannot pass fastq as input and ask for fasta as output._
 
 #### Random seed
 
@@ -264,7 +280,7 @@ rasusa 0.1.0
 Randomly subsample reads to a specified coverage.
 
 USAGE:
-    rasusa [FLAGS] [OPTIONS] --coverage <coverage> --genome-size <genome-size> --input <input>
+    rasusa [FLAGS] [OPTIONS] --coverage <coverage> --genome-size <genome-size> --input <input>...
 
 FLAGS:
     -h, --help       Prints help information
@@ -275,8 +291,12 @@ OPTIONS:
     -c, --coverage <coverage>          The desired coverage to sub-sample the reads to.
     -g, --genome-size <genome-size>    Size of the genome to calculate coverage with respect to. i.e 4.3kb, 7Tb, 9000,
                                        4.1MB etc.
-    -i, --input <input>                The fast{a,q} file to sub-sample.
-    -o, --output <output>              Output file, stdout if not present.
+    -i, --input <input>...             The fast{a,q} file(s) to subsample. For paired Illumina you may either pass this
+                                       flag twice `-i r1.fq -i r2.fq` or give two files consecutively `-i r1.fq r2.fq`.
+    -o, --output <output>...           Output file(s), stdout if not present. For paired Illumina you may either pass
+                                       this flag twice `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq
+                                       o2.fq`. NOTE: The order of the pairs is assumed to be the same as that given for
+                                       --input. This option is required for paired input.
     -s, --seed <seed>                  Random seed to use.
 ```
 
