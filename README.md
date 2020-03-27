@@ -103,6 +103,7 @@ URI="docker://mbhall88/rasusa:${VERSION}"
 ```
 
 ### `docker`
+[![Docker Image Version (latest semver)](https://img.shields.io/docker/v/mbhall88/rasusa)](https://hub.docker.com/r/mbhall88/rasusa/tags)
 
 Prerequisite: [`docker`][docker]
 
