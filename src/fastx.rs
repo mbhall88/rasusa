@@ -294,7 +294,7 @@ impl Fastx {
     /// ```
     pub fn filter_reads_into<T: ?Sized + Write>(
         &self,
-        reads_to_keep: &mut HashSet<u32>,
+        mut reads_to_keep: HashSet<u32>,
         write_to: &mut T,
     ) -> Result<(), Invalid> {
         let file_handle = self.open()?;
@@ -633,11 +633,11 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         let mut out_fh = output_fastx.create().unwrap();
-        let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+        let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
 
         assert!(filter_result.is_ok());
 
@@ -658,12 +658,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -679,12 +679,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -700,12 +700,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -721,12 +721,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -742,12 +742,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
             assert!(filter_result.is_err());
         }
 
@@ -763,12 +763,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path()).unwrap();
-        let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
         let output = Builder::new().suffix(".fq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path()).unwrap();
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
             assert!(filter_result.is_err());
         }
 
