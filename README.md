@@ -34,12 +34,7 @@
 
 ## Motivation
 
-I couldn't find a tool for subsampling reads that met my requirements. All the strategies  
-I could find fell short as they either just wanted a number or  percentage of reads to  
-subsample to or, if they did subsample to a coverage, they assume all reads are the same  
-size (i.e Illumina). As I mostly work with long-read data this posed a problem if I wanted  
-to subsample a file to certain coverage, as length of reads was never taken into account.  
-`rasusa` addresses this shortcoming.
+I couldn't find a tool for subsampling reads that met my requirements. All the strategies I could find fell short as they either just wanted a number or  percentage of reads to subsample to or, if they did subsample to a coverage, they assume all reads are the same size (i.e Illumina). As I mostly work with long-read data this posed a problem if I wanted to subsample a file to certain coverage, as length of reads was never taken into account. `rasusa` addresses this shortcoming.
 
 A workaround I had been using for a while was using [`filtlong`][filtlong]. It was simple enough, I just figure out the number of bases I need to achieve a (theoretical) coverage for my sample. Say I have a fastq from an _E. coli_ sample with 5 million reads and I want to subset it to 50x coverage. I just need to multiply the expected size of the sample's genome, 4.6 million base pairs, by the coverage I want and I have my target bases - 230 million base pairs. In `filtlong`, I can do the following
 
@@ -250,9 +245,7 @@ Genome size can be passed in many ways. As a plain old integer (1600), or with a
 
 NOTE: This parameter is required if passing paired Illumina data.
 
-By default, `rasusa` will output the subsampled file to `stdout` (if one file is given). If you would prefer  
-to specify an output file path, then use this option. If you add the compression suffix  
-`.gz` to the file path then the output will be compressed for you.
+By default, `rasusa` will output the subsampled file to `stdout` (if one file is given). If you would prefer to specify an output file path, then use this option. If you add the compression suffix `.gz` to the file path then the output will be compressed for you.
 
 Output for Illumina paired files can be specified in the same manner as [`--input`](#input)
 1. Using `--output` twice `-o out.r1.fq -o out.r2.fq`
@@ -382,9 +375,7 @@ hyperfine --warmup 3 --export-markdown results.md \
 **Summary**: `seqtk` (1-pass) ran 1.27 ± 0.18 times faster than `rasusa` and
 1.03 ± 0.15 times faster than `seqtk` (2-pass)
 
-So, `rasusa` is just about the same speed as `seqtk` but doesn't require a fixed number  
-of reads - allowing you to avoid doing maths to determine how many reads you need to downsample  
-to a specific coverage. 🤓
+So, `rasusa` is just about the same speed as `seqtk` but doesn't require a fixed number of reads - allowing you to avoid doing maths to determine how many reads you need to downsample to a specific coverage. 🤓
 
 [hyperfine]: https://github.com/sharkdp/hyperfine
 [1]: https://doi.org/10.1099/mgen.0.000188
