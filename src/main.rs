@@ -126,13 +126,7 @@ fn main() -> Result<(), ExitFailure> {
         read_lengths = second_input_fastx.read_lengths()?;
 
         if read_lengths.len() != expected_num_reads {
-            error!(
-                "First input has {} reads, but the second has {} reads. Paired Illumina files are \
-                assumed to have the same number of reads. The results of this subsample \
-                may not be as expected now.",
-                expected_num_reads,
-                read_lengths.len()
-            )
+            error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len())
         } else {
             info!(
                 "Both input files have the same number of reads ({}) 👍",
