@@ -208,6 +208,8 @@ Illumina paired files can be passed in two ways.
 1. Using `--input` twice `-i r1.fq -i r2.fq`
 2. Using `--input` once, but passing both files immediately after `-i r1.fq r2.fq`
 
+> Bash wizard tip 🧙: Let globs do the work for you `-i r*.fq`
+
 _**Note**: The file format is (lazily) determined from the file name._ File suffixes that are deemed valid are:
 
 -   fasta: `.fa`, `.fasta`, `.fa.gz`, `.fasta.gz`
