@@ -128,8 +128,8 @@ fn main() -> Result<(), ExitFailure> {
         if read_lengths.len() != expected_num_reads {
             error!(
                 "First input has {} reads, but the second has {} reads. Paired Illumina files are \
-            assumed to have the same number of reads. The results of this subsample \
-            may not be as expected now.",
+                assumed to have the same number of reads. The results of this subsample \
+                may not be as expected now.",
                 expected_num_reads,
                 read_lengths.len()
             )
