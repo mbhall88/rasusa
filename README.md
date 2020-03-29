@@ -149,7 +149,9 @@ wget "$URL" -O - | tar -xzf -
 ```
 
 If these binaries do not work on your system please raise an issue and I will potentially
-add some additional kernels.
+add some additional [target triples][triples].
+
+[triples]: https://clang.llvm.org/docs/CrossCompilation.html#target-triple
 
 ### Build locally
 
