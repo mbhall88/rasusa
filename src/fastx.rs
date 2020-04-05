@@ -476,6 +476,38 @@ mod tests {
     }
 
     #[test]
+    fn file_type_from_str_fq_extension_returns_fastq_filetype() {
+        let path = "data/in.fq";
+
+        let actual = FileType::from_str(path).unwrap();
+        let expected = FileType::Fastq;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn file_type_from_str_compressed_fastq_extension_returns_fastq_filetype() {
+        let path = "data/in.fq.gz";
+
+        let actual = FileType::from_str(path).unwrap();
+        let expected = FileType::Fastq;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn file_type_from_str_invalid_extension_raises_error() {
+        let path = "data/in.bam";
+
+        let actual = FileType::from_str(path).unwrap_err();
+        let expected = Invalid::UnknownFileType {
+            filepath: String::from(path),
+        };
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
     fn path_is_compressed() {
         let path = Path::new("this/is/compres.gz");
 

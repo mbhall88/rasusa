@@ -3,88 +3,95 @@ dist: bionic
 services: docker
 env:
   global:
-  - PROJECT_NAME: rasusa
-  - RUST_BACKTRACE: full
-  - IMAGE_NAME: mbhall88/rasusa
-  - secure: DFEMnUada32BaGZUZLcbqo856w+a8H5pCGMFB1v/gQyAFsGN4M0uKg84CR69fpmdEdm2xXCi8UmL1TaEWwVCp43Z6qd0PDJm8+C1Ley7OEaibEuE92cWG4AdCshCXJR37EV4XyexPEsvyhg66DH9CYjywyywH1DULLCS6sluNMC0SxyhTwNiXiQu4FaEBCXDsLA7mt0S9D3O+iky9CmZXqM/5HPMzYdnI4/pkXgj80Hqm1ibxcrIPh/C8CUYxmN0ZQPctxhKhLvfmE58k3b7J/MGs2JQnkK5MAQQ2nS5MgnC+CXvB2gVAJ/zcD3wAPre10XXJLsT4zSANAH4BO7yu00dgNTyOsjtxrOXFrXzsifMQU5RnN++6123Xb2FNFebDHGMMtHXTw7zgeyJUgkKQ7oX5ZTBh/jgvBde60RfB0zTwVsCA1o1nqbnjbpDHD6MsK5tC6dSy2fkDvu+oQE5le4Kq6qwiR1cveLfvTJCgWPNk7w7XzfaPwQZwiCgfBFlYbLhxxgKVF8K71Eh8loxeUTicf2nCskz+iKYEikBM86pIdgEPPxgiXXD2TuUaPOowR315qSyvNwcdELPmWrtTiljjF+RtFU8QWbMu84jL90KI1nhzvLt9C3oJnlPiGYHVYwFF2aJ4bRzE4jJTMLlZDU3dDL3zqQfNN5bZTB3GsI=
-  - secure: qYBEb3OyZD5mRoRWWgxlYR4sY1Wtgub5y7lhOTvpFSlNbjVo220wimdqFL2l3PJRdKab3WRP/FlBjx9gsw/kY81fgs6vfm4gP8p4bhecKwG0VuJWoKySCG0vX7idV38lZXgCNZocxhYsu96fT7vNFIluA6iEuMPju6S9tgemaCJ6H9rFUSENX7RSCjCIKrdZ4Gf8o8ixQACL/tKUQT3XJJIZcGA7yeZ0thjnGSzl9GYiH6VHgJ5pItjmAm0vH9L4PFVAEIEYFn01rW554hEaoMcytlippBwTrcmMMqfAg4xuhg+bLr42GmMoTkIRYl9DXZ8Ar7JyKRTa44o/g0UhKTk4qm+vdqdyJebFa8TSdErUlJapfPPiVf1UlE0M/CKZQnsIHqhYbAg99htwZKXv4qvZobjXlC2NwN1S9inKdMvu82KEPLRbZCwSkR+q4r3DqatqK62EBwI/VmbjwFsQUbMlQ/SFje9JgnY6+3iLW2dwwYM7y2UW4UKzqQEJhhCcU1YZ1y1s5k6MD5p+1BytLKtKE0xrPMpq6eoZLOw0yVjPljRxMZKxrfwVbkX6lLnTDTbG6RL4qdcme2iCP+7Lnfd4RSSYEO7tgj7SYZwxOk4Y+t0yHeX0dNsg67Ij2cjTckz9I7vcmAsMQAhndw/EFBWAi3AkIaRGg6rCTwt7bOc=
+    - PROJECT_NAME: rasusa
+    - RUST_BACKTRACE: full
+    - IMAGE_NAME: mbhall88/rasusa
+    - secure: DFEMnUada32BaGZUZLcbqo856w+a8H5pCGMFB1v/gQyAFsGN4M0uKg84CR69fpmdEdm2xXCi8UmL1TaEWwVCp43Z6qd0PDJm8+C1Ley7OEaibEuE92cWG4AdCshCXJR37EV4XyexPEsvyhg66DH9CYjywyywH1DULLCS6sluNMC0SxyhTwNiXiQu4FaEBCXDsLA7mt0S9D3O+iky9CmZXqM/5HPMzYdnI4/pkXgj80Hqm1ibxcrIPh/C8CUYxmN0ZQPctxhKhLvfmE58k3b7J/MGs2JQnkK5MAQQ2nS5MgnC+CXvB2gVAJ/zcD3wAPre10XXJLsT4zSANAH4BO7yu00dgNTyOsjtxrOXFrXzsifMQU5RnN++6123Xb2FNFebDHGMMtHXTw7zgeyJUgkKQ7oX5ZTBh/jgvBde60RfB0zTwVsCA1o1nqbnjbpDHD6MsK5tC6dSy2fkDvu+oQE5le4Kq6qwiR1cveLfvTJCgWPNk7w7XzfaPwQZwiCgfBFlYbLhxxgKVF8K71Eh8loxeUTicf2nCskz+iKYEikBM86pIdgEPPxgiXXD2TuUaPOowR315qSyvNwcdELPmWrtTiljjF+RtFU8QWbMu84jL90KI1nhzvLt9C3oJnlPiGYHVYwFF2aJ4bRzE4jJTMLlZDU3dDL3zqQfNN5bZTB3GsI=
+    - secure: qYBEb3OyZD5mRoRWWgxlYR4sY1Wtgub5y7lhOTvpFSlNbjVo220wimdqFL2l3PJRdKab3WRP/FlBjx9gsw/kY81fgs6vfm4gP8p4bhecKwG0VuJWoKySCG0vX7idV38lZXgCNZocxhYsu96fT7vNFIluA6iEuMPju6S9tgemaCJ6H9rFUSENX7RSCjCIKrdZ4Gf8o8ixQACL/tKUQT3XJJIZcGA7yeZ0thjnGSzl9GYiH6VHgJ5pItjmAm0vH9L4PFVAEIEYFn01rW554hEaoMcytlippBwTrcmMMqfAg4xuhg+bLr42GmMoTkIRYl9DXZ8Ar7JyKRTa44o/g0UhKTk4qm+vdqdyJebFa8TSdErUlJapfPPiVf1UlE0M/CKZQnsIHqhYbAg99htwZKXv4qvZobjXlC2NwN1S9inKdMvu82KEPLRbZCwSkR+q4r3DqatqK62EBwI/VmbjwFsQUbMlQ/SFje9JgnY6+3iLW2dwwYM7y2UW4UKzqQEJhhCcU1YZ1y1s5k6MD5p+1BytLKtKE0xrPMpq6eoZLOw0yVjPljRxMZKxrfwVbkX6lLnTDTbG6RL4qdcme2iCP+7Lnfd4RSSYEO7tgj7SYZwxOk4Y+t0yHeX0dNsg67Ij2cjTckz9I7vcmAsMQAhndw/EFBWAi3AkIaRGg6rCTwt7bOc=
 addons:
   apt:
     update: true
     packages:
-    - libcurl4-openssl-dev
-    - libelf-dev
-    - libdw-dev
-    - cmake
-    - gcc
-    - binutils-dev
-    - libiberty-dev
-    - musl-tools
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - cmake
+      - gcc
+      - binutils-dev
+      - libiberty-dev
+      - musl-tools
+      - libssl-dev  # for tarpaulin
 jobs:
   allow_failures:
-  - rust: nightly
+    - rust: nightly
   include:
-  - os: linux
-    env:
-    - TARGET=x86_64-unknown-linux-musl
-    - DOCKER_DEPLOY=true
-    - CARGO_DEPLOY=true
-    rust: stable
-  - os: osx
-    env: TARGET=x86_64-apple-darwin
-    rust: stable
-  - os: linux
-    env: TARGET=x86_64-unknown-linux-musl
-    rust: beta
-  - os: linux
-    env: TARGET=x86_64-unknown-linux-musl
-    rust: nightly
-  - os: linux
-    env: TARGET=x86_64-unknown-linux-musl
-    rust: 1.38.0
+    - os: linux
+      env:
+        - TARGET=x86_64-unknown-linux-musl
+        - DOCKER_DEPLOY=true
+        - CARGO_DEPLOY=true
+      rust: stable
+    - os: osx
+      env: TARGET=x86_64-apple-darwin
+      rust: stable
+    - os: linux
+      env: TARGET=x86_64-unknown-linux-musl
+      rust: beta
+    - os: linux
+      env: TARGET=x86_64-unknown-linux-musl
+      rust: nightly
+    - os: linux
+      env: TARGET=x86_64-unknown-linux-musl
+      rust: 1.38.0
 before_install:
-- set -e
-- rustup self update
+  - set -e
+  - rustup self update
 install:
-- sh ci/install.sh
-- source ~/.cargo/env || true
+  - sh ci/install.sh
+  - source ~/.cargo/env || true
 script:
-- bash ci/script.sh
+  - bash ci/script.sh
 after_success:
-- bash ci/after_success.sh
+  - bash ci/after_success.sh
 before_deploy:
-- sh ci/before_deploy.sh
+  - sh ci/before_deploy.sh
 deploy:
-- provider: releases
-  file_glob: true
-  file: "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.*"
-  skip_cleanup: true
-  on:
-    condition: "$TRAVIS_RUST_VERSION = stable"
-    tags: true
-  api_key:
-    secure: i7dLFxAv1V+ODvwIPQJQ33iO5aoL4R7rjYNPZ7mkf6AB15MbDnYkly7MpsaTxfQmUPoBBpuHFXGEVInXfBfm/8hqrY2D0EBsr3yhBaTgLfuXf2kIj9LX+BSHqO2/JXmKWeLZcFa2aFrBXz154818vCzvvcR0r0HIBQgOA5gtU46uSXSyOqDAqrF4eRuLEXt2SYmgCRGi265j3+mm9wYjCLbHJT34bkMJQa4kqygnMDBTi4yblAWR1PqGvFWi2Ot4yAikHgg+bbNZRdRZzCBhkgozhvSI2syyli/l0P6fjqR4GhnrLKHyyy4vGAf+Zad/GL45MEbh5qmV8vLkmE39OZgQ/GT73Psl01PGohFe13CdAXf9/zZanmVMXHguYkAXDUnaHlMIbz/KEkjlWJqf7yWU6c/7Hh7DSvYtQp28G7s4CN5qR89a6esl7F2UdkFrpScQMUme8PVhwV6a6DW5ZDlPIZk31rWTBJvk321kyT5VyEuQ7nf2yYdJaOP+2bsbQrF0def4m4ZJ6NuxI2mD8ozqgR4pi2DI6ELyVQ9QQWcsk/KZJdgn/h+I2POQDoMvHcMfxPGn8uk7Dt092t9knvaLAC5vInd4M/4iauBMJdKdHBwJelHVUHvhs4qUQT1mLDPyCqQq7Dngabvytw/pITeFN+PDpdmNbsbPAc340fY=
-- provider: script
-  script: bash ci/docker_push.sh
-  on:
-    condition: "$DOCKER_DEPLOY = true"
-    tags: true
-- provider: cargo
-  on:
-    tags: true
-    condition: "$CARGO_DEPLOY = true"
-  token:
-    secure: jPvxYnImwNcYaqoOzq9GHahkkCID8KdOUDf/qsohNsUsUzKmy039EGtyCcav9oPQAe/4KqPmDvS1KJBoR3C/WBHnT1exSq0ZUIxvTxwodC2akjECvfoXrz3cMSqz1J0BSmf7r/mW0ZJITFLBvu1GCy+7oB4BecS9d8pgP9lIJ8ftp4FmdoFBAQKEfjfMc8RW9hXWOfXT2RgIf22UVP7I+gibdkMU4Rdk2IuQZyAv2PcSJVY6+2aQchIN28BGHS0GI0mH8YqsH9fJiSLvvv/sKgdUjcEEcnqwt9N/430y3QP9Nd4jRLWCAJBppBxwj47fGxMPvQBpKVCj4Xm6nrzRXjSv0DaLVRuM10fGeK2gDNPe/zgLYfuSwDSl6Fe+SFindWzl03CiJGCOAgT1NDLjXfMbBYuTWa2prO8qv3aXl19FDmCcDwh5Mb1A9rPnwJCaCqo+90OMpGnPEwuXPcxGezaj69UGtXr0qskLlpj1V0ib1yZk5KpVF6jxOLYbOJWb6NVj9dyoKXnHI6XC2CZIZxbClqXcZhbpnSbqPtHldeW0Y8g5Izm8IDB9WqdkUatH3JNpcQrBhFaTPyFHTZ8klzc7oUekCm48b/ncivHtlGloqbGf/x7RclbFpqa+pYjaU8SGs3jk2IBLf96q6r64AFuyp1oqKpnexTJ6VVR/CRU=
-cache: cargo
+  - provider: releases
+    file_glob: true
+    file: "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.*"
+    skip_cleanup: true
+    on:
+      condition: "$TRAVIS_RUST_VERSION = stable"
+      tags: true
+    api_key:
+      secure: i7dLFxAv1V+ODvwIPQJQ33iO5aoL4R7rjYNPZ7mkf6AB15MbDnYkly7MpsaTxfQmUPoBBpuHFXGEVInXfBfm/8hqrY2D0EBsr3yhBaTgLfuXf2kIj9LX+BSHqO2/JXmKWeLZcFa2aFrBXz154818vCzvvcR0r0HIBQgOA5gtU46uSXSyOqDAqrF4eRuLEXt2SYmgCRGi265j3+mm9wYjCLbHJT34bkMJQa4kqygnMDBTi4yblAWR1PqGvFWi2Ot4yAikHgg+bbNZRdRZzCBhkgozhvSI2syyli/l0P6fjqR4GhnrLKHyyy4vGAf+Zad/GL45MEbh5qmV8vLkmE39OZgQ/GT73Psl01PGohFe13CdAXf9/zZanmVMXHguYkAXDUnaHlMIbz/KEkjlWJqf7yWU6c/7Hh7DSvYtQp28G7s4CN5qR89a6esl7F2UdkFrpScQMUme8PVhwV6a6DW5ZDlPIZk31rWTBJvk321kyT5VyEuQ7nf2yYdJaOP+2bsbQrF0def4m4ZJ6NuxI2mD8ozqgR4pi2DI6ELyVQ9QQWcsk/KZJdgn/h+I2POQDoMvHcMfxPGn8uk7Dt092t9knvaLAC5vInd4M/4iauBMJdKdHBwJelHVUHvhs4qUQT1mLDPyCqQq7Dngabvytw/pITeFN+PDpdmNbsbPAc340fY=
+  - provider: script
+    script: bash ci/docker_push.sh
+    on:
+      condition: "$DOCKER_DEPLOY = true"
+      tags: true
+  - provider: cargo
+    on:
+      tags: true
+      condition: "$CARGO_DEPLOY = true"
+    token:
+      secure: jPvxYnImwNcYaqoOzq9GHahkkCID8KdOUDf/qsohNsUsUzKmy039EGtyCcav9oPQAe/4KqPmDvS1KJBoR3C/WBHnT1exSq0ZUIxvTxwodC2akjECvfoXrz3cMSqz1J0BSmf7r/mW0ZJITFLBvu1GCy+7oB4BecS9d8pgP9lIJ8ftp4FmdoFBAQKEfjfMc8RW9hXWOfXT2RgIf22UVP7I+gibdkMU4Rdk2IuQZyAv2PcSJVY6+2aQchIN28BGHS0GI0mH8YqsH9fJiSLvvv/sKgdUjcEEcnqwt9N/430y3QP9Nd4jRLWCAJBppBxwj47fGxMPvQBpKVCj4Xm6nrzRXjSv0DaLVRuM10fGeK2gDNPe/zgLYfuSwDSl6Fe+SFindWzl03CiJGCOAgT1NDLjXfMbBYuTWa2prO8qv3aXl19FDmCcDwh5Mb1A9rPnwJCaCqo+90OMpGnPEwuXPcxGezaj69UGtXr0qskLlpj1V0ib1yZk5KpVF6jxOLYbOJWb6NVj9dyoKXnHI6XC2CZIZxbClqXcZhbpnSbqPtHldeW0Y8g5Izm8IDB9WqdkUatH3JNpcQrBhFaTPyFHTZ8klzc7oUekCm48b/ncivHtlGloqbGf/x7RclbFpqa+pYjaU8SGs3jk2IBLf96q6r64AFuyp1oqKpnexTJ6VVR/CRU=
+# Need to cache the whole `.cargo` directory to keep .crates.toml for
+# cargo-update to work
+cache:
+  directories:
+    - /home/travis/.cargo
+# But don't cache the cargo registry
 before_cache:
-- chmod -R a+r $HOME/.cargo
+  - rm -rf /home/travis/.cargo/registry
+  - chmod -R a+r $HOME/.cargo
 branches:
   only:
-  - "/^\\d+\\.\\d+\\.\\d+.*$/"
-  - master
+    - "/^\\d+\\.\\d+\\.\\d+.*$/"
+    - master
 notifications:
   email:
     recipients:
-    - michael@mbh.sh
+      - michael@mbh.sh
     on_success: never
     on_failure: always
