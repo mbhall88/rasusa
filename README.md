@@ -135,7 +135,7 @@ brew install brewsci/bio/rasusa
 
 ### Release binaries
 
-**tl;dr**: Run the following snippet to get download the binary to your current directory and show the help menu.
+**tl;dr**: Run the following snippet to download the binary for your system to the current directory and show the help menu.
 ```shell
 OS=$(uname -s)                                                                                                       
 if [ "$OS" = "Linux" ]; then                                                                                         
