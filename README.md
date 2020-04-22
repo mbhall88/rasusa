@@ -135,6 +135,23 @@ brew install brewsci/bio/rasusa
 
 ### Release binaries
 
+**tl;dr**: Run the following snippet to get download the binary to your current directory and show the help menu.
+```shell
+OS=$(uname -s)                                                                                                       
+if [ "$OS" = "Linux" ]; then                                                                                         
+    triple="x86_64-unknown-linux-musl"                                                                              
+elif [ "$OS" = "Darwin" ]; then                                                                                        
+    triple="x86_64-apple-darwin"                                                         
+else                                                      
+    echo "ERROR: $OS not a recognised operating system"
+fi              
+if [ -n "$triple" ]; then   
+    URL="https://github.com/mbhall88/rasusa/releases/download/0.2.0/rasusa-0.2.0-${triple}.tar.gz"
+    wget "$URL" -O - | tar -xzf -
+    ./rasusa --help             
+fi
+```
+
 These binaries _do not_ require that you have the `rust` toolchain installed.
 
 Currently, there are two pre-compiled binaries available:
