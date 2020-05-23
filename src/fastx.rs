@@ -1,3 +1,4 @@
+use bio::io::fastq::FastqRead;
 use bio::io::{fasta, fastq};
 use flate2::bufread::MultiGzDecoder;
 use flate2::write::GzEncoder;
@@ -253,10 +254,17 @@ impl Fastx {
                 .records()
                 .map(|record| record.unwrap().seq().len() as u32)
                 .collect(),
-            FileType::Fastq => fastq::Reader::new(file_handle)
-                .records()
-                .map(|record| record.unwrap().seq().len() as u32)
-                .collect(),
+            FileType::Fastq => {
+                let mut reader = fastq::Reader::new(file_handle);
+                let mut record = fastq::Record::new();
+                let mut lengths: Vec<u32> = Vec::with_capacity(5000);
+                reader.read(&mut record).expect("Failed to parse record");
+                while !record.is_empty() {
+                    lengths.push(record.seq().len() as u32);
+                    reader.read(&mut record).expect("Failed to parse record");
+                }
+                lengths
+            }
         };
         Ok(read_lengths)
     }
@@ -333,11 +341,13 @@ impl Fastx {
                 }
             }
             FileType::Fastq => {
-                let records = fastq::Reader::new(file_handle)
-                    .records()
-                    .map(|r| r.unwrap());
-                for (i, record) in records.enumerate() {
-                    let i = &(i as u32);
+                let mut reader = fastq::Reader::new(file_handle);
+                let mut record = fastq::Record::new();
+
+                let mut i: u32 = 0;
+                reader.read(&mut record).expect("Failed to parse record");
+
+                while !record.is_empty() {
                     if reads_to_keep.contains(&i) {
                         let header = match record.desc() {
                             Some(d) => format!("{} {}", record.id(), d),
@@ -360,6 +370,8 @@ impl Fastx {
                     if reads_to_keep.is_empty() {
                         break;
                     }
+                    i += 1;
+                    reader.read(&mut record).expect("Failed to parse record");
                 }
                 if reads_to_keep.is_empty() {
                     Ok(())
