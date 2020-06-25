@@ -1,3 +1,4 @@
+use bio::io::fasta::FastaRead;
 use bio::io::fastq::FastqRead;
 use bio::io::{fasta, fastq};
 use flate2::bufread::MultiGzDecoder;
@@ -250,10 +251,17 @@ impl Fastx {
     pub fn read_lengths(&self) -> Result<Vec<u32>, Invalid> {
         let file_handle = self.open()?;
         let read_lengths = match self.filetype {
-            FileType::Fasta => fasta::Reader::new(file_handle)
-                .records()
-                .map(|record| record.unwrap().seq().len() as u32)
-                .collect(),
+            FileType::Fasta => {
+                let mut reader = fasta::Reader::new(file_handle);
+                let mut record = fasta::Record::new();
+                let mut lengths: Vec<u32> = Vec::with_capacity(5000);
+                reader.read(&mut record).expect("Failed to parse record");
+                while !record.is_empty() {
+                    lengths.push(record.seq().len() as u32);
+                    reader.read(&mut record).expect("Failed to parse record");
+                }
+                lengths
+            }
             FileType::Fastq => {
                 let mut reader = fastq::Reader::new(file_handle);
                 let mut record = fastq::Record::new();
@@ -308,22 +316,14 @@ impl Fastx {
         let file_handle = self.open()?;
         match self.filetype {
             FileType::Fasta => {
-                let records = fasta::Reader::new(file_handle)
-                    .records()
-                    .map(|r| r.unwrap());
-                for (i, record) in records.enumerate() {
-                    let i = &(i as u32);
+                let mut reader = fasta::Reader::new(file_handle);
+                let mut record = fasta::Record::new();
+                let mut i: u32 = 0;
+                reader.read(&mut record).expect("Failed to parse record");
+
+                while !record.is_empty() {
                     if reads_to_keep.contains(&i) {
-                        let header = match record.desc() {
-                            Some(d) => format!("{} {}", record.id(), d),
-                            None => record.id().to_string(),
-                        };
-                        if let Err(e) = write!(
-                            write_to,
-                            ">{}\n{}\n",
-                            header,
-                            std::str::from_utf8(record.seq()).unwrap()
-                        ) {
+                        if let Err(e) = write!(write_to, "{}", record) {
                             return Err(Invalid::WriteFailed {
                                 error: e.to_string(),
                             });
@@ -333,6 +333,8 @@ impl Fastx {
                     if reads_to_keep.is_empty() {
                         break;
                     }
+                    i += 1;
+                    reader.read(&mut record).expect("Failed to parse record");
                 }
                 if reads_to_keep.is_empty() {
                     Ok(())
@@ -343,24 +345,12 @@ impl Fastx {
             FileType::Fastq => {
                 let mut reader = fastq::Reader::new(file_handle);
                 let mut record = fastq::Record::new();
-
                 let mut i: u32 = 0;
                 reader.read(&mut record).expect("Failed to parse record");
 
                 while !record.is_empty() {
                     if reads_to_keep.contains(&i) {
-                        let header = match record.desc() {
-                            Some(d) => format!("{} {}", record.id(), d),
-                            None => record.id().to_string(),
-                        };
-                        // todo: once rust-bio record Display trait is fixed, clean up this write
-                        if let Err(e) = write!(
-                            write_to,
-                            "@{}\n{}\n+\n{}\n",
-                            header,
-                            std::str::from_utf8(record.seq()).unwrap(),
-                            std::str::from_utf8(record.qual()).unwrap(),
-                        ) {
+                        if let Err(e) = write!(write_to, "{}", record,) {
                             return Err(Invalid::WriteFailed {
                                 error: e.to_string(),
                             });
