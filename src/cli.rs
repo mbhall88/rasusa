@@ -230,7 +230,7 @@ impl Mul<Coverage> for GenomeSize {
     type Output = u64;
 
     fn mul(self, rhs: Coverage) -> Self::Output {
-        self.0 * u64::from(rhs.0)
+        (self.0 as f32 * rhs.0) as u64
     }
 }
 
@@ -258,17 +258,17 @@ impl Div<GenomeSize> for u64 {
 /// An object for collecting together methods for working with the coverage parameter for this
 /// package.
 #[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
-pub struct Coverage(u32);
+pub struct Coverage(f32);
 
-/// Allow for comparison of a `u32` and a `Coverage`.
+/// Allow for comparison of a `f32` and a `Coverage`.
 ///
 /// # Example
 ///
 /// ```rust
-/// assert!(Coverage(10) == 10)
+/// assert!(Coverage(10) == 10.0)
 /// ```
-impl PartialEq<u32> for Coverage {
-    fn eq(&self, other: &u32) -> bool {
+impl PartialEq<f32> for Coverage {
+    fn eq(&self, other: &f32) -> bool {
         self.0 == *other
     }
 }
@@ -300,8 +300,8 @@ impl FromStr for Coverage {
                 .name("covg")
                 .unwrap()
                 .as_str()
-                .parse::<f64>()
-                .unwrap() as u32,
+                .parse::<f32>()
+                .unwrap(),
         ))
     }
 }
@@ -320,13 +320,15 @@ impl Mul<GenomeSize> for Coverage {
     type Output = u64;
 
     fn mul(self, rhs: GenomeSize) -> Self::Output {
-        u64::from(self.0) * rhs.0
+        (self.0 * (rhs.0 as f32)) as u64
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ERROR: f32 = std::f32::EPSILON;
 
     #[test]
     fn no_args_given_raises_error() {
@@ -423,7 +425,7 @@ mod tests {
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
         assert_eq!(args.input[0], PathBuf::from_str("in.fq").unwrap());
-        assert_eq!(args.coverage, Coverage(5));
+        assert_eq!(args.coverage, Coverage(5.0));
         assert_eq!(args.genome_size, GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
         assert_eq!(
@@ -455,7 +457,7 @@ mod tests {
             PathBuf::from_str("in2.fq").unwrap(),
         ];
         assert_eq!(args.input, expected_input);
-        assert_eq!(args.coverage, Coverage(5));
+        assert_eq!(args.coverage, Coverage(5.0));
         assert_eq!(args.genome_size, GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
         assert_eq!(
@@ -488,7 +490,7 @@ mod tests {
             PathBuf::from_str("in2.fq").unwrap(),
         ];
         assert_eq!(args.input, expected_input);
-        assert_eq!(args.coverage, Coverage(5));
+        assert_eq!(args.coverage, Coverage(5.0));
         assert_eq!(args.genome_size, GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
         assert_eq!(
@@ -706,19 +708,19 @@ mod tests {
     }
 
     #[test]
-    fn int_coverage_returns_int() {
+    fn int_coverage_returns_float() {
         let actual = Coverage::from_str("56").unwrap();
-        let expected = 56 as u32;
+        let expected = 56.0;
 
-        assert_eq!(actual, expected)
+        assert!((expected - actual.0).abs() < ERROR)
     }
 
     #[test]
-    fn float_coverage_returns_int() {
+    fn float_coverage_returns_float() {
         let actual = Coverage::from_str("56.6").unwrap();
-        let expected = 56 as u32;
+        let expected = 56.6;
 
-        assert_eq!(actual, expected)
+        assert!((expected - actual.0).abs() < ERROR)
     }
 
     #[test]
@@ -744,25 +746,25 @@ mod tests {
     #[test]
     fn zero_coverage_returns_zero() {
         let actual = Coverage::from_str("0").unwrap();
-        let expected = 0 as u32;
+        let expected = 0.0;
 
-        assert_eq!(actual, expected)
+        assert!((expected - actual.0).abs() < ERROR)
     }
 
     #[test]
-    fn int_ending_in_x_coverage_returns_int() {
+    fn int_ending_in_x_coverage_returns_float() {
         let actual = Coverage::from_str("1X").unwrap();
-        let expected = 1 as u32;
+        let expected = 1.0;
 
-        assert_eq!(actual, expected)
+        assert!((expected - actual.0).abs() < ERROR)
     }
 
     #[test]
-    fn float_ending_in_x_coverage_returns_int() {
+    fn float_ending_in_x_coverage_returns_float() {
         let actual = Coverage::from_str("1.9X").unwrap();
-        let expected = 1 as u32;
+        let expected = 1.9;
 
-        assert_eq!(actual, expected)
+        assert!((expected - actual.0).abs() < ERROR)
     }
 
     #[test]
@@ -826,10 +828,10 @@ mod tests {
     #[test]
     fn multiply_genome_size_by_coverage() {
         let genome_size = GenomeSize::from_str("4.2kb").unwrap();
-        let covg = Coverage::from_str("10").unwrap();
+        let covg = Coverage::from_str("11.7866").unwrap();
 
         let actual = genome_size * covg;
-        let expected: u64 = 42_000;
+        let expected: u64 = 49_503;
 
         assert_eq!(actual, expected)
     }
@@ -837,10 +839,10 @@ mod tests {
     #[test]
     fn multiply_coverage_by_genome_size() {
         let genome_size = GenomeSize::from_str("4.2kb").unwrap();
-        let covg = Coverage::from_str("10").unwrap();
+        let covg = Coverage::from_str("11.7866").unwrap();
 
         let actual = covg * genome_size;
-        let expected: u64 = 42_000;
+        let expected: u64 = 49_503;
 
         assert_eq!(actual, expected)
     }
