@@ -9,6 +9,7 @@
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
 [TOC]:#
+
 # Table of Contents
 - [Motivation](#motivation)
 - [Install](#install)
@@ -96,7 +97,7 @@ singularity exec "$URI" rasusa --help
 The above will use the latest version. If you want to specify a version then use a [tag][dockerhub] like so.
 
 ```sh
-VERSION="0.2.0"
+VERSION="0.3.0"
 URI="docker://mbhall88/rasusa:${VERSION}"
 ```
 
@@ -146,7 +147,7 @@ else
     echo "ERROR: $OS not a recognised operating system"
 fi              
 if [ -n "$triple" ]; then   
-    URL="https://github.com/mbhall88/rasusa/releases/download/0.2.0/rasusa-0.2.0-${triple}.tar.gz"
+    URL="https://github.com/mbhall88/rasusa/releases/download/0.3.0/rasusa-0.3.0-${triple}.tar.gz"
     wget "$URL" -O - | tar -xzf -
     ./rasusa --help             
 fi
@@ -160,7 +161,7 @@ Currently, there are two pre-compiled binaries available:
 
 An example of downloading one of these binaries using `wget`
 ```sh
-URL="https://github.com/mbhall88/rasusa/releases/download/0.2.0/rasusa-0.2.0-x86_64-unknown-linux-musl.tar.gz"
+URL="https://github.com/mbhall88/rasusa/releases/download/0.3.0/rasusa-0.3.0-x86_64-unknown-linux-musl.tar.gz"
 wget "$URL" -O - | tar -xzf -
 ./rasusa --help
 ```
@@ -238,10 +239,16 @@ If there is a naming convention you feel is missing, please raise an issue.
 
 ##### `-c`, `--coverage`
 
-This option is used to determine the minimum coverage to subsample the reads to. It can be specified as an integer (100), a decimal/float (100.0), or either of the previous suffixed with an 'x' (100x).  
-When using a float, the coverage will be rounded _down_ to the nearest integer (i.e. 100.7 becomes 100).  
+This option is used to determine the minimum coverage to subsample the
+reads to. It can be specified as an integer (100), a decimal/float
+(100.7), or either of the previous suffixed with an 'x' (100x).
 
-_**Note**: Due to the method for determining how many bases are required to achieve the desired coverage, the actual coverage, in the end, could be slightly higher than requested. For example, if the last included read is very long. The log messages should inform you of the actual coverage in the end._
+
+_**Note**: Due to the method for determining how many bases are required
+to achieve the desired coverage, the actual coverage, in the end, could
+be slightly higher than requested. For example, if the last included
+read is very long. The log messages should inform you of the actual
+coverage in the end._
 
 #### Genome size
 
@@ -294,7 +301,7 @@ Adding this optional flag will make the logging more verbose. By default, loggin
 ```text
 $ rasusa --help
 
-rasusa 0.2.0
+rasusa 0.3.0
 Randomly subsample reads to a specified coverage.
 
 USAGE:
