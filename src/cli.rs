@@ -1,9 +1,9 @@
 use regex::Regex;
-use snafu::Snafu;
 use std::ops::{Div, Mul};
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::StructOpt;
+use thiserror::Error;
 
 /// Randomly subsample reads to a specified coverage.
 #[derive(Debug, StructOpt)]
@@ -53,7 +53,7 @@ impl Cli {
     /// - An unequal number of `--input` and `--output` are passed. The only exception to
     /// this is if one `--input` and zero `--output` are passed, in which case, the output
     /// will be sent to STDOUT.
-    pub fn validate_input_output_combination(&self) -> Result<(), Invalid> {
+    pub fn validate_input_output_combination(&self) -> Result<(), CliError> {
         let out_len = self.output.len();
         let in_len = self.input.len();
 
@@ -76,26 +76,23 @@ impl Cli {
 }
 
 /// A collection of custom errors relating to the command line interface for this package.
-#[derive(Debug, Snafu, PartialEq)]
-pub enum Invalid {
+#[derive(Error, Debug, PartialEq)]
+pub enum CliError {
     /// Indicates that a string cannot be parsed into a [`MetricSuffix`](#metricsuffix).
-    #[snafu(display("{} is not a valid metric suffix", suffix))]
-    MetricSuffixString { suffix: String },
+    #[error("{0} is not a valid metric suffix")]
+    InvalidMetricSuffix(String),
 
     /// Indicates that a string cannot be parsed into a [`GenomeSize`](#genomesize).
-    #[snafu(display(
-        "{} is not a valid genome size. Valid forms include 4gb, 3000, 8.7Kb etc.",
-        genome_size
-    ))]
-    GenomeSizeString { genome_size: String },
+    #[error("{0} is not a valid genome size. Valid forms include 4gb, 3000, 8.7Kb etc.")]
+    InvalidGenomeSizeString(String),
 
     /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
-    #[snafu(display("{} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character", coverage))]
-    CoverageValue { coverage: String },
+    #[error("{0} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character")]
+    InvalidCoverageValue(String),
 
     /// Indicates a bad combination of input and output files was passed.
-    #[snafu(display("{}", msg))]
-    InputOutputCombination { msg: String },
+    #[error("Bad combination of input and output files: {0}")]
+    BadInputOutputCombination(String),
 }
 
 /// A metric suffix is a unit suffix used to indicate the multiples of (in this case) base pairs.
@@ -110,7 +107,7 @@ enum MetricSuffix {
 }
 
 impl FromStr for MetricSuffix {
-    type Err = Invalid;
+    type Err = CliError;
 
     /// Parses a string into a `MetricSuffix`.
     ///
@@ -130,9 +127,7 @@ impl FromStr for MetricSuffix {
             s if "gb".contains(s) => MetricSuffix::Giga,
             s if "tb".contains(s) => MetricSuffix::Tera,
             _ => {
-                return Err(Invalid::MetricSuffixString {
-                    suffix: suffix.to_string(),
-                });
+                return Err(CliError::InvalidMetricSuffix(suffix.to_string()));
             }
         };
         Ok(metric_suffix)
@@ -182,7 +177,7 @@ impl PartialEq<u64> for GenomeSize {
 }
 
 impl FromStr for GenomeSize {
-    type Err = Invalid;
+    type Err = CliError;
 
     /// Parses a string into a `GenomeSize`.
     ///
@@ -199,9 +194,7 @@ impl FromStr for GenomeSize {
         let captures = match re.captures(text.as_str()) {
             Some(cap) => cap,
             None => {
-                return Err(Invalid::GenomeSizeString {
-                    genome_size: s.to_string(),
-                });
+                return Err(CliError::InvalidGenomeSizeString(s.to_string()));
             }
         };
         let size = captures
@@ -274,7 +267,7 @@ impl PartialEq<f32> for Coverage {
 }
 
 impl FromStr for Coverage {
-    type Err = Invalid;
+    type Err = CliError;
 
     /// Parses a string into a `Coverage`.
     ///
@@ -290,9 +283,7 @@ impl FromStr for Coverage {
         let captures = match re.captures(s) {
             Some(cap) => cap,
             None => {
-                return Err(Invalid::CoverageValue {
-                    coverage: s.to_string(),
-                });
+                return Err(CliError::InvalidCoverageValue(s.to_string()));
             }
         };
         Ok(Coverage(
@@ -520,10 +511,9 @@ mod tests {
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
-        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
-        let expected = Invalid::InputOutputCombination {
-            msg: String::from("Got more than 2 files for input."),
-        };
+        let actual: CliError = args.validate_input_output_combination().unwrap_err();
+        let expected =
+            CliError::BadInputOutputCombination(String::from("Got more than 2 files for input."));
 
         assert_eq!(actual, expected)
     }
@@ -551,10 +541,9 @@ mod tests {
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
-        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
-        let expected = Invalid::InputOutputCombination {
-            msg: String::from("Got more than 2 files for output."),
-        };
+        let actual: CliError = args.validate_input_output_combination().unwrap_err();
+        let expected =
+            CliError::BadInputOutputCombination(String::from("Got more than 2 files for input."));
 
         assert_eq!(actual, expected)
     }
@@ -577,10 +566,9 @@ mod tests {
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
-        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
-        let expected = Invalid::InputOutputCombination {
-            msg: String::from("Got 2 --input but 1 --output"),
-        };
+        let actual: CliError = args.validate_input_output_combination().unwrap_err();
+        let expected =
+            CliError::BadInputOutputCombination(String::from("Got 2 --input but 1 --output"));
 
         assert_eq!(actual, expected)
     }
@@ -593,10 +581,9 @@ mod tests {
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
-        let actual: Invalid = args.validate_input_output_combination().unwrap_err();
-        let expected = Invalid::InputOutputCombination {
-            msg: String::from("Got 1 --input but 2 --output"),
-        };
+        let actual: CliError = args.validate_input_output_combination().unwrap_err();
+        let expected =
+            CliError::BadInputOutputCombination(String::from("Got 2 --input but 1 --output"));
 
         assert_eq!(actual, expected)
     }
