@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Switch from using `snafu` and `failure` for error handling to `anyhow` and `thiserror`. Based on the procedure outlined in [this excellent blog post][error-blog].
+
 ## [0.3.0]
 
 Version 0.3.0 may give different results to previous versions. If so,
@@ -37,3 +41,4 @@ been 1000, whereas now, it would be 1070.
 [0.3.0]: https://github.com/mbhall88/rasusa/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mbhall88/rasusa/releases/tag/v0.2.0
 [19]: https://github.com/mbhall88/rasusa/issues/19
+[error-blog]: https://nick.groenen.me/posts/rust-error-handling/
