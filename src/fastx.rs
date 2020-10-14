@@ -4,12 +4,12 @@ use bio::io::{fasta, fastq};
 use flate2::bufread::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use snafu::Snafu;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use thiserror::Error;
 
 /// A an "extension" trait to allow for extending the [`std::path::Path`](https://doc.rust-lang.org/nightly/std/path/struct.Path.html) struct.
 trait PathExt {
@@ -43,31 +43,31 @@ pub enum FileType {
 }
 
 /// A collection of custom errors relating to the working with files for this package.
-#[derive(Debug, Snafu, PartialEq)]
-pub enum Invalid {
+#[derive(Error, Debug, PartialEq)]
+pub enum FastxError {
     /// Indicates that the file is not one of the allowed file types as specified by [`FileType`](#filetype).
-    #[snafu(display("File type of {} is not fasta or fastq", filepath))]
-    UnknownFileType { filepath: String },
+    #[error("File type of {0} is not fasta or fastq")]
+    UnknownFileType(String),
 
-    /// Indicates that the specified input file could not be opened.
-    #[snafu(display("Input file could not be open: {}", error))]
-    OpenInputFile { error: String },
+    /// Indicates that the specified input file could not be opened/read.
+    #[error("Read error")]
+    ReadError { source: std::io::Error },
 
     /// Indicates that the specified output file could not be created.
-    #[snafu(display("Output file could not be created: {}", error))]
-    CreateOutputFile { error: String },
+    #[error("Output file could not be created")]
+    CreateError { source: std::io::Error },
 
     /// Indicates that some indices we expected to find in the input file weren't found.
-    #[snafu(display("Some expected indices were not in the input file"))]
-    IndicesNotFound {},
+    #[error("Some expected indices were not in the input file")]
+    IndicesNotFound,
 
     /// Indicates that writing to the output file failed.
-    #[snafu(display("Could not write to output file: {}", error))]
-    WriteFailed { error: String },
+    #[error("Could not write to output file")]
+    WriteError { source: std::io::Error },
 }
 
 impl FromStr for FileType {
-    type Err = Invalid;
+    type Err = FastxError;
 
     /// Parses a string into a `FileType`.
     ///
@@ -95,7 +95,7 @@ impl FileType {
     ///
     /// assert_eq!(filetype, FileType::Fastq)
     /// ```
-    pub(crate) fn from_path(path: &Path) -> Result<FileType, Invalid> {
+    pub(crate) fn from_path(path: &Path) -> Result<FileType, FastxError> {
         let is_compressed = path.is_compressed();
 
         let uncompressed_path = if is_compressed {
@@ -108,13 +108,13 @@ impl FileType {
             Some(e) => match e.to_str() {
                 Some("fa") | Some("fasta") => Ok(FileType::Fasta),
                 Some("fq") | Some("fastq") => Ok(FileType::Fastq),
-                _ => Err(Invalid::UnknownFileType {
-                    filepath: String::from(path.to_str().unwrap()),
-                }),
+                _ => Err(FastxError::UnknownFileType(String::from(
+                    path.to_str().unwrap(),
+                ))),
             },
-            _ => Err(Invalid::UnknownFileType {
-                filepath: String::from(path.to_str().unwrap()),
-            }),
+            _ => Err(FastxError::UnknownFileType(String::from(
+                path.to_str().unwrap(),
+            ))),
         }
     }
 }
@@ -134,7 +134,7 @@ impl Fastx {
     /// Create a `Fastx` object from a `std::path::Path`.
     ///
     /// # Errors
-    /// If the file type is not known then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// If the file type is not known then an `Err` containing a variant of [`FastxError`](#fastxerror) is
     /// returned.
     ///
     /// # Example
@@ -149,7 +149,7 @@ impl Fastx {
     /// };
     /// assert_eq!(fastx, expected)
     /// ```
-    pub fn from_path(path: &Path) -> Result<Self, Invalid> {
+    pub fn from_path(path: &Path) -> Result<Self, FastxError> {
         let filetype = FileType::from_path(&path)?;
         let is_compressed = path.is_compressed();
 
@@ -163,7 +163,7 @@ impl Fastx {
     /// Open the file associated with this `Fastx` object for reading.
     ///
     /// # Errors
-    /// If the file cannot be opened then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// If the file cannot be opened then an `Err` containing a variant of [`FastxError`](#fastxerror) is
     /// returned.
     ///
     /// # Example
@@ -176,15 +176,8 @@ impl Fastx {
     ///     // do something with the file handle
     /// }
     /// ```
-    pub fn open(&self) -> Result<Box<dyn std::io::Read>, Invalid> {
-        let file = match File::open(&self.path) {
-            Ok(fh) => fh,
-            Err(err) => {
-                return Err(Invalid::OpenInputFile {
-                    error: err.to_string(),
-                });
-            }
-        };
+    pub fn open(&self) -> Result<Box<dyn std::io::Read>, FastxError> {
+        let file = File::open(&self.path).map_err(|source| FastxError::ReadError { source })?;
         let file_handle = BufReader::new(file);
 
         if self.is_compressed {
@@ -197,7 +190,7 @@ impl Fastx {
     /// Create the file associated with this `Fastx` object for writing.
     ///
     /// # Errors
-    /// If the file cannot be created then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// If the file cannot be created then an `Err` containing a variant of [`FastxError`](#fastxerror) is
     /// returned.
     ///
     /// # Example
@@ -210,15 +203,8 @@ impl Fastx {
     ///     write!(file_handle, ">read1\nACGT\n")?
     /// }
     /// ```
-    pub fn create(&self) -> Result<Box<dyn Write>, Invalid> {
-        let file = match File::create(&self.path) {
-            Ok(fh) => fh,
-            Err(err) => {
-                return Err(Invalid::CreateOutputFile {
-                    error: err.to_string(),
-                });
-            }
-        };
+    pub fn create(&self) -> Result<Box<dyn Write>, FastxError> {
+        let file = File::create(&self.path).map_err(|source| FastxError::CreateError { source })?;
         let file_handle = BufWriter::new(file);
 
         if self.is_compressed {
@@ -234,7 +220,7 @@ impl Fastx {
     /// Returns a vector containing the lengths of all the reads in the file.
     ///
     /// # Errors
-    /// If the file cannot be opened then an `Err` containing a variant of [`Invalid`](#invalid) is
+    /// If the file cannot be opened then an `Err` containing a variant of [`FastxError`](#fastxerror) is
     /// returned.
     ///
     /// # Example
@@ -248,7 +234,7 @@ impl Fastx {
     /// let expected: Vec<u32> = vec![4, 1];
     /// assert_eq!(actual, expected)
     /// ```
-    pub fn read_lengths(&self) -> Result<Vec<u32>, Invalid> {
+    pub fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
         let file_handle = self.open()?;
         let read_lengths = match self.filetype {
             FileType::Fasta => {
@@ -281,7 +267,7 @@ impl Fastx {
     /// `write_to`.
     ///
     /// # Errors
-    /// This function could raise an `Err` instance of [`Invalid`](#invalid) in the following
+    /// This function could raise an `Err` instance of [`FastxError`](#fastxerror) in the following
     /// circumstances:
     /// -   If the file (of `self`) cannot be opened.
     /// -   If writing to `write_to` fails.
@@ -312,7 +298,7 @@ impl Fastx {
         &self,
         mut reads_to_keep: HashSet<u32>,
         write_to: &mut T,
-    ) -> Result<(), Invalid> {
+    ) -> Result<(), FastxError> {
         let file_handle = self.open()?;
         match self.filetype {
             FileType::Fasta => {
@@ -323,11 +309,8 @@ impl Fastx {
 
                 while !record.is_empty() {
                     if reads_to_keep.contains(&i) {
-                        if let Err(e) = write!(write_to, "{}", record) {
-                            return Err(Invalid::WriteFailed {
-                                error: e.to_string(),
-                            });
-                        }
+                        write!(write_to, "{}", record)
+                            .map_err(|source| FastxError::WriteError { source })?;
                         reads_to_keep.remove(&i);
                     }
                     if reads_to_keep.is_empty() {
@@ -339,7 +322,7 @@ impl Fastx {
                 if reads_to_keep.is_empty() {
                     Ok(())
                 } else {
-                    Err(Invalid::IndicesNotFound {})
+                    Err(FastxError::IndicesNotFound)
                 }
             }
             FileType::Fastq => {
@@ -350,11 +333,8 @@ impl Fastx {
 
                 while !record.is_empty() {
                     if reads_to_keep.contains(&i) {
-                        if let Err(e) = write!(write_to, "{}", record,) {
-                            return Err(Invalid::WriteFailed {
-                                error: e.to_string(),
-                            });
-                        }
+                        write!(write_to, "{}", record)
+                            .map_err(|source| FastxError::WriteError { source })?;
                         reads_to_keep.remove(&i);
                     }
                     if reads_to_keep.is_empty() {
@@ -366,7 +346,7 @@ impl Fastx {
                 if reads_to_keep.is_empty() {
                     Ok(())
                 } else {
-                    Err(Invalid::IndicesNotFound {})
+                    Err(FastxError::IndicesNotFound)
                 }
             }
         }
@@ -446,9 +426,7 @@ mod tests {
         let path = Path::new("data/in.bam");
 
         let actual = FileType::from_path(path).unwrap_err();
-        let expected = Invalid::UnknownFileType {
-            filepath: String::from(path.to_str().unwrap()),
-        };
+        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
         assert_eq!(actual, expected)
     }
@@ -458,9 +436,7 @@ mod tests {
         let path = Path::new("data/fq");
 
         let actual = FileType::from_path(path).unwrap_err();
-        let expected = Invalid::UnknownFileType {
-            filepath: String::from(path.to_str().unwrap()),
-        };
+        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
         assert_eq!(actual, expected)
     }
@@ -470,9 +446,7 @@ mod tests {
         let path = Path::new("");
 
         let actual = FileType::from_path(path).unwrap_err();
-        let expected = Invalid::UnknownFileType {
-            filepath: String::from(path.to_str().unwrap()),
-        };
+        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
         assert_eq!(actual, expected)
     }
@@ -502,9 +476,7 @@ mod tests {
         let path = "data/in.bam";
 
         let actual = FileType::from_str(path).unwrap_err();
-        let expected = Invalid::UnknownFileType {
-            filepath: String::from(path),
-        };
+        let expected = FastxError::UnknownFileType(String::from(path));
 
         assert_eq!(actual, expected)
     }
@@ -542,9 +514,7 @@ mod tests {
         let path = Path::new("data/my.gz");
 
         let actual = Fastx::from_path(path).unwrap_err();
-        let expected = Invalid::UnknownFileType {
-            filepath: String::from(path.to_str().unwrap()),
-        };
+        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
         assert_eq!(actual, expected)
     }
@@ -555,7 +525,7 @@ mod tests {
         let fastx = Fastx::from_path(path).unwrap();
 
         let actual = fastx.open().err().unwrap();
-        let expected = Invalid::OpenInputFile {
+        let expected = FastxError::OpenInputFile {
             error: String::from("No such file or directory (os error 2)"),
         };
 
@@ -595,7 +565,7 @@ mod tests {
         let path = Path::new("invalid/out/path.fq");
 
         let actual = Fastx::from_path(&path).unwrap().create().err().unwrap();
-        let expected = Invalid::CreateOutputFile {
+        let expected = FastxError::CreateOutputFile {
             error: "No such file or directory (os error 2)".to_string(),
         };
 

@@ -48,7 +48,7 @@ impl Cli {
     /// Checks there is a valid and equal number of `--input` and `--output` arguments given.
     ///
     /// # Errors
-    /// An [`Invalid::InputOutputCombination`](#invalid) is returned for the following:
+    /// A [`CliError::BadInputOutputCombination`](#clierror) is returned for the following:
     /// - Either `--input` or `--output` are passed more than twice
     /// - An unequal number of `--input` and `--output` are passed. The only exception to
     /// this is if one `--input` and zero `--output` are passed, in which case, the output
