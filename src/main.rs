@@ -1,6 +1,6 @@
 use std::io::stdout;
 
-use exitfailure::ExitFailure;
+use anyhow::{Context, Result};
 use fern::colors::{Color, ColoredLevelConfig};
 use log::{debug, error, info, warn};
 use structopt::StructOpt;
@@ -48,7 +48,7 @@ fn setup_logger(verbose: bool) -> Result<(), fern::InitError> {
     Ok(())
 }
 
-fn main() -> Result<(), ExitFailure> {
+fn main() -> Result<()> {
     let args: Cli = Cli::from_args();
     args.validate_input_output_combination()?;
     let is_illumina = args.input.len() == 2;
@@ -56,16 +56,18 @@ fn main() -> Result<(), ExitFailure> {
         info!("Two input files given. Assuming paired Illumina...")
     }
 
-    setup_logger(args.verbose)?;
+    setup_logger(args.verbose).context("Failed to setup the logger")?;
 
     debug!("{:?}", args);
 
-    let input_fastx = Fastx::from_path(&args.input[0])?;
+    let input_fastx = Fastx::from_path(&args.input[0])
+        .context("unable to infer the file type of the first input file")?;
 
     let mut output_handle = match args.output.len() {
         0 => Box::new(stdout()),
         _ => {
-            let out_fastx = Fastx::from_path(&args.output[0])?;
+            let out_fastx = Fastx::from_path(&args.output[0])
+                .context("unable to infer the file type of the first output file")?;
             if out_fastx.filetype != input_fastx.filetype {
                 warn!(
                     "Input ({:?}) and output ({:?}) file types are not the same. \
@@ -73,7 +75,9 @@ fn main() -> Result<(), ExitFailure> {
                     input_fastx.filetype, out_fastx.filetype
                 )
             }
-            out_fastx.create()?
+            out_fastx
+                .create()
+                .context("unable to create the first output file")?
         }
     };
 
@@ -84,7 +88,9 @@ fn main() -> Result<(), ExitFailure> {
     );
 
     info!("Gathering read lengths...");
-    let mut read_lengths = input_fastx.read_lengths()?;
+    let mut read_lengths = input_fastx
+        .read_lengths()
+        .context("unable to gather read lengths for the first input file")?;
 
     if is_illumina {
         info!("{} reads detected in the first input", read_lengths.len());
@@ -117,13 +123,19 @@ fn main() -> Result<(), ExitFailure> {
 
     // repeat the same process for the second input fastx (if illumina)
     if is_illumina {
-        let second_input_fastx = Fastx::from_path(&args.input[1])?;
-        let second_out_fastx = Fastx::from_path(&args.output[1])?;
-        let mut second_output_handle = second_out_fastx.create()?;
+        let second_input_fastx = Fastx::from_path(&args.input[1])
+            .context("unable to infer the file type of the second input file")?;
+        let second_out_fastx = Fastx::from_path(&args.output[1])
+            .context("unable to infer the file type of the second output file")?;
+        let mut second_output_handle = second_out_fastx
+            .create()
+            .context("unable to create the second output file")?;
 
         let expected_num_reads = read_lengths.len();
         info!("Gathering read lengths for second input file...");
-        read_lengths = second_input_fastx.read_lengths()?;
+        read_lengths = second_input_fastx
+            .read_lengths()
+            .context("unable to gather read lengths for the second input file")?;
 
         if read_lengths.len() != expected_num_reads {
             error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len())

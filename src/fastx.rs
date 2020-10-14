@@ -43,7 +43,7 @@ pub enum FileType {
 }
 
 /// A collection of custom errors relating to the working with files for this package.
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum FastxError {
     /// Indicates that the file is not one of the allowed file types as specified by [`FileType`](#filetype).
     #[error("File type of {0} is not fasta or fastq")]
@@ -356,6 +356,7 @@ impl Fastx {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::any::Any;
     use std::collections::HashSet;
     use std::io::{Read, Write};
     use std::iter::FromIterator;
@@ -428,7 +429,7 @@ mod tests {
         let actual = FileType::from_path(path).unwrap_err();
         let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]
@@ -438,7 +439,7 @@ mod tests {
         let actual = FileType::from_path(path).unwrap_err();
         let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]
@@ -448,7 +449,7 @@ mod tests {
         let actual = FileType::from_path(path).unwrap_err();
         let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]
@@ -478,7 +479,7 @@ mod tests {
         let actual = FileType::from_str(path).unwrap_err();
         let expected = FastxError::UnknownFileType(String::from(path));
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]
@@ -516,7 +517,7 @@ mod tests {
         let actual = Fastx::from_path(path).unwrap_err();
         let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]
@@ -525,11 +526,14 @@ mod tests {
         let fastx = Fastx::from_path(path).unwrap();
 
         let actual = fastx.open().err().unwrap();
-        let expected = FastxError::OpenInputFile {
-            error: String::from("No such file or directory (os error 2)"),
+        let expected = FastxError::ReadError {
+            source: std::io::Error::new(
+                std::io::ErrorKind::Other,
+                String::from("No such file or directory (os error 2)"),
+            ),
         };
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]
@@ -565,11 +569,14 @@ mod tests {
         let path = Path::new("invalid/out/path.fq");
 
         let actual = Fastx::from_path(&path).unwrap().create().err().unwrap();
-        let expected = FastxError::CreateOutputFile {
-            error: "No such file or directory (os error 2)".to_string(),
+        let expected = FastxError::CreateError {
+            source: std::io::Error::new(
+                std::io::ErrorKind::Other,
+                String::from("No such file or directory (os error 2)"),
+            ),
         };
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual.type_id(), expected.type_id())
     }
 
     #[test]

@@ -59,17 +59,18 @@ impl Cli {
 
         if in_len > 2 {
             let msg = String::from("Got more than 2 files for input.");
-            return Err(Invalid::InputOutputCombination { msg });
+            return Err(CliError::BadInputOutputCombination(msg));
         }
         if out_len > 2 {
             let msg = String::from("Got more than 2 files for output.");
-            return Err(Invalid::InputOutputCombination { msg });
+            return Err(CliError::BadInputOutputCombination(msg));
         }
         match (in_len as isize - out_len as isize) as isize {
             diff if diff == 1 && in_len == 1 => Ok(()),
-            diff if diff != 0 => Err(Invalid::InputOutputCombination {
-                msg: format!("Got {} --input but {} --output", in_len, out_len),
-            }),
+            diff if diff != 0 => Err(CliError::BadInputOutputCombination(format!(
+                "Got {} --input but {} --output",
+                in_len, out_len
+            ))),
             _ => Ok(()),
         }
     }
@@ -543,7 +544,7 @@ mod tests {
 
         let actual: CliError = args.validate_input_output_combination().unwrap_err();
         let expected =
-            CliError::BadInputOutputCombination(String::from("Got more than 2 files for input."));
+            CliError::BadInputOutputCombination(String::from("Got more than 2 files for output."));
 
         assert_eq!(actual, expected)
     }
@@ -583,7 +584,7 @@ mod tests {
 
         let actual: CliError = args.validate_input_output_combination().unwrap_err();
         let expected =
-            CliError::BadInputOutputCombination(String::from("Got 2 --input but 1 --output"));
+            CliError::BadInputOutputCombination(String::from("Got 1 --input but 2 --output"));
 
         assert_eq!(actual, expected)
     }
@@ -670,9 +671,7 @@ mod tests {
     fn invalid_suffix_returns_err() {
         let genome_size = String::from(".77uB");
         let actual = GenomeSize::from_str(genome_size.as_str()).unwrap_err();
-        let expected = Invalid::MetricSuffixString {
-            suffix: String::from("ub"),
-        };
+        let expected = CliError::InvalidMetricSuffix(String::from("ub"));
 
         assert_eq!(actual, expected);
     }
@@ -680,9 +679,7 @@ mod tests {
     #[test]
     fn empty_string_returns_error() {
         let actual = GenomeSize::from_str("").unwrap_err();
-        let expected = Invalid::GenomeSizeString {
-            genome_size: String::from(""),
-        };
+        let expected = CliError::InvalidGenomeSizeString(String::from(""));
 
         assert_eq!(actual, expected);
     }
@@ -715,7 +712,7 @@ mod tests {
         let coverage = String::from("");
 
         let actual = Coverage::from_str(coverage.as_str()).unwrap_err();
-        let expected = Invalid::CoverageValue { coverage };
+        let expected = CliError::InvalidCoverageValue(coverage);
 
         assert_eq!(actual, expected)
     }
@@ -725,7 +722,7 @@ mod tests {
         let coverage = String::from("foo");
 
         let actual = Coverage::from_str(coverage.as_str()).unwrap_err();
-        let expected = Invalid::CoverageValue { coverage };
+        let expected = CliError::InvalidCoverageValue(coverage);
 
         assert_eq!(actual, expected)
     }
@@ -807,7 +804,7 @@ mod tests {
     fn invalid_suffix_raises_error() {
         let suffix = String::from("ub");
         let actual = MetricSuffix::from_str(suffix.as_str()).unwrap_err();
-        let expected = Invalid::MetricSuffixString { suffix };
+        let expected = CliError::InvalidMetricSuffix(suffix);
 
         assert_eq!(actual, expected)
     }
