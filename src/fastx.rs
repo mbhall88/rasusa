@@ -1,46 +1,10 @@
-use bio::io::fasta::FastaRead;
-use bio::io::fastq::FastqRead;
-use bio::io::{fasta, fastq};
-use flate2::bufread::MultiGzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use needletail::parse_fastx_file;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
-
-/// A an "extension" trait to allow for extending the [`std::path::Path`](https://doc.rust-lang.org/nightly/std/path/struct.Path.html) struct.
-trait PathExt {
-    fn is_compressed(&self) -> bool;
-}
-
-impl PathExt for Path {
-    /// Determine of a `Path` is for a compressed file. This is based on whether the path ends with
-    /// the extension `.gz`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("output.fq.gz");
-    ///
-    /// assert!(path.is_compressed())
-    /// ```
-    fn is_compressed(&self) -> bool {
-        match self.extension() {
-            Some(p) => p == "gz",
-            _ => false,
-        }
-    }
-}
-
-/// An `Enum` that collates the different, allowed, file types.
-#[derive(Debug, PartialEq)]
-pub enum FileType {
-    Fasta,
-    Fastq,
-}
 
 /// A collection of custom errors relating to the working with files for this package.
 #[derive(Error, Debug)]
@@ -51,7 +15,15 @@ pub enum FastxError {
 
     /// Indicates that the specified input file could not be opened/read.
     #[error("Read error")]
-    ReadError { source: std::io::Error },
+    ReadError {
+        source: needletail::errors::ParseError,
+    },
+
+    /// Indicates that a sequence record could not be parsed.
+    #[error("Failed to parse record")]
+    ParseError {
+        source: needletail::errors::ParseError,
+    },
 
     /// Indicates that the specified output file could not be created.
     #[error("Output file could not be created")]
@@ -66,127 +38,14 @@ pub enum FastxError {
     WriteError { source: std::io::Error },
 }
 
-impl FromStr for FileType {
-    type Err = FastxError;
-
-    /// Parses a string into a `FileType`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let s = "input.fa";
-    /// let filetype = FileType::from_str(s);
-    ///
-    /// assert_eq!(filetype, FileType::Fasta)
-    /// ```
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_path(Path::new(s))
-    }
-}
-
-impl FileType {
-    /// Parses a `std::path::Path` into a `FileType`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("infile.fastq.gz");
-    /// let filetype = FileType::from_path(path);
-    ///
-    /// assert_eq!(filetype, FileType::Fastq)
-    /// ```
-    pub(crate) fn from_path(path: &Path) -> Result<FileType, FastxError> {
-        let is_compressed = path.is_compressed();
-
-        let uncompressed_path = if is_compressed {
-            path.with_extension("")
-        } else {
-            path.to_path_buf()
-        };
-
-        match uncompressed_path.extension() {
-            Some(e) => match e.to_str() {
-                Some("fa") | Some("fasta") => Ok(FileType::Fasta),
-                Some("fq") | Some("fastq") => Ok(FileType::Fastq),
-                _ => Err(FastxError::UnknownFileType(String::from(
-                    path.to_str().unwrap(),
-                ))),
-            },
-            _ => Err(FastxError::UnknownFileType(String::from(
-                path.to_str().unwrap(),
-            ))),
-        }
-    }
-}
-
 /// A `Struct` used for seamlessly dealing with either compressed or uncompressed fasta/fastq files.
 #[derive(Debug, PartialEq)]
 pub struct Fastx {
     /// The path for the file.
     path: PathBuf,
-    /// The [`FileType`](#filetype) of the file.
-    pub filetype: FileType,
-    /// Is the file compressed?
-    is_compressed: bool,
 }
 
 impl Fastx {
-    /// Create a `Fastx` object from a `std::path::Path`.
-    ///
-    /// # Errors
-    /// If the file type is not known then an `Err` containing a variant of [`FastxError`](#fastxerror) is
-    /// returned.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("input.fa.gz");
-    /// let fastx = Fastx::from_path(path);
-    /// let expected = Fastx{
-    ///     path: std::path::PathBuf::new("input.fa.gz"),
-    ///     filetype: FileType::Fasta,
-    ///     is_compressed: true
-    /// };
-    /// assert_eq!(fastx, expected)
-    /// ```
-    pub fn from_path(path: &Path) -> Result<Self, FastxError> {
-        let filetype = FileType::from_path(&path)?;
-        let is_compressed = path.is_compressed();
-
-        Ok(Fastx {
-            path: path.to_path_buf(),
-            filetype,
-            is_compressed,
-        })
-    }
-
-    /// Open the file associated with this `Fastx` object for reading.
-    ///
-    /// # Errors
-    /// If the file cannot be opened then an `Err` containing a variant of [`FastxError`](#fastxerror) is
-    /// returned.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("input.fa.gz");
-    /// let fastx = Fastx::from_path(path);
-    /// { // this scoping means the file handle is closed afterwards.
-    ///     let file_handle = fastx.open()?;
-    ///     // do something with the file handle
-    /// }
-    /// ```
-    pub fn open(&self) -> Result<Box<dyn std::io::Read>, FastxError> {
-        let file = File::open(&self.path).map_err(|source| FastxError::ReadError { source })?;
-        let file_handle = BufReader::new(file);
-
-        if self.is_compressed {
-            Ok(Box::new(MultiGzDecoder::new(file_handle)))
-        } else {
-            Ok(Box::new(file_handle))
-        }
-    }
-
     /// Create the file associated with this `Fastx` object for writing.
     ///
     /// # Errors
@@ -196,8 +55,8 @@ impl Fastx {
     /// # Example
     ///
     /// ```rust
-    /// let path = std::path::Path::new("output.fa.gz");
-    /// let fastx = Fastx::from_path(path);
+    /// let path = std::path::Path::new("output.fa");
+    /// let fastx = Fastx{ path };
     /// { // this scoping means the file handle is closed afterwards.
     ///     let file_handle = fastx.create()?;
     ///     write!(file_handle, ">read1\nACGT\n")?
@@ -220,8 +79,8 @@ impl Fastx {
     /// Returns a vector containing the lengths of all the reads in the file.
     ///
     /// # Errors
-    /// If the file cannot be opened then an `Err` containing a variant of [`FastxError`](#fastxerror) is
-    /// returned.
+    /// If the file cannot be opened or there is an issue parsing any records then an
+    /// `Err` containing a variant of [`FastxError`](#fastxerror) is returned.
     ///
     /// # Example
     ///
@@ -229,37 +88,21 @@ impl Fastx {
     /// let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
     /// let mut file = tempfile::Builder::new().suffix(".fq").tempfile().unwrap();
     /// file.write_all(text.as_bytes()).unwrap();
-    /// let fastx = Fastx::from_path(file.path()).unwrap();
+    /// let fastx = Fastx{ file.path() };
     /// let actual = fastx.read_lengths().unwrap();
     /// let expected: Vec<u32> = vec![4, 1];
     /// assert_eq!(actual, expected)
     /// ```
     pub fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
-        let file_handle = self.open()?;
-        let read_lengths = match self.filetype {
-            FileType::Fasta => {
-                let mut reader = fasta::Reader::new(file_handle);
-                let mut record = fasta::Record::new();
-                let mut lengths: Vec<u32> = Vec::with_capacity(5000);
-                reader.read(&mut record).expect("Failed to parse record");
-                while !record.is_empty() {
-                    lengths.push(record.seq().len() as u32);
-                    reader.read(&mut record).expect("Failed to parse record");
-                }
-                lengths
+        let mut reader =
+            parse_fastx_file(&self.path).map_err(|source| FastxError::ReadError { source })?;
+        let mut read_lengths: Vec<u32> = vec![];
+        while let Some(record) = reader.next() {
+            match record {
+                Ok(rec) => read_lengths.push(rec.num_bases() as u32),
+                Err(err) => return Err(FastxError::ParseError { source: err }),
             }
-            FileType::Fastq => {
-                let mut reader = fastq::Reader::new(file_handle);
-                let mut record = fastq::Record::new();
-                let mut lengths: Vec<u32> = Vec::with_capacity(5000);
-                reader.read(&mut record).expect("Failed to parse record");
-                while !record.is_empty() {
-                    lengths.push(record.seq().len() as u32);
-                    reader.read(&mut record).expect("Failed to parse record");
-                }
-                lengths
-            }
-        };
+        }
         Ok(read_lengths)
     }
 
