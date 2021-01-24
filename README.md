@@ -25,6 +25,7 @@
   - [Required parameters](#required-parameters)
   - [Optional parameters](#optional-parameters)
   - [Full usage](#full-usage)
+  - [Snakemake](#snakemake)
 - [Benchmark](#benchmark)
   - [Single long read input](#single-long-read-input)
   - [Paired-end input](#paired-end-input)
@@ -324,6 +325,33 @@ OPTIONS:
                                        --input. This option is required for paired input.
     -s, --seed <seed>                  Random seed to use.
 ```
+
+### Snakemake
+
+If you want to use `rasusa` in a [`snakemake`][snakemake] pipeline, it is advised to use the [wrapper][wrapper].
+
+```py
+rule subsample:
+    input:
+        r1="{sample}.r1.fq",
+        r2="{sample}.r2.fq",
+    output:
+        r1="{sample}.subsampled.r1.fq",
+        r2="{sample}.subsampled.r2.fq",
+    params:
+        options="--seed 15",  # optional
+        genome_size="3mb",  # required
+        coverage=20,  # required
+    log:
+        "logs/subsample/{sample}.log",
+    wrapper:
+        "0.70.0/bio/rasusa"
+```
+
+*See the [latest wrapper][wrapper] documentation for the most up-to-date version number.*
+
+[snakemake]: https://snakemake.readthedocs.io/en/stable/
+[wrapper]: https://snakemake-wrappers.readthedocs.io/en/stable/wrappers/rasusa.html
 
 ## Benchmark
 
