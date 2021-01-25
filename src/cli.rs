@@ -614,7 +614,7 @@ mod tests {
     #[test]
     fn integer_only_returns_integer() {
         let actual = GenomeSize::from_str("6").unwrap();
-        let expected = 6 as u64;
+        let expected = 6;
 
         assert_eq!(actual, expected);
     }
@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn float_only_returns_integer() {
         let actual = GenomeSize::from_str("6.5").unwrap();
-        let expected = 6 as u64;
+        let expected = 6;
 
         assert_eq!(actual, expected);
     }
@@ -630,7 +630,7 @@ mod tests {
     #[test]
     fn int_and_suffix_returns_multiplied_int() {
         let actual = GenomeSize::from_str("5mb").unwrap();
-        let expected = 5_000_000 as u64;
+        let expected = 5_000_000;
 
         assert_eq!(actual, expected);
     }
@@ -638,7 +638,7 @@ mod tests {
     #[test]
     fn float_and_suffix_returns_multiplied_float_as_int() {
         let actual = GenomeSize::from_str("5.4kB").unwrap();
-        let expected = 5_400 as u64;
+        let expected = 5_400;
 
         assert_eq!(actual, expected);
     }
@@ -646,7 +646,7 @@ mod tests {
     #[test]
     fn float_without_leading_int_and_suffix_returns_multiplied_float_as_int() {
         let actual = GenomeSize::from_str(".77G").unwrap();
-        let expected = 770_000_000 as u64;
+        let expected = 770_000_000;
 
         assert_eq!(actual, expected);
     }
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn int_and_tera_suffix_returns_multiplied_int() {
         let actual = GenomeSize::from_str("7TB").unwrap();
-        let expected = 7_000_000_000_000 as u64;
+        let expected = 7_000_000_000_000;
 
         assert_eq!(actual, expected);
     }
@@ -662,7 +662,7 @@ mod tests {
     #[test]
     fn int_and_base_suffix_returns_int_without_scaling() {
         let actual = GenomeSize::from_str("7B").unwrap();
-        let expected = 7 as u64;
+        let expected = 7;
 
         assert_eq!(actual, expected);
     }
