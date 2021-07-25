@@ -1,46 +1,10 @@
-use bio::io::fasta::FastaRead;
-use bio::io::fastq::FastqRead;
-use bio::io::{fasta, fastq};
-use flate2::bufread::MultiGzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use needletail::errors::ParseErrorKind::EmptyFile;
+use needletail::parse_fastx_file;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use thiserror::Error;
-
-/// A an "extension" trait to allow for extending the [`std::path::Path`](https://doc.rust-lang.org/nightly/std/path/struct.Path.html) struct.
-trait PathExt {
-    fn is_compressed(&self) -> bool;
-}
-
-impl PathExt for Path {
-    /// Determine of a `Path` is for a compressed file. This is based on whether the path ends with
-    /// the extension `.gz`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("output.fq.gz");
-    ///
-    /// assert!(path.is_compressed())
-    /// ```
-    fn is_compressed(&self) -> bool {
-        match self.extension() {
-            Some(p) => p == "gz",
-            _ => false,
-        }
-    }
-}
-
-/// An `Enum` that collates the different, allowed, file types.
-#[derive(Debug, PartialEq)]
-pub enum FileType {
-    Fasta,
-    Fastq,
-}
 
 /// A collection of custom errors relating to the working with files for this package.
 #[derive(Error, Debug)]
@@ -51,7 +15,15 @@ pub enum FastxError {
 
     /// Indicates that the specified input file could not be opened/read.
     #[error("Read error")]
-    ReadError { source: std::io::Error },
+    ReadError {
+        source: needletail::errors::ParseError,
+    },
+
+    /// Indicates that a sequence record could not be parsed.
+    #[error("Failed to parse record")]
+    ParseError {
+        source: needletail::errors::ParseError,
+    },
 
     /// Indicates that the specified output file could not be created.
     #[error("Output file could not be created")]
@@ -63,60 +35,7 @@ pub enum FastxError {
 
     /// Indicates that writing to the output file failed.
     #[error("Could not write to output file")]
-    WriteError { source: std::io::Error },
-}
-
-impl FromStr for FileType {
-    type Err = FastxError;
-
-    /// Parses a string into a `FileType`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let s = "input.fa";
-    /// let filetype = FileType::from_str(s);
-    ///
-    /// assert_eq!(filetype, FileType::Fasta)
-    /// ```
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_path(Path::new(s))
-    }
-}
-
-impl FileType {
-    /// Parses a `std::path::Path` into a `FileType`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("infile.fastq.gz");
-    /// let filetype = FileType::from_path(path);
-    ///
-    /// assert_eq!(filetype, FileType::Fastq)
-    /// ```
-    pub(crate) fn from_path(path: &Path) -> Result<FileType, FastxError> {
-        let is_compressed = path.is_compressed();
-
-        let uncompressed_path = if is_compressed {
-            path.with_extension("")
-        } else {
-            path.to_path_buf()
-        };
-
-        match uncompressed_path.extension() {
-            Some(e) => match e.to_str() {
-                Some("fa") | Some("fasta") => Ok(FileType::Fasta),
-                Some("fq") | Some("fastq") => Ok(FileType::Fastq),
-                _ => Err(FastxError::UnknownFileType(String::from(
-                    path.to_str().unwrap(),
-                ))),
-            },
-            _ => Err(FastxError::UnknownFileType(String::from(
-                path.to_str().unwrap(),
-            ))),
-        }
-    }
+    WriteError { source: anyhow::Error },
 }
 
 /// A `Struct` used for seamlessly dealing with either compressed or uncompressed fasta/fastq files.
@@ -124,69 +43,22 @@ impl FileType {
 pub struct Fastx {
     /// The path for the file.
     path: PathBuf,
-    /// The [`FileType`](#filetype) of the file.
-    pub filetype: FileType,
-    /// Is the file compressed?
-    is_compressed: bool,
 }
 
 impl Fastx {
     /// Create a `Fastx` object from a `std::path::Path`.
     ///
-    /// # Errors
-    /// If the file type is not known then an `Err` containing a variant of [`FastxError`](#fastxerror) is
-    /// returned.
-    ///
     /// # Example
     ///
     /// ```rust
     /// let path = std::path::Path::new("input.fa.gz");
     /// let fastx = Fastx::from_path(path);
-    /// let expected = Fastx{
-    ///     path: std::path::PathBuf::new("input.fa.gz"),
-    ///     filetype: FileType::Fasta,
-    ///     is_compressed: true
-    /// };
-    /// assert_eq!(fastx, expected)
     /// ```
-    pub fn from_path(path: &Path) -> Result<Self, FastxError> {
-        let filetype = FileType::from_path(&path)?;
-        let is_compressed = path.is_compressed();
-
-        Ok(Fastx {
+    pub fn from_path(path: &Path) -> Self {
+        Fastx {
             path: path.to_path_buf(),
-            filetype,
-            is_compressed,
-        })
-    }
-
-    /// Open the file associated with this `Fastx` object for reading.
-    ///
-    /// # Errors
-    /// If the file cannot be opened then an `Err` containing a variant of [`FastxError`](#fastxerror) is
-    /// returned.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let path = std::path::Path::new("input.fa.gz");
-    /// let fastx = Fastx::from_path(path);
-    /// { // this scoping means the file handle is closed afterwards.
-    ///     let file_handle = fastx.open()?;
-    ///     // do something with the file handle
-    /// }
-    /// ```
-    pub fn open(&self) -> Result<Box<dyn std::io::Read>, FastxError> {
-        let file = File::open(&self.path).map_err(|source| FastxError::ReadError { source })?;
-        let file_handle = BufReader::new(file);
-
-        if self.is_compressed {
-            Ok(Box::new(MultiGzDecoder::new(file_handle)))
-        } else {
-            Ok(Box::new(file_handle))
         }
     }
-
     /// Create the file associated with this `Fastx` object for writing.
     ///
     /// # Errors
@@ -196,8 +68,8 @@ impl Fastx {
     /// # Example
     ///
     /// ```rust
-    /// let path = std::path::Path::new("output.fa.gz");
-    /// let fastx = Fastx::from_path(path);
+    /// let path = std::path::Path::new("output.fa");
+    /// let fastx = Fastx{ path };
     /// { // this scoping means the file handle is closed afterwards.
     ///     let file_handle = fastx.create()?;
     ///     write!(file_handle, ">read1\nACGT\n")?
@@ -207,21 +79,14 @@ impl Fastx {
         let file = File::create(&self.path).map_err(|source| FastxError::CreateError { source })?;
         let file_handle = BufWriter::new(file);
 
-        if self.is_compressed {
-            Ok(Box::new(GzEncoder::new(
-                file_handle,
-                Compression::default(),
-            )))
-        } else {
-            Ok(Box::new(file_handle))
-        }
+        Ok(Box::new(file_handle))
     }
 
     /// Returns a vector containing the lengths of all the reads in the file.
     ///
     /// # Errors
-    /// If the file cannot be opened then an `Err` containing a variant of [`FastxError`](#fastxerror) is
-    /// returned.
+    /// If the file cannot be opened or there is an issue parsing any records then an
+    /// `Err` containing a variant of [`FastxError`](#fastxerror) is returned.
     ///
     /// # Example
     ///
@@ -229,37 +94,25 @@ impl Fastx {
     /// let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
     /// let mut file = tempfile::Builder::new().suffix(".fq").tempfile().unwrap();
     /// file.write_all(text.as_bytes()).unwrap();
-    /// let fastx = Fastx::from_path(file.path()).unwrap();
+    /// let fastx = Fastx{ file.path() };
     /// let actual = fastx.read_lengths().unwrap();
     /// let expected: Vec<u32> = vec![4, 1];
     /// assert_eq!(actual, expected)
     /// ```
     pub fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
-        let file_handle = self.open()?;
-        let read_lengths = match self.filetype {
-            FileType::Fasta => {
-                let mut reader = fasta::Reader::new(file_handle);
-                let mut record = fasta::Record::new();
-                let mut lengths: Vec<u32> = Vec::with_capacity(5000);
-                reader.read(&mut record).expect("Failed to parse record");
-                while !record.is_empty() {
-                    lengths.push(record.seq().len() as u32);
-                    reader.read(&mut record).expect("Failed to parse record");
-                }
-                lengths
-            }
-            FileType::Fastq => {
-                let mut reader = fastq::Reader::new(file_handle);
-                let mut record = fastq::Record::new();
-                let mut lengths: Vec<u32> = Vec::with_capacity(5000);
-                reader.read(&mut record).expect("Failed to parse record");
-                while !record.is_empty() {
-                    lengths.push(record.seq().len() as u32);
-                    reader.read(&mut record).expect("Failed to parse record");
-                }
-                lengths
-            }
+        let mut read_lengths: Vec<u32> = vec![];
+        let mut reader = match parse_fastx_file(&self.path) {
+            Ok(rdr) => rdr,
+            Err(e) if e.kind == EmptyFile => return Ok(read_lengths),
+            Err(source) => return Err(FastxError::ReadError { source }),
         };
+
+        while let Some(record) = reader.next() {
+            match record {
+                Ok(rec) => read_lengths.push(rec.num_bases() as u32),
+                Err(err) => return Err(FastxError::ParseError { source: err }),
+            }
+        }
         Ok(read_lengths)
     }
 
@@ -294,61 +147,39 @@ impl Fastx {
     /// let expected = "@read2\nCCCC\n+\n$$$$\n";
     /// assert_eq!(actual, expected)
     /// ```
-    pub fn filter_reads_into<T: ?Sized + Write>(
+    pub fn filter_reads_into<T: Write>(
         &self,
         mut reads_to_keep: HashSet<u32>,
         write_to: &mut T,
     ) -> Result<(), FastxError> {
-        let file_handle = self.open()?;
-        match self.filetype {
-            FileType::Fasta => {
-                let mut reader = fasta::Reader::new(file_handle);
-                let mut record = fasta::Record::new();
-                let mut i: u32 = 0;
-                reader.read(&mut record).expect("Failed to parse record");
+        let mut reader =
+            parse_fastx_file(&self.path).map_err(|source| FastxError::ReadError { source })?;
+        let mut read_idx: u32 = 0;
+        while let Some(record) = reader.next() {
+            let keep_this_read = reads_to_keep.contains(&read_idx);
+            read_idx += 1; // increment here so we don't need to do it twice below
 
-                while !record.is_empty() {
-                    if reads_to_keep.contains(&i) {
-                        write!(write_to, "{}", record)
-                            .map_err(|source| FastxError::WriteError { source })?;
-                        reads_to_keep.remove(&i);
-                    }
-                    if reads_to_keep.is_empty() {
-                        break;
-                    }
-                    i += 1;
-                    reader.read(&mut record).expect("Failed to parse record");
+            match record {
+                Err(source) => return Err(FastxError::ParseError { source }),
+                Ok(rec) if keep_this_read => {
+                    rec.write(write_to, None)
+                        .map_err(|err| FastxError::WriteError {
+                            source: anyhow::Error::from(err),
+                        })?
                 }
-                if reads_to_keep.is_empty() {
-                    Ok(())
-                } else {
-                    Err(FastxError::IndicesNotFound)
-                }
+                Ok(_) => continue,
             }
-            FileType::Fastq => {
-                let mut reader = fastq::Reader::new(file_handle);
-                let mut record = fastq::Record::new();
-                let mut i: u32 = 0;
-                reader.read(&mut record).expect("Failed to parse record");
 
-                while !record.is_empty() {
-                    if reads_to_keep.contains(&i) {
-                        write!(write_to, "{}", record)
-                            .map_err(|source| FastxError::WriteError { source })?;
-                        reads_to_keep.remove(&i);
-                    }
-                    if reads_to_keep.is_empty() {
-                        break;
-                    }
-                    i += 1;
-                    reader.read(&mut record).expect("Failed to parse record");
-                }
-                if reads_to_keep.is_empty() {
-                    Ok(())
-                } else {
-                    Err(FastxError::IndicesNotFound)
-                }
+            reads_to_keep.remove(&(read_idx - 1)); // remember we already incremented the index
+
+            if reads_to_keep.is_empty() {
+                return Ok(());
             }
+        }
+        if reads_to_keep.is_empty() {
+            Ok(())
+        } else {
+            Err(FastxError::IndicesNotFound)
         }
     }
 }
@@ -360,206 +191,17 @@ mod tests {
     use std::collections::HashSet;
     use std::io::{Read, Write};
     use std::iter::FromIterator;
+    use std::path::Path;
     use tempfile::Builder;
-
-    #[test]
-    fn fasta_extension_returns_fasta_filetype() {
-        let path = Path::new("data/in.fasta");
-
-        let actual = FileType::from_path(path).unwrap();
-        let expected = FileType::Fasta;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn fa_extension_returns_fasta_filetype() {
-        let path = Path::new("data/in.fa");
-
-        let actual = FileType::from_path(path).unwrap();
-        let expected = FileType::Fasta;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn compressed_fasta_extension_returns_fasta_filetype() {
-        let path = Path::new("data/in.fa.gz");
-
-        let actual = FileType::from_path(path).unwrap();
-        let expected = FileType::Fasta;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn fastq_extension_returns_fastq_filetype() {
-        let path = Path::new("data/in.fastq");
-
-        let actual = FileType::from_path(path).unwrap();
-        let expected = FileType::Fastq;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn fq_extension_returns_fastq_filetype() {
-        let path = Path::new("data/in.fq");
-
-        let actual = FileType::from_path(path).unwrap();
-        let expected = FileType::Fastq;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn compressed_fastq_extension_returns_fastq_filetype() {
-        let path = Path::new("data/in.fq.gz");
-
-        let actual = FileType::from_path(path).unwrap();
-        let expected = FileType::Fastq;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn invalid_extension_raises_error() {
-        let path = Path::new("data/in.bam");
-
-        let actual = FileType::from_path(path).unwrap_err();
-        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
-
-        assert_eq!(actual.type_id(), expected.type_id())
-    }
-
-    #[test]
-    fn no_extension_raises_error() {
-        let path = Path::new("data/fq");
-
-        let actual = FileType::from_path(path).unwrap_err();
-        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
-
-        assert_eq!(actual.type_id(), expected.type_id())
-    }
-
-    #[test]
-    fn empty_path_raises_error() {
-        let path = Path::new("");
-
-        let actual = FileType::from_path(path).unwrap_err();
-        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
-
-        assert_eq!(actual.type_id(), expected.type_id())
-    }
-
-    #[test]
-    fn file_type_from_str_fq_extension_returns_fastq_filetype() {
-        let path = "data/in.fq";
-
-        let actual = FileType::from_str(path).unwrap();
-        let expected = FileType::Fastq;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn file_type_from_str_compressed_fastq_extension_returns_fastq_filetype() {
-        let path = "data/in.fq.gz";
-
-        let actual = FileType::from_str(path).unwrap();
-        let expected = FileType::Fastq;
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn file_type_from_str_invalid_extension_raises_error() {
-        let path = "data/in.bam";
-
-        let actual = FileType::from_str(path).unwrap_err();
-        let expected = FastxError::UnknownFileType(String::from(path));
-
-        assert_eq!(actual.type_id(), expected.type_id())
-    }
-
-    #[test]
-    fn path_is_compressed() {
-        let path = Path::new("this/is/compres.gz");
-
-        assert!(path.is_compressed())
-    }
-
-    #[test]
-    fn path_is_not_compressed() {
-        let path = Path::new("this/is/compres.fa");
-
-        assert!(!path.is_compressed())
-    }
 
     #[test]
     fn fastx_from_fasta() {
         let path = Path::new("data/my.fa");
 
-        let actual = Fastx::from_path(path).unwrap();
+        let actual = Fastx::from_path(path);
         let expected = Fastx {
             path: path.to_path_buf(),
-            filetype: FileType::Fasta,
-            is_compressed: false,
         };
-
-        assert_eq!(actual, expected)
-    }
-
-    #[test]
-    fn fastx_from_non_fastaq_fails() {
-        let path = Path::new("data/my.gz");
-
-        let actual = Fastx::from_path(path).unwrap_err();
-        let expected = FastxError::UnknownFileType(String::from(path.to_str().unwrap()));
-
-        assert_eq!(actual.type_id(), expected.type_id())
-    }
-
-    #[test]
-    fn open_invalid_input_file_raises_error() {
-        let path = Path::new("i/dont/exist.fa");
-        let fastx = Fastx::from_path(path).unwrap();
-
-        let actual = fastx.open().err().unwrap();
-        let expected = FastxError::ReadError {
-            source: std::io::Error::new(
-                std::io::ErrorKind::Other,
-                String::from("No such file or directory (os error 2)"),
-            ),
-        };
-
-        assert_eq!(actual.type_id(), expected.type_id())
-    }
-
-    #[test]
-    fn open_valid_fastq_file() {
-        let text = "@read1\nACGT\n+\n!!!!";
-        let mut file = Builder::new().suffix(".fastq").tempfile().unwrap();
-        file.write_all(text.as_bytes()).unwrap();
-        let mut reader = Fastx::from_path(file.path()).unwrap().open().unwrap();
-
-        let mut actual = String::new();
-        reader.read_to_string(&mut actual).unwrap();
-
-        assert_eq!(actual, text)
-    }
-
-    #[test]
-    fn open_valid_compressed_fastq_file() {
-        let test_file = Path::new("tests/cases/file1.fq.gz");
-        let fastx = Fastx::from_path(test_file).unwrap();
-        let reader = fastx.open();
-        let mut reader = reader.unwrap();
-        let mut s = String::new();
-        reader.read_to_string(&mut s).unwrap();
-
-        let actual = s;
-        let expected = "@read1\nACGT\n+\n!!!!\n";
 
         assert_eq!(actual, expected)
     }
@@ -568,7 +210,7 @@ mod tests {
     fn create_invalid_output_file_raises_error() {
         let path = Path::new("invalid/out/path.fq");
 
-        let actual = Fastx::from_path(&path).unwrap().create().err().unwrap();
+        let actual = Fastx::from_path(&path).create().err().unwrap();
         let expected = FastxError::CreateError {
             source: std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -582,7 +224,7 @@ mod tests {
     #[test]
     fn create_valid_output_file_and_can_write_to_it() {
         let file = Builder::new().suffix(".fastq").tempfile().unwrap();
-        let mut writer = Fastx::from_path(file.path()).unwrap().create().unwrap();
+        let mut writer = Fastx::from_path(file.path()).create().unwrap();
 
         let actual = writer.write(b"foo\nbar");
 
@@ -592,7 +234,7 @@ mod tests {
     #[test]
     fn create_valid_compressed_output_file_and_can_write_to_it() {
         let file = Builder::new().suffix(".fastq.gz").tempfile().unwrap();
-        let mut writer = Fastx::from_path(file.path()).unwrap().create().unwrap();
+        let mut writer = Fastx::from_path(file.path()).create().unwrap();
 
         let actual = writer.write(b"foo\nbar");
 
@@ -604,7 +246,7 @@ mod tests {
         let text = "";
         let mut file = Builder::new().suffix(".fa").tempfile().unwrap();
         file.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(file.path()).unwrap();
+        let fastx = Fastx::from_path(file.path());
 
         let actual = fastx.read_lengths().unwrap();
         let expected: Vec<u32> = Vec::new();
@@ -617,7 +259,7 @@ mod tests {
         let text = ">read1\nACGT\n>read2\nG";
         let mut file = Builder::new().suffix(".fa").tempfile().unwrap();
         file.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(file.path()).unwrap();
+        let fastx = Fastx::from_path(file.path());
 
         let actual = fastx.read_lengths().unwrap();
         let expected: Vec<u32> = vec![4, 1];
@@ -630,7 +272,7 @@ mod tests {
         let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
         let mut file = Builder::new().suffix(".fq").tempfile().unwrap();
         file.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(file.path()).unwrap();
+        let fastx = Fastx::from_path(file.path());
 
         let actual = fastx.read_lengths().unwrap();
         let expected: Vec<u32> = vec![4, 1];
@@ -643,21 +285,17 @@ mod tests {
         let text = "@read1\nACGT\n+\n!!!!";
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         let mut out_fh = output_fastx.create().unwrap();
         let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
 
         assert!(filter_result.is_ok());
 
         let mut actual = String::new();
-        output_fastx
-            .open()
-            .unwrap()
-            .read_to_string(&mut actual)
-            .unwrap();
+        output.into_file().read_to_string(&mut actual).unwrap();
         let expected = String::new();
 
         assert_eq!(actual, expected)
@@ -668,10 +306,10 @@ mod tests {
         let text = "@read1\nACGT\n+\n!!!!\n";
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
             let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
@@ -689,10 +327,10 @@ mod tests {
         let text = ">read1\nACGT\n";
         let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
             let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
@@ -710,10 +348,10 @@ mod tests {
         let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
             let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
@@ -731,10 +369,10 @@ mod tests {
         let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nA\n+\n$\n";
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
             let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
@@ -752,10 +390,10 @@ mod tests {
         let text = ">read1 length=4\nACGT\n>read2\nCCCC\n";
         let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
             let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
@@ -773,10 +411,10 @@ mod tests {
         let text = "@read1 length=4\nACGT\n+\n!!!!\n@read2\nC\n+\n^\n";
         let mut input = Builder::new().suffix(".fq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
-        let fastx = Fastx::from_path(input.path()).unwrap();
+        let fastx = Fastx::from_path(input.path());
         let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
         let output = Builder::new().suffix(".fq").tempfile().unwrap();
-        let output_fastx = Fastx::from_path(output.path()).unwrap();
+        let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
             let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);

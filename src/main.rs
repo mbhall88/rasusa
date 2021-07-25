@@ -6,7 +6,7 @@ use log::{debug, error, info, warn};
 use structopt::StructOpt;
 
 pub use crate::cli::Cli;
-pub use crate::fastx::{Fastx, FileType};
+pub use crate::fastx::Fastx;
 pub use crate::subsampler::SubSampler;
 
 mod cli;
@@ -60,21 +60,12 @@ fn main() -> Result<()> {
 
     debug!("{:?}", args);
 
-    let input_fastx = Fastx::from_path(&args.input[0])
-        .context("unable to infer the file type of the first input file")?;
+    let input_fastx = Fastx::from_path(&args.input[0]);
 
     let mut output_handle = match args.output.len() {
         0 => Box::new(stdout()),
         _ => {
-            let out_fastx = Fastx::from_path(&args.output[0])
-                .context("unable to infer the file type of the first output file")?;
-            if out_fastx.filetype != input_fastx.filetype {
-                warn!(
-                    "Input ({:?}) and output ({:?}) file types are not the same. \
-                     Output will be of the same type as the input.",
-                    input_fastx.filetype, out_fastx.filetype
-                )
-            }
+            let out_fastx = Fastx::from_path(&args.output[0]);
             out_fastx
                 .create()
                 .context("unable to create the first output file")?
@@ -123,10 +114,8 @@ fn main() -> Result<()> {
 
     // repeat the same process for the second input fastx (if illumina)
     if is_illumina {
-        let second_input_fastx = Fastx::from_path(&args.input[1])
-            .context("unable to infer the file type of the second input file")?;
-        let second_out_fastx = Fastx::from_path(&args.output[1])
-            .context("unable to infer the file type of the second output file")?;
+        let second_input_fastx = Fastx::from_path(&args.input[1]);
+        let second_out_fastx = Fastx::from_path(&args.output[1]);
         let mut second_output_handle = second_out_fastx
             .create()
             .context("unable to create the second output file")?;

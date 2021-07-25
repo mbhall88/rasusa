@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Switch from using `snafu` and `failure` for error handling to `anyhow` and `thiserror`. Based on the procedure outlined in [this excellent blog post][error-blog].
+- Switched fasta/q parsing to use [needletail](https://github.com/onecodex/needletail)
+  instead of rust-bio
 
 ## [0.3.0]
 

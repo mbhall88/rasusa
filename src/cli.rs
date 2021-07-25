@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::ffi::{OsStr, OsString};
 use std::ops::{Div, Mul};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -14,7 +15,7 @@ pub struct Cli {
     #[structopt(
         short = "i",
         long = "input",
-        parse(from_os_str),
+        parse(try_from_os_str = check_path_exists),
         multiple = true,
         required = true
     )]
@@ -316,11 +317,21 @@ impl Mul<GenomeSize> for Coverage {
     }
 }
 
+/// A utility function that allows the CLI to error if a path doesn't exist
+fn check_path_exists(s: &OsStr) -> Result<PathBuf, OsString> {
+    let path = PathBuf::from(s);
+    if path.exists() {
+        Ok(path)
+    } else {
+        Err(OsString::from(format!("{:?} does not exist", path)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const ERROR: f32 = std::f32::EPSILON;
+    const ERROR: f32 = f32::EPSILON;
 
     #[test]
     fn no_args_given_raises_error() {
@@ -401,10 +412,11 @@ mod tests {
 
     #[test]
     fn all_valid_args_parsed_as_expected() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             "rasusa",
             "-i",
-            "in.fq",
+            infile,
             "-c",
             "5",
             "-g",
@@ -416,7 +428,7 @@ mod tests {
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
-        assert_eq!(args.input[0], PathBuf::from_str("in.fq").unwrap());
+        assert_eq!(args.input[0], PathBuf::from_str(infile).unwrap());
         assert_eq!(args.coverage, Coverage(5.0));
         assert_eq!(args.genome_size, GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
@@ -428,11 +440,12 @@ mod tests {
 
     #[test]
     fn all_valid_args_with_two_inputs_parsed_as_expected() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             "rasusa",
             "-i",
-            "in.fq",
-            "in2.fq",
+            infile,
+            infile,
             "-c",
             "5",
             "-g",
@@ -445,8 +458,8 @@ mod tests {
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
         let expected_input = vec![
-            PathBuf::from_str("in.fq").unwrap(),
-            PathBuf::from_str("in2.fq").unwrap(),
+            PathBuf::from_str(infile).unwrap(),
+            PathBuf::from_str(infile).unwrap(),
         ];
         assert_eq!(args.input, expected_input);
         assert_eq!(args.coverage, Coverage(5.0));
@@ -460,12 +473,13 @@ mod tests {
 
     #[test]
     fn all_valid_args_with_two_inputs_using_flag_twice_parsed_as_expected() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             "rasusa",
             "-i",
-            "in.fq",
+            infile,
             "-i",
-            "in2.fq",
+            infile,
             "-c",
             "5",
             "-g",
@@ -478,8 +492,8 @@ mod tests {
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
         let expected_input = vec![
-            PathBuf::from_str("in.fq").unwrap(),
-            PathBuf::from_str("in2.fq").unwrap(),
+            PathBuf::from_str(infile).unwrap(),
+            PathBuf::from_str(infile).unwrap(),
         ];
         assert_eq!(args.input, expected_input);
         assert_eq!(args.coverage, Coverage(5.0));
@@ -493,14 +507,15 @@ mod tests {
 
     #[test]
     fn three_inputs_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             "rasusa",
             "-i",
-            "in.fq",
+            infile,
             "-i",
-            "in.fq",
+            infile,
             "-i",
-            "in.fq",
+            infile,
             "-c",
             "5",
             "-g",
@@ -521,12 +536,13 @@ mod tests {
 
     #[test]
     fn three_outputs_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             "rasusa",
             "-i",
-            "in.fq",
+            infile,
             "-i",
-            "in.fq",
+            infile,
             "-c",
             "5",
             "-g",
@@ -551,7 +567,8 @@ mod tests {
 
     #[test]
     fn one_input_no_output_is_ok() {
-        let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88"];
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-c", "5", "-g", "8mb", "-s", "88"];
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
         let actual = args.validate_input_output_combination();
@@ -561,8 +578,9 @@ mod tests {
 
     #[test]
     fn two_inputs_one_output_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
-            "rasusa", "-i", "in.fq", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88", "-o",
+            "rasusa", "-i", infile, "-i", infile, "-c", "5", "-g", "8mb", "-s", "88", "-o",
             "out.fq",
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
@@ -576,8 +594,9 @@ mod tests {
 
     #[test]
     fn one_input_two_outputs_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
-            "rasusa", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o",
+            "rasusa", "-i", infile, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o",
             "out.fq",
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
@@ -591,8 +610,9 @@ mod tests {
 
     #[test]
     fn two_input_two_outputs_is_ok() {
+        let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
-            "rasusa", "-i", "in.fq", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "88", "-o",
+            "rasusa", "-i", infile, "-i", infile, "-c", "5", "-g", "8mb", "-s", "88", "-o",
             "out.fq", "-o", "out.fq",
         ];
         let args = Cli::from_iter_safe(passed_args).unwrap();
@@ -608,7 +628,7 @@ mod tests {
         let expected = 4.5;
 
         let diff = (actual.abs() - expected).abs();
-        assert!(diff < std::f64::EPSILON)
+        assert!(diff < f64::EPSILON)
     }
 
     #[test]
@@ -840,6 +860,6 @@ mod tests {
         let expected = 1.05;
 
         let diff = (actual.abs() - expected).abs();
-        assert!(diff < std::f64::EPSILON)
+        assert!(diff < f64::EPSILON)
     }
 }
