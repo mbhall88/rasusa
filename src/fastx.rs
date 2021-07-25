@@ -1,3 +1,4 @@
+use needletail::errors::ParseErrorKind::EmptyFile;
 use needletail::parse_fastx_file;
 use std::collections::HashSet;
 use std::fs::File;
@@ -99,9 +100,13 @@ impl Fastx {
     /// assert_eq!(actual, expected)
     /// ```
     pub fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
-        let mut reader =
-            parse_fastx_file(&self.path).map_err(|source| FastxError::ReadError { source })?;
         let mut read_lengths: Vec<u32> = vec![];
+        let mut reader = match parse_fastx_file(&self.path) {
+            Ok(rdr) => rdr,
+            Err(e) if e.kind == EmptyFile => return Ok(read_lengths),
+            Err(source) => return Err(FastxError::ReadError { source }),
+        };
+
         while let Some(record) = reader.next() {
             match record {
                 Ok(rec) => read_lengths.push(rec.num_bases() as u32),

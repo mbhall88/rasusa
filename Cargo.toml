@@ -22,7 +22,7 @@ clap = "2.33.0"
 regex = "1"
 thiserror = "1.0"
 anyhow = "1.0"
-needletail = { version = "0.4.0", features = ["compression"] }
+needletail = { version = "0.4.1", features = ["compression"] }
 rand = "0.7.2"
 rand_pcg = "0.2.1"
 log = "0.4"
