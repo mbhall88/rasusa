@@ -150,7 +150,8 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         with:
           version: '0.18.0'
-          args: '-- --test-threads 1 --timeout 180'
+          timeout: '180'
+          args: '-- --test-threads 1'
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v1
