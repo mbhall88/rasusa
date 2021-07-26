@@ -1,6 +1,5 @@
 ![rasusa](img/logo.png)
-
-[![Build Status](https://github.com/mbhall88/rasusa/actions/workflows/rust-ci.yml/badge.svg?branch=master)](https://github.com/mbhall88/rasusa/actions/workflows/rust-ci.yml)
+[![Build Status](https://github.com/mbhall88/rasusa/actions/workflows/rust-ci.yaml/badge.svg?branch=master)](https://github.com/mbhall88/rasusa/actions/workflows/rust-ci.yaml)
 [![codecov](https://codecov.io/gh/mbhall88/rasusa/branch/master/graph/badge.svg)](https://codecov.io/gh/mbhall88/rasusa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
