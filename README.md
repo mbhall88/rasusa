@@ -63,7 +63,7 @@ Some of these installation options require the [`rust` toolchain][rust], which i
 
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
 
-Prerequisite: [`rust` toolchain][rust] (min. v1.42.0)
+Prerequisite: [`rust` toolchain][rust] (min. v1.43.0)
 
 ```sh
 cargo install rasusa
