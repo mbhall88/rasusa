@@ -151,7 +151,8 @@ impl Fastx {
         &self,
         mut reads_to_keep: HashSet<u32>,
         write_to: &mut T,
-    ) -> Result<(), FastxError> {
+    ) -> Result<usize, FastxError> {
+        let mut total_len = 0;
         let mut reader =
             parse_fastx_file(&self.path).map_err(|source| FastxError::ReadError { source })?;
         let mut read_idx: u32 = 0;
@@ -162,6 +163,7 @@ impl Fastx {
             match record {
                 Err(source) => return Err(FastxError::ParseError { source }),
                 Ok(rec) if keep_this_read => {
+                    total_len += rec.num_bases();
                     rec.write(write_to, None)
                         .map_err(|err| FastxError::WriteError {
                             source: anyhow::Error::from(err),
@@ -173,11 +175,11 @@ impl Fastx {
             reads_to_keep.remove(&(read_idx - 1)); // remember we already incremented the index
 
             if reads_to_keep.is_empty() {
-                return Ok(());
+                return Ok(total_len);
             }
         }
         if reads_to_keep.is_empty() {
-            Ok(())
+            Ok(total_len)
         } else {
             Err(FastxError::IndicesNotFound)
         }

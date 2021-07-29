@@ -2,7 +2,7 @@ use std::io::stdout;
 
 use anyhow::{Context, Result};
 use fern::colors::{Color, ColoredLevelConfig};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use structopt::StructOpt;
 
 pub use crate::cli::Cli;
@@ -120,14 +120,8 @@ fn main() -> Result<()> {
     }
     debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
-    if let Err(err) = input_fastx.filter_reads_into(reads_to_keep.clone(), &mut output_handle) {
-        warn!("{:?}", err);
-    }
-
-    let mut total_kept_bases: u64 = reads_to_keep
-        .iter()
-        .map(|&i| read_lengths[i as usize])
-        .fold(0, |acc, x| acc + u64::from(x));
+    let mut total_kept_bases =
+        input_fastx.filter_reads_into(reads_to_keep.clone(), &mut output_handle)? as u64;
 
     // repeat the same process for the second input fastx (if illumina)
     if is_illumina {
@@ -137,16 +131,8 @@ fn main() -> Result<()> {
             .create()
             .context("unable to create the second output file")?;
 
-        total_kept_bases += reads_to_keep
-            .iter()
-            .map(|&i| read_lengths[i as usize])
-            .fold(0, |acc, x| acc + u64::from(x));
-
-        if let Err(err) =
-            second_input_fastx.filter_reads_into(reads_to_keep, &mut second_output_handle)
-        {
-            warn!("{:?}", err);
-        }
+        total_kept_bases +=
+            second_input_fastx.filter_reads_into(reads_to_keep, &mut second_output_handle)? as u64;
     }
 
     let actual_covg = total_kept_bases / args.genome_size;
