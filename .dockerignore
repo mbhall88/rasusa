@@ -1,0 +1,17 @@
+.git*
+src/ext/
+target/
+tmp*/
+tests
+.rustfmt.toml
+README.md
+Dockerfile
+.dockerignore
+.idea
+benchmark
+ci
+clippy.toml
+codecov.yml
+data
+img
+scripts

@@ -86,20 +86,26 @@ Thank you to Devon Ryan ([@dpryan79][dpryan79]) for [help debugging the bioconda
 [dpryan79]: https://github.com/dpryan79
 [pr-help]: https://github.com/bioconda/bioconda-recipes/pull/18690
 
+### Container
+
+Docker images are hosted at [quay.io]. For versions 0.3.0 and earlier, the images were
+hosted on [Dockerhub][dockerhub].
+
 ### `singularity`
 
 Prerequisite: [`singularity`][singularity]
 
 ```sh
-URI="docker://mbhall88/rasusa"
+URI="docker://quay.io/mbhall88/rasusa"
 singularity exec "$URI" rasusa --help
 ```
 
-The above will use the latest version. If you want to specify a version then use a [tag][dockerhub] like so.
+The above will use the latest version. If you want to specify a version then use a
+[tag][quay.io] (or commit) like so.
 
 ```sh
 VERSION="0.3.0"
-URI="docker://mbhall88/rasusa:${VERSION}"
+URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
 ### `docker`
@@ -108,13 +114,12 @@ URI="docker://mbhall88/rasusa:${VERSION}"
 Prerequisite: [`docker`][docker]
 
 ```sh
-docker pull mbhall88/rasusa
-docker run mbhall88/rasusa rasusa --help
+docker pull quay.io/mbhall88/rasusa
+docker run quay.io/mbhall88/rasusa rasusa --help
 ```
 
-You can find all the available tags on the [Docker Hub repository][dockerhub].
-
 [dockerhub]: https://hub.docker.com/r/mbhall88/rasusa
+[quay.io]: https://quay.io/repository/mbhall88/rasusa
 
 ### `homebrew`
 
