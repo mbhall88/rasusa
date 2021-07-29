@@ -72,7 +72,7 @@ fn main() -> Result<()> {
         }
     };
 
-    let mut target_total_bases: u64 = args.genome_size * args.coverage;
+    let target_total_bases: u64 = args.genome_size * args.coverage;
     info!(
         "Target number of bases to subsample to is: {}",
         target_total_bases
@@ -84,11 +84,28 @@ fn main() -> Result<()> {
         .context("unable to gather read lengths for the first input file")?;
 
     if is_illumina {
-        info!("{} reads detected in the first input", read_lengths.len());
-        target_total_bases /= 2;
-    } else {
-        info!("{} reads detected", read_lengths.len());
+        let second_input_fastx = Fastx::from_path(&args.input[1]);
+        let expected_num_reads = read_lengths.len();
+        info!("Gathering read lengths for second input file...");
+        let mate_lengths = second_input_fastx
+            .read_lengths()
+            .context("unable to gather read lengths for the second input file")?;
+
+        if mate_lengths.len() != expected_num_reads {
+            error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len());
+            std::process::exit(1);
+        } else {
+            info!(
+                "Both input files have the same number of reads ({}) 👍",
+                expected_num_reads
+            );
+        }
+        // add the paired read lengths to the existing lengths
+        for (i, len) in mate_lengths.iter().enumerate() {
+            read_lengths[i] += len;
+        }
     }
+    info!("{} reads detected", read_lengths.len());
 
     let subsampler = SubSampler {
         target_total_bases,
@@ -119,21 +136,6 @@ fn main() -> Result<()> {
         let mut second_output_handle = second_out_fastx
             .create()
             .context("unable to create the second output file")?;
-
-        let expected_num_reads = read_lengths.len();
-        info!("Gathering read lengths for second input file...");
-        read_lengths = second_input_fastx
-            .read_lengths()
-            .context("unable to gather read lengths for the second input file")?;
-
-        if read_lengths.len() != expected_num_reads {
-            error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len())
-        } else {
-            info!(
-                "Both input files have the same number of reads ({}) 👍",
-                expected_num_reads
-            )
-        }
 
         total_kept_bases += reads_to_keep
             .iter()
