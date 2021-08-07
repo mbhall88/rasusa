@@ -388,10 +388,10 @@ hyperfine --warmup 3 --runs 10 --export-markdown results.md \
 #### Results
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `filtlong --target_bases 220576600 tb.fq` | 111.199 ± 14.926 | 92.716 | 128.849 | 51.64 ± 9.11 |
-| `rasusa -i tb.fq -c 50 -g 4411532 -s 1` | 2.153 ± 0.246 | 2.060 | 2.853 | 1.00 |
+| `filtlong --target_bases 220576600 tb.fq` | 21.685 ± 0.055 | 21.622 | 21.787 | 21.77 ± 0.29 |
+| `rasusa -i tb.fq -c 50 -g 4411532 -s 1` | 0.996 ±  0.013 | 0.983 | 1.023 | 1.00 |
 
-**Summary**: `rasusa` ran 51.64 ± 9.11 times faster than `filtlong`.
+**Summary**: `rasusa` ran 21.77 ± 0.29 times faster than `filtlong`.
 
 
 ### Paired-end input
@@ -422,14 +422,16 @@ hyperfine --warmup 5 --runs 20 --export-markdown results.md \
 
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;` | 1.435 ± 0.036 | 1.396 | 1.523 | 1.00 |
-| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 1.587 ± 0.166 | 1.399 | 2.087 | 1.11 ± 0.12 |
-| `rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq` | 1.731 ± 0.079 | 1.611 | 1.982 | 1.21 ± 0.06 |
+| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;` | 1.113 ± 0.091 | 1.014 | 1.441 | 1.43 ± 0.28 |
+| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 1.047 ± 0.073 | 0.976 | 1.312 | 1.34 ± 0.25 |
+| `rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq` | 0.778 ± 0.137 | 0.566 | 1.027 | 1.0 |
 
-**Summary**: `seqtk` (1-pass) ran 1.21 ± 0.06 times faster than `rasusa`
-and 1.11 ± 0.12 times faster than `seqtk` (2-pass)
+**Summary**: `rasusa` ran 1.43 times faster than `seqtk` (1-pass) and 1.34 times
+faster than `seqtk` (2-pass)
 
-So, `rasusa` is just about the same speed as `seqtk` but doesn't require a fixed number of reads - allowing you to avoid doing maths to determine how many reads you need to downsample to a specific coverage. 🤓
+So, `rasusa` is faster than `seqtk` but doesn't require a fixed number of reads -
+allowing you to avoid doing maths to determine how many reads you need to downsample to
+a specific coverage. 🤓
 
 [hyperfine]: https://github.com/sharkdp/hyperfine
 [1]: https://doi.org/10.1099/mgen.0.000188
