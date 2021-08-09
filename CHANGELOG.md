@@ -11,7 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Switch from using `snafu` and `failure` for error handling to `anyhow` and `thiserror`. Based on the procedure outlined in [this excellent blog post][error-blog].
 - Switched fasta/q parsing to use [needletail](https://github.com/onecodex/needletail)
-  instead of rust-bio
+  instead of rust-bio. See [benchmark] for improvement in runtimes.
+- Changed the way Illumina paired reads are subsampled. Previously, there was an
+  assumption made that the reads of a pair were both the same length as the R1 read. We
+  are now more careful and look at each read's length individually [[#22][22]]
+- Moved container hosting to quay.io
 
 ## [0.3.0]
 
@@ -39,8 +43,10 @@ been 1000, whereas now, it would be 1070.
 - Support paired Illumina [#15](https://github.com/mbhall88/rasusa/issues/15)
 
 
-[unreleased]: https://github.com/mbhall88/rasusa/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/mbhall88/rasusa/releases/tag/v0.3.0
-[0.2.0]: https://github.com/mbhall88/rasusa/releases/tag/v0.2.0
+[unreleased]: https://github.com/mbhall88/rasusa/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/mbhall88/rasusa/releases/tag/0.3.0
+[0.2.0]: https://github.com/mbhall88/rasusa/releases/tag/0.2.0
 [19]: https://github.com/mbhall88/rasusa/issues/19
+[22]: https://github.com/mbhall88/rasusa/issues/22
+[benchmark]: https://github.com/mbhall88/rasusa#benchmark
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/

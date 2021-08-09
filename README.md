@@ -399,7 +399,7 @@ hyperfine --warmup 3 --runs 10 --export-markdown results.md \
 Download and then deinterleave the fastq with [`pyfastaq`][pyfastaq]
 ```shell
 URL="ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR648/008/SRR6488968/SRR6488968.fastq.gz"
-wget "$URL" -O - | fastaq deinterleave - r1.fq r2.fq
+wget "$URL" -O - | gzip -d -c - | fastaq deinterleave - r1.fq r2.fq
 ```
 Each file's size is 179M and has 283,590 reads.  
 For this benchmark, we will use [`seqtk`][seqtk]. As `seqtk` requires a fixed number of
