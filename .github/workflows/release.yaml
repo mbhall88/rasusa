@@ -149,7 +149,7 @@ jobs:
           unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/[0-9].* ]]; then IS_RELEASE='true' ; fi
           echo ::set-output name=IS_RELEASE::${IS_RELEASE}
       - name: Publish archives and packages
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@59c3b4891632ff9a897f99a91d7bc557467a3a22 # https://github.com/softprops/action-gh-release/issues/139
         if: steps.is-release.outputs.IS_RELEASE
         with:
           files: |
