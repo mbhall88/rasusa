@@ -1,11 +1,23 @@
-FROM alpine
+FROM rust:1.54 AS builder
 
-RUN apk update
+COPY . /rasusa
 
-RUN apk upgrade
+WORKDIR /rasusa
 
-RUN apk add bash
+ARG TARGET="x86_64-unknown-linux-musl"
 
-ADD target/docker/rasusa /bin/
+RUN apt update \
+    && apt install -y musl-tools \
+    && rustup target add "$TARGET" \
+    && cargo build --release --target "$TARGET" \
+    && strip target/${TARGET}/release/rasusa
 
-CMD ["/bin/rasusa"]
+
+FROM bash
+
+ARG TARGET="x86_64-unknown-linux-musl"
+COPY --from=builder /rasusa/target/${TARGET}/release/rasusa /bin/
+
+RUN rasusa --version
+
+ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
