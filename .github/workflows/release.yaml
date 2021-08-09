@@ -1,3 +1,4 @@
+# inspried by https://github.com/sharkdp/hyperfine/blob/master/.github/workflows/CICD.yml
 name: Release
 
 on:

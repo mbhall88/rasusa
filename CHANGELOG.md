@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Changed
 
 - Switch from using `snafu` and `failure` for error handling to `anyhow` and `thiserror`. Based on the procedure outlined in [this excellent blog post][error-blog].
@@ -43,7 +45,8 @@ been 1000, whereas now, it would be 1070.
 - Support paired Illumina [#15](https://github.com/mbhall88/rasusa/issues/15)
 
 
-[unreleased]: https://github.com/mbhall88/rasusa/compare/0.3.0...HEAD
+[unreleased]: https://github.com/mbhall88/rasusa/compare/0.4.0...HEAD
+[0.4.0]: https://github.com/mbhall88/rasusa/releases/tag/0.4.0
 [0.3.0]: https://github.com/mbhall88/rasusa/releases/tag/0.3.0
 [0.2.0]: https://github.com/mbhall88/rasusa/releases/tag/0.2.0
 [19]: https://github.com/mbhall88/rasusa/issues/19
