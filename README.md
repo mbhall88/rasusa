@@ -15,8 +15,7 @@
 - [Install](#install)
   - [`cargo`](#cargo)
   - [`conda`](#conda)
-  - [`singularity`](#singularity)
-  - [`docker`](#docker)
+  - [Container](#container)
   - [`homebrew`](#homebrew)
   - [Release binaries](#release-binaries)
   - [Build locally](#build-locally)
@@ -91,7 +90,7 @@ Thank you to Devon Ryan ([@dpryan79][dpryan79]) for [help debugging the bioconda
 Docker images are hosted at [quay.io]. For versions 0.3.0 and earlier, the images were
 hosted on [Dockerhub][dockerhub].
 
-### `singularity`
+#### `singularity`
 
 Prerequisite: [`singularity`][singularity]
 
@@ -108,7 +107,7 @@ VERSION="0.4.1"
 URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
-### `docker`
+#### `docker`
 [![Docker Repository on Quay](https://quay.io/repository/mbhall88/rasusa/status "Docker Repository on Quay")](https://quay.io/repository/mbhall88/rasusa)
 
 Prerequisite: [`docker`][docker]
@@ -122,7 +121,8 @@ docker run quay.io/mbhall88/rasusa rasusa --help
 [quay.io]: https://quay.io/repository/mbhall88/rasusa
 
 
-You can find all the available tags on the [quay.io repository][tags]. Note: versions prior to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
+You can find all the available tags on the [quay.io repository][quay.io]. Note: versions prior
+to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
 
 
 ### `homebrew`
