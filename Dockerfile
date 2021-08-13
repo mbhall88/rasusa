@@ -1,22 +1,23 @@
-# 1: Build the binary
-FROM rust:1.53 as builder
+FROM rust:1.54 AS builder
 
-# 1a: Prepare for static linking
-RUN apt-get update && \
-    apt-get dist-upgrade -y && \
-    apt-get install -y musl-tools && \
-    rustup target add x86_64-unknown-linux-musl
-
-# 1b: Download and compile Rust dependencies (and store as a separate Docker layer)
 COPY . /rasusa
-WORKDIR /rasusa
-RUN cargo install --target x86_64-unknown-linux-musl --path .
 
-# 2: Copy the binary to an empty Docker image
+WORKDIR /rasusa
+
+ARG TARGET="x86_64-unknown-linux-musl"
+
+RUN apt update \
+    && apt install -y musl-tools \
+    && rustup target add "$TARGET" \
+    && cargo build --release --target "$TARGET" \
+    && strip target/${TARGET}/release/rasusa
+
+
 FROM bash:5.0
 
-COPY --from=builder /usr/local/cargo/bin/rasusa /bin/rasusa
+ARG TARGET="x86_64-unknown-linux-musl"
+COPY --from=builder /rasusa/target/${TARGET}/release/rasusa /bin/
 
-RUN rasusa --help
+RUN rasusa --version
 
-CMD ["/bin/rasusa"]
+ENTRYPOINT [ "/bin/bash", "-l", "-c" ]

@@ -212,7 +212,7 @@ mod tests {
     fn create_invalid_output_file_raises_error() {
         let path = Path::new("invalid/out/path.fq");
 
-        let actual = Fastx::from_path(&path).create().err().unwrap();
+        let actual = Fastx::from_path(path).create().err().unwrap();
         let expected = FastxError::CreateError {
             source: std::io::Error::new(
                 std::io::ErrorKind::Other,

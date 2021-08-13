@@ -318,7 +318,7 @@ impl Mul<GenomeSize> for Coverage {
 }
 
 /// A utility function that allows the CLI to error if a path doesn't exist
-fn check_path_exists(s: &OsStr) -> Result<PathBuf, OsString> {
+fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsString> {
     let path = PathBuf::from(s);
     if path.exists() {
         Ok(path)

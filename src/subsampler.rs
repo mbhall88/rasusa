@@ -65,7 +65,7 @@ impl SubSampler {
     /// assert!(actual.contains(&2))
     /// ```
     pub fn indices(&self, lengths: &[u32]) -> HashSet<u32> {
-        let mut indices = self.shuffled_indices(&lengths).into_iter();
+        let mut indices = self.shuffled_indices(lengths).into_iter();
         let mut to_keep: HashSet<u32> = HashSet::new();
         let mut total_bases_kept: u64 = 0;
 
