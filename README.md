@@ -386,7 +386,7 @@ COVG=50
 TARGET_BASES=$(( TB_GENOME_SIZE * COVG ))
 FILTLONG_CMD="filtlong --target_bases $TARGET_BASES tb.fq"
 RASUSA_CMD="rasusa -i tb.fq -c $COVG -g $TB_GENOME_SIZE -s 1"
-hyperfine --warmup 3 --runs 10 --export-markdown results.md \
+hyperfine --warmup 3 --runs 10 --export-markdown results-single.md \
      "$FILTLONG_CMD" "$RASUSA_CMD" 
 ```
 
@@ -419,20 +419,20 @@ NUM_READS=147052
 SEQTK_CMD_1="seqtk sample -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
 SEQTK_CMD_2="seqtk sample -2 -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
 RASUSA_CMD="rasusa -i r1.fq r2.fq -c $COVG -g $TB_GENOME_SIZE -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
-hyperfine --warmup 5 --runs 20 --export-markdown results.md \
+hyperfine --warmup 5 --runs 20 --export-markdown results-paired.md \
      "$SEQTK_CMD_1" "$SEQTK_CMD_2" "$RASUSA_CMD"
 ```
 
 #### Results
 
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;` | 1.113 ± 0.091 | 1.014 | 1.441 | 1.43 ± 0.28 |
-| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 1.047 ± 0.073 | 0.976 | 1.312 | 1.34 ± 0.25 |
-| `rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq` | 0.778 ± 0.137 | 0.566 | 1.027 | 1.0 |
+| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;` | 699.8 ± 11.1 | 686.0 | 718.5 | 1.40 ± 0.12 |
+| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 748.2 ± 48.0 | 712.9 | 927.2 | 1.49 ± 0.16 |
+| `rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq` | 501.6 ± 42.3 | 448.9 | 574.2 | 1.00 |
 
-**Summary**: `rasusa` ran 1.43 times faster than `seqtk` (1-pass) and 1.34 times
-faster than `seqtk` (2-pass)
+**Summary**: `rasusa` ran 1.40 times faster than `seqtk` (1-pass) and 1.49 times faster
+than `seqtk` (2-pass)
 
 So, `rasusa` is faster than `seqtk` but doesn't require a fixed number of reads -
 allowing you to avoid doing maths to determine how many reads you need to downsample to
