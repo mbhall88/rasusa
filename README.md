@@ -105,11 +105,11 @@ The above will use the latest version. If you want to specify a version then use
 
 ```sh
 VERSION="0.4.1"
-URI="docker://mbhall88/rasusa:${VERSION}"
+URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
 ### `docker`
-[![Docker Image Version (latest semver)](https://img.shields.io/docker/v/mbhall88/rasusa)](https://hub.docker.com/r/mbhall88/rasusa/tags)
+[![Docker Repository on Quay](https://quay.io/repository/mbhall88/rasusa/status "Docker Repository on Quay")](https://quay.io/repository/mbhall88/rasusa)
 
 Prerequisite: [`docker`][docker]
 
@@ -120,6 +120,10 @@ docker run quay.io/mbhall88/rasusa rasusa --help
 
 [dockerhub]: https://hub.docker.com/r/mbhall88/rasusa
 [quay.io]: https://quay.io/repository/mbhall88/rasusa
+
+
+You can find all the available tags on the [quay.io repository][tags]. Note: versions prior to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
+
 
 ### `homebrew`
 
