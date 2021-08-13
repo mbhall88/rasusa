@@ -95,8 +95,7 @@ fn invalid_input_and_output_combination_raises_error() -> Result<(), Box<dyn std
 }
 
 #[test]
-fn unequal_number_of_reads_in_inputs_raises_no_errors_but_prints_error_msg(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn unequal_number_of_reads_raises_error() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::main_binary()?;
     cmd.args(vec![
         "-i",
@@ -112,7 +111,7 @@ fn unequal_number_of_reads_in_inputs_raises_no_errors_but_prints_error_msg(
         "/tmp/out2.fq",
     ]);
 
-    cmd.assert().success().stderr(predicate::str::contains(
+    cmd.assert().failure().stderr(predicate::str::contains(
         "Illumina files are assumed to have the same number of reads",
     ));
 

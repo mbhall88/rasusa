@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2]
+
+### Fixed
+- I had stupidly forgetten to merge the fix for [#22][22] onto master 🤦
+
 ## [0.4.1]
 
 ### Fixes
@@ -51,7 +56,8 @@ been 1000, whereas now, it would be 1070.
 - Support paired Illumina [#15](https://github.com/mbhall88/rasusa/issues/15)
 
 
-[unreleased]: https://github.com/mbhall88/rasusa/compare/0.4.1...HEAD
+[unreleased]: https://github.com/mbhall88/rasusa/compare/0.4.2...HEAD
+[0.4.2]: https://github.com/mbhall88/rasusa/releases/tag/0.4.2
 [0.4.1]: https://github.com/mbhall88/rasusa/releases/tag/0.4.1
 [0.4.0]: https://github.com/mbhall88/rasusa/releases/tag/0.4.0
 [0.3.0]: https://github.com/mbhall88/rasusa/releases/tag/0.3.0

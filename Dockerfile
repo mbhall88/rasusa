@@ -13,7 +13,7 @@ RUN apt update \
     && strip target/${TARGET}/release/rasusa
 
 
-FROM bash
+FROM bash:5.0
 
 ARG TARGET="x86_64-unknown-linux-musl"
 COPY --from=builder /rasusa/target/${TARGET}/release/rasusa /bin/

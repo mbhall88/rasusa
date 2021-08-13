@@ -2,7 +2,7 @@ use std::io::stdout;
 
 use anyhow::{Context, Result};
 use fern::colors::{Color, ColoredLevelConfig};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use structopt::StructOpt;
 
 pub use crate::cli::Cli;
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
         }
     };
 
-    let mut target_total_bases: u64 = args.genome_size * args.coverage;
+    let target_total_bases: u64 = args.genome_size * args.coverage;
     info!(
         "Target number of bases to subsample to is: {}",
         target_total_bases
@@ -84,11 +84,28 @@ fn main() -> Result<()> {
         .context("unable to gather read lengths for the first input file")?;
 
     if is_illumina {
-        info!("{} reads detected in the first input", read_lengths.len());
-        target_total_bases /= 2;
-    } else {
-        info!("{} reads detected", read_lengths.len());
+        let second_input_fastx = Fastx::from_path(&args.input[1]);
+        let expected_num_reads = read_lengths.len();
+        info!("Gathering read lengths for second input file...");
+        let mate_lengths = second_input_fastx
+            .read_lengths()
+            .context("unable to gather read lengths for the second input file")?;
+
+        if mate_lengths.len() != expected_num_reads {
+            error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len());
+            std::process::exit(1);
+        } else {
+            info!(
+                "Both input files have the same number of reads ({}) 👍",
+                expected_num_reads
+            );
+        }
+        // add the paired read lengths to the existing lengths
+        for (i, len) in mate_lengths.iter().enumerate() {
+            read_lengths[i] += len;
+        }
     }
+    info!("{} reads detected", read_lengths.len());
 
     let subsampler = SubSampler {
         target_total_bases,
@@ -103,14 +120,8 @@ fn main() -> Result<()> {
     }
     debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
-    if let Err(err) = input_fastx.filter_reads_into(reads_to_keep.clone(), &mut output_handle) {
-        warn!("{:?}", err);
-    }
-
-    let mut total_kept_bases: u64 = reads_to_keep
-        .iter()
-        .map(|&i| read_lengths[i as usize])
-        .fold(0, |acc, x| acc + u64::from(x));
+    let mut total_kept_bases =
+        input_fastx.filter_reads_into(reads_to_keep.clone(), &mut output_handle)? as u64;
 
     // repeat the same process for the second input fastx (if illumina)
     if is_illumina {
@@ -120,31 +131,8 @@ fn main() -> Result<()> {
             .create()
             .context("unable to create the second output file")?;
 
-        let expected_num_reads = read_lengths.len();
-        info!("Gathering read lengths for second input file...");
-        read_lengths = second_input_fastx
-            .read_lengths()
-            .context("unable to gather read lengths for the second input file")?;
-
-        if read_lengths.len() != expected_num_reads {
-            error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len())
-        } else {
-            info!(
-                "Both input files have the same number of reads ({}) 👍",
-                expected_num_reads
-            )
-        }
-
-        total_kept_bases += reads_to_keep
-            .iter()
-            .map(|&i| read_lengths[i as usize])
-            .fold(0, |acc, x| acc + u64::from(x));
-
-        if let Err(err) =
-            second_input_fastx.filter_reads_into(reads_to_keep, &mut second_output_handle)
-        {
-            warn!("{:?}", err);
-        }
+        total_kept_bases +=
+            second_input_fastx.filter_reads_into(reads_to_keep, &mut second_output_handle)? as u64;
     }
 
     let actual_covg = total_kept_bases / args.genome_size;
