@@ -1,5 +1,4 @@
 use rand::prelude::*;
-use std::collections::HashSet;
 
 /// A `Struct` for dealing with the randomised part of sub-sampling.
 pub struct SubSampler {
@@ -60,24 +59,28 @@ impl SubSampler {
     /// };
     /// let actual = sampler.indices(&v);
     ///
-    /// assert_eq!(actual.len(), 2);
-    /// assert!(actual.contains(&1));
-    /// assert!(actual.contains(&2))
+    /// assert_eq!(actual.len(), 3);
+    /// assert!(actual[1]);
+    /// assert!(actual[2]);
+    /// assert!(actual[3]);
     /// ```
-    pub fn indices(&self, lengths: &[u32]) -> HashSet<u32> {
+    pub fn indices(&self, lengths: &[u32]) -> (Vec<bool>, usize) {
         let mut indices = self.shuffled_indices(lengths).into_iter();
-        let mut to_keep: HashSet<u32> = HashSet::new();
+        let mut to_keep: Vec<bool> = vec![false; lengths.len()];
         let mut total_bases_kept: u64 = 0;
 
+        let mut nb_reads_keep = 0;
         while total_bases_kept < self.target_total_bases {
             let idx = match indices.next() {
                 Some(i) => i,
                 None => break,
             };
-            to_keep.insert(idx.to_owned());
-            total_bases_kept += u64::from(lengths[idx.to_owned() as usize])
+            to_keep[idx as usize] = true;
+            total_bases_kept += u64::from(lengths[idx.to_owned() as usize]);
+            nb_reads_keep += 1;
         }
-        to_keep
+
+        (to_keep, nb_reads_keep)
     }
 }
 
@@ -161,9 +164,9 @@ mod tests {
             seed: None,
         };
 
-        let actual = sampler.indices(&v);
+        let (_, nb_select) = sampler.indices(&v);
 
-        assert!(actual.is_empty())
+        assert_eq!(nb_select, 0)
     }
 
     #[test]
@@ -174,9 +177,9 @@ mod tests {
             seed: None,
         };
 
-        let actual = sampler.indices(&v);
+        let (_, nb_select) = sampler.indices(&v);
 
-        assert!(actual.is_empty())
+        assert_eq!(nb_select, 0);
     }
 
     #[test]
@@ -187,10 +190,10 @@ mod tests {
             seed: None,
         };
 
-        let actual = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(&v);
 
-        assert_eq!(actual.len(), 1);
-        assert!(actual.contains(&0))
+        assert_eq!(nb_select, 1);
+        assert!(actual[0])
     }
 
     #[test]
@@ -201,10 +204,10 @@ mod tests {
             seed: None,
         };
 
-        let actual = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(&v);
 
-        assert_eq!(actual.len(), 1);
-        assert!(actual.contains(&0))
+        assert_eq!(nb_select, 1);
+        assert!(actual[0])
     }
 
     #[test]
@@ -215,11 +218,12 @@ mod tests {
             seed: Some(1),
         };
 
-        let actual = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(&v);
 
-        assert_eq!(actual.len(), 2);
-        assert!(actual.contains(&1));
-        assert!(actual.contains(&2))
+        assert_eq!(nb_select, 2);
+        assert!(!actual[0]);
+        assert!(actual[1]);
+        assert!(actual[2]);
     }
 
     #[test]
@@ -230,8 +234,8 @@ mod tests {
             seed: None,
         };
 
-        let actual = sampler.indices(&v);
-        let expected: HashSet<u32> = [0, 1, 2].iter().cloned().collect();
+        let (actual, _) = sampler.indices(&v);
+        let expected = vec![true; 3];
 
         assert_eq!(actual, expected);
     }
@@ -244,8 +248,8 @@ mod tests {
             seed: None,
         };
 
-        let actual = sampler.indices(&v);
-        let expected: HashSet<u32> = [0, 1, 2].iter().cloned().collect();
+        let (actual, _) = sampler.indices(&v);
+        let expected = vec![true; 3];
 
         assert_eq!(actual, expected);
     }
@@ -258,10 +262,12 @@ mod tests {
             seed: Some(1),
         };
 
-        let actual = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(&v);
         println!("{:?}", actual);
 
-        assert_eq!(actual.len(), 1);
-        assert!(actual.contains(&2))
+        assert_eq!(nb_select, 1);
+        assert!(!actual[0]);
+        assert!(!actual[1]);
+        assert!(actual[2]);
     }
 }
