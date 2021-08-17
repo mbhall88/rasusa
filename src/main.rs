@@ -112,16 +112,16 @@ fn main() -> Result<()> {
         seed: args.seed,
     };
 
-    let reads_to_keep = subsampler.indices(&read_lengths);
+    let (reads_to_keep, nb_reads_keep) = subsampler.indices(&read_lengths);
     if is_illumina {
-        info!("Keeping {} reads from each input", reads_to_keep.len());
+        info!("Keeping {} reads from each input", nb_reads_keep);
     } else {
-        info!("Keeping {} reads", reads_to_keep.len());
+        info!("Keeping {} reads", nb_reads_keep);
     }
     debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
     let mut total_kept_bases =
-        input_fastx.filter_reads_into(reads_to_keep.clone(), &mut output_handle)? as u64;
+        input_fastx.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut output_handle)? as u64;
 
     // repeat the same process for the second input fastx (if illumina)
     if is_illumina {
@@ -131,8 +131,11 @@ fn main() -> Result<()> {
             .create()
             .context("unable to create the second output file")?;
 
-        total_kept_bases +=
-            second_input_fastx.filter_reads_into(reads_to_keep, &mut second_output_handle)? as u64;
+        total_kept_bases += second_input_fastx.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_keep,
+            &mut second_output_handle,
+        )? as u64;
     }
 
     let actual_covg = total_kept_bases / args.genome_size;

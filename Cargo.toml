@@ -35,17 +35,8 @@ tempfile = "3.1.0"
 
 # bench dependencie
 criterion  = "0.3"
-#rand       = { version = "0.8", features = ["small_rng"] }
 rustc-hash = "1"
 bitvec     = "0.22"
-
-[profile.release]
-debug = true # uncomment for profiling
-lto = 'thin'
-opt-level = 3
-overflow-checks = false
-panic = 'abort'
-incremental = false
 
 [[bench]]
 name = "indice_storage"

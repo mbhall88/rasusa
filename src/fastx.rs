@@ -1,6 +1,5 @@
 use needletail::errors::ParseErrorKind::EmptyFile;
 use needletail::parse_fastx_file;
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -135,12 +134,12 @@ impl Fastx {
     /// let mut input = tempfile::Builder::new().suffix(".fastq").tempfile().unwrap();
     /// input.write_all(text.as_bytes()).unwrap();
     /// let fastx = Fastx::from_path(input.path()).unwrap();
-    /// let mut reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
+    /// let mut reads_to_keep: Vec<bool> = vec![false, true]);
     /// let output = Builder::new().suffix(".fastq").tempfile().unwrap();
     /// let output_fastx = Fastx::from_path(output.path()).unwrap();
     /// {
     ///     let mut out_fh = output_fastx.create().unwrap();
-    ///     let filter_result = fastx.filter_reads_into(&mut reads_to_keep, &mut out_fh);
+    ///     let filter_result = fastx.filter_reads_into(&mut reads_to_keep, 1, &mut out_fh);
     ///     assert!(filter_result.is_ok());
     /// }
     /// let actual = std::fs::read_to_string(output).unwrap();
@@ -149,36 +148,34 @@ impl Fastx {
     /// ```
     pub fn filter_reads_into<T: Write>(
         &self,
-        mut reads_to_keep: HashSet<u32>,
+        reads_to_keep: &[bool],
+        nb_reads_keep: usize,
         write_to: &mut T,
     ) -> Result<usize, FastxError> {
         let mut total_len = 0;
         let mut reader =
             parse_fastx_file(&self.path).map_err(|source| FastxError::ReadError { source })?;
-        let mut read_idx: u32 = 0;
-        while let Some(record) = reader.next() {
-            let keep_this_read = reads_to_keep.contains(&read_idx);
-            read_idx += 1; // increment here so we don't need to do it twice below
+        let mut read_idx: usize = 0;
+        let mut nb_reads_write = 0;
 
+        while let Some(record) = reader.next() {
             match record {
                 Err(source) => return Err(FastxError::ParseError { source }),
-                Ok(rec) if keep_this_read => {
+                Ok(rec) if reads_to_keep[read_idx] => {
                     total_len += rec.num_bases();
                     rec.write(write_to, None)
                         .map_err(|err| FastxError::WriteError {
                             source: anyhow::Error::from(err),
-                        })?
+                        })?;
+                    nb_reads_write += 1;
                 }
-                Ok(_) => continue,
+                Ok(_) => (),
             }
 
-            reads_to_keep.remove(&(read_idx - 1)); // remember we already incremented the index
-
-            if reads_to_keep.is_empty() {
-                return Ok(total_len);
-            }
+            read_idx += 1;
         }
-        if reads_to_keep.is_empty() {
+
+        if nb_reads_write == nb_reads_keep {
             Ok(total_len)
         } else {
             Err(FastxError::IndicesNotFound)
@@ -190,9 +187,7 @@ impl Fastx {
 mod tests {
     use super::*;
     use std::any::Any;
-    use std::collections::HashSet;
     use std::io::{Read, Write};
-    use std::iter::FromIterator;
     use std::path::Path;
     use tempfile::Builder;
 
@@ -288,11 +283,11 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![]);
+        let reads_to_keep: Vec<bool> = vec![false];
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         let mut out_fh = output_fastx.create().unwrap();
-        let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+        let filter_result = fastx.filter_reads_into(&reads_to_keep, 0, &mut out_fh);
 
         assert!(filter_result.is_ok());
 
@@ -309,12 +304,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
+        let reads_to_keep: Vec<bool> = vec![true];
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -330,12 +325,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0]);
+        let reads_to_keep: Vec<bool> = vec![true];
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -351,12 +346,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![1]);
+        let reads_to_keep: Vec<bool> = vec![false, true];
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -372,12 +367,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let reads_to_keep: Vec<bool> = vec![true, false, true];
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh);
             assert!(filter_result.is_ok());
         }
 
@@ -393,12 +388,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fa").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let reads_to_keep: Vec<bool> = vec![true, false, true];
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh);
             assert!(filter_result.is_err());
         }
 
@@ -414,12 +409,12 @@ mod tests {
         let mut input = Builder::new().suffix(".fq").tempfile().unwrap();
         input.write_all(text.as_bytes()).unwrap();
         let fastx = Fastx::from_path(input.path());
-        let reads_to_keep: HashSet<u32> = HashSet::from_iter(vec![0, 2]);
+        let reads_to_keep: Vec<bool> = vec![true, false, true];
         let output = Builder::new().suffix(".fq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create().unwrap();
-            let filter_result = fastx.filter_reads_into(reads_to_keep, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh);
             assert!(filter_result.is_err());
         }
 
