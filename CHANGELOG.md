@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Use a `Vec<bool>` instead of `HashSet` to store the indices of reads to keep. This
+  gives a nice little speedup (see [#28][28]), A big thank you to
+  [@natir](https://github.com/natir) for this.
+
 ## [0.4.2]
 
 ### Fixed
@@ -64,5 +69,6 @@ been 1000, whereas now, it would be 1070.
 [0.2.0]: https://github.com/mbhall88/rasusa/releases/tag/0.2.0
 [19]: https://github.com/mbhall88/rasusa/issues/19
 [22]: https://github.com/mbhall88/rasusa/issues/22
+[28]: https://github.com/mbhall88/rasusa/pull/28
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/
