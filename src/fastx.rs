@@ -156,7 +156,7 @@ impl Fastx {
         let mut reader =
             parse_fastx_file(&self.path).map_err(|source| FastxError::ReadError { source })?;
         let mut read_idx: usize = 0;
-        let mut nb_reads_write = 0;
+        let mut nb_reads_written = 0;
 
         while let Some(record) = reader.next() {
             match record {
@@ -167,7 +167,10 @@ impl Fastx {
                         .map_err(|err| FastxError::WriteError {
                             source: anyhow::Error::from(err),
                         })?;
-                    nb_reads_write += 1;
+                    nb_reads_written += 1;
+                    if nb_reads_keep == nb_reads_written {
+                        break;
+                    }
                 }
                 Ok(_) => (),
             }
@@ -175,7 +178,7 @@ impl Fastx {
             read_idx += 1;
         }
 
-        if nb_reads_write == nb_reads_keep {
+        if nb_reads_written == nb_reads_keep {
             Ok(total_len)
         } else {
             Err(FastxError::IndicesNotFound)
