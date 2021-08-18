@@ -32,12 +32,3 @@ chrono = "0.4"
 assert_cmd = "0.10"
 predicates = "1"
 tempfile = "3.1.0"
-
-# bench dependencie
-criterion  = "0.3"
-rustc-hash = "1"
-bitvec     = "0.22"
-
-[[bench]]
-name = "indice_storage"
-harness = false
