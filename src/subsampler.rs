@@ -69,18 +69,18 @@ impl SubSampler {
         let mut to_keep: Vec<bool> = vec![false; lengths.len()];
         let mut total_bases_kept: u64 = 0;
 
-        let mut nb_reads_keep = 0;
+        let mut nb_reads_to_keep = 0;
         while total_bases_kept < self.target_total_bases {
             let idx = match indices.next() {
-                Some(i) => i,
+                Some(i) => i as usize,
                 None => break,
             };
-            to_keep[idx as usize] = true;
-            total_bases_kept += u64::from(lengths[idx.to_owned() as usize]);
-            nb_reads_keep += 1;
+            to_keep[idx] = true;
+            total_bases_kept += u64::from(lengths[idx.to_owned()]);
+            nb_reads_to_keep += 1;
         }
 
-        (to_keep, nb_reads_keep)
+        (to_keep, nb_reads_to_keep)
     }
 }
 
