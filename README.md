@@ -429,13 +429,13 @@ hyperfine --warmup 5 --runs 20 --export-markdown results-paired.md \
 
 #### Results
 
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
-| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;` | 699.8 ± 11.1 | 686.0 | 718.5 | 1.40 ± 0.12 |
-| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 748.2 ± 48.0 | 712.9 | 927.2 | 1.49 ± 0.16 |
-| `rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq` | 501.6 ± 42.3 | 448.9 | 574.2 | 1.00 |
+| Command                                                                                           |    Mean [ms] | Min [ms] | Max [ms] |    Relative |
+|:--------------------------------------------------------------------------------------------------|-------------:|---------:|---------:|------------:|
+| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;`       | 693.8 ± 17.4 |    678.8 |    780.5 | 1.21 ± 0.19 |
+| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 739.5 ± 28.4 |    695.6 |    811.8 | 1.29 ± 0.20 |
+| `./rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq`                       | 574.7 ± 88.1 |    432.3 |    784.4 |        1.00 |
 
-**Summary**: `rasusa` ran 1.40 times faster than `seqtk` (1-pass) and 1.49 times faster
+**Summary**: `rasusa` ran 1.21 times faster than `seqtk` (1-pass) and 1.29 times faster
 than `seqtk` (2-pass)
 
 So, `rasusa` is faster than `seqtk` but doesn't require a fixed number of reads -
