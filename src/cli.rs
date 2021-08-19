@@ -10,8 +10,10 @@ use thiserror::Error;
 #[derive(Debug, StructOpt)]
 #[structopt()]
 pub struct Cli {
-    /// The fast{a,q} file(s) to subsample. For paired Illumina you may either pass this flag twice
-    /// `-i r1.fq -i r2.fq` or give two files consecutively `-i r1.fq r2.fq`.
+    /// The fast{a,q} file(s) to subsample.
+    ///
+    /// For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
+    /// files consecutively `-i r1.fq r2.fq`.
     #[structopt(
         short = "i",
         long = "input",
@@ -21,28 +23,41 @@ pub struct Cli {
     )]
     pub input: Vec<PathBuf>,
 
-    /// Output file(s), stdout if not present. For paired Illumina you may either pass this flag twice
-    /// `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the
-    /// pairs is assumed to be the same as that given for --input. This option is required for paired
-    /// input.
+    /// Output filepath(s); stdout if not present.
+    ///
+    /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
+    /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
+    /// same as that given for --input. This option is required for paired input.
     #[structopt(short = "o", long = "output", parse(from_os_str), multiple = true)]
     pub output: Vec<PathBuf>,
 
-    /// Size of the genome to calculate coverage with respect to. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
+    /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
     #[structopt(short = "g", long = "genome-size")]
     pub genome_size: GenomeSize,
 
     /// The desired coverage to sub-sample the reads to.
-    #[structopt(short = "c", long = "coverage")]
+    #[structopt(short = "c", long = "coverage", value_name = "FLOAT")]
     pub coverage: Coverage,
 
     /// Random seed to use.
-    #[structopt(short = "s", long = "seed")]
+    #[structopt(short = "s", long = "seed", value_name = "INT")]
     pub seed: Option<u64>,
 
     /// Switch on verbosity.
     #[structopt(short)]
     pub verbose: bool,
+
+    /// u: uncompressed; b: Bgzip; g: Gzip; l: Lzma
+    ///
+    /// Rasusa will attempt to infer the output compression format automatically from the filename
+    /// extension. This option is used to override that. If writing to stdout, the default is
+    /// uncompressed
+    #[structopt(short = "O", long, value_name = "u|b|g|l")]
+    output_type: Option<CompressionFormat>,
+
+    /// Compression level to use if compressing output
+    #[structopt(short = "l", long, validator = in_compress_range, default_value="6", value_name = "1-9")]
+    compress_level: u8,
 }
 
 impl Cli {
@@ -91,6 +106,10 @@ pub enum CliError {
     /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
     #[error("{0} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character")]
     InvalidCoverageValue(String),
+
+    /// Indicates that a string cannot be parsed into a [`CompressionFormat`](#compressionformat).
+    #[error("{0} is not a valid output format")]
+    InvalidCompression(String),
 
     /// Indicates a bad combination of input and output files was passed.
     #[error("Bad combination of input and output files: {0}")]
@@ -317,6 +336,30 @@ impl Mul<GenomeSize> for Coverage {
     }
 }
 
+/// A wrapper around niffler's compression format so I can add some convenience methods
+#[derive(Debug, PartialEq, Copy, Clone)]
+enum CompressionFormat {
+    Uncompressed(niffler::compression::Format),
+    Gzip(niffler::compression::Format),
+    Bgzip(niffler::compression::Format),
+    Lzma(niffler::compression::Format),
+}
+
+impl FromStr for CompressionFormat {
+    type Err = CliError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let fmt = match s {
+            "b" | "B" => Self::Bgzip(niffler::Format::Bzip),
+            "g" | "G" => Self::Gzip(niffler::Format::Gzip),
+            "l" | "L" => Self::Lzma(niffler::Format::Lzma),
+            "u" | "U" => Self::Uncompressed(niffler::Format::No),
+            _ => return Err(CliError::InvalidCompression(s.to_string())),
+        };
+        Ok(fmt)
+    }
+}
+
 /// A utility function that allows the CLI to error if a path doesn't exist
 fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsString> {
     let path = PathBuf::from(s);
@@ -324,6 +367,14 @@ fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsStrin
         Ok(path)
     } else {
         Err(OsString::from(format!("{:?} does not exist", path)))
+    }
+}
+
+/// A utility function to validate compression level is in allowed range
+fn in_compress_range(s: String) -> Result<(), String> {
+    match s.parse::<u8>() {
+        Ok(1..=9) => Ok(()),
+        _ => Err(format!("Compression level {} not in the range 1-9", s)),
     }
 }
 
@@ -861,5 +912,49 @@ mod tests {
 
         let diff = (actual.abs() - expected).abs();
         assert!(diff < f64::EPSILON)
+    }
+
+    #[test]
+    fn compression_format_from_str() {
+        let mut s = "B";
+        assert_eq!(
+            CompressionFormat::from_str(s).unwrap(),
+            CompressionFormat::Bgzip(niffler::Format::Bzip)
+        );
+
+        s = "g";
+        assert_eq!(
+            CompressionFormat::from_str(s).unwrap(),
+            CompressionFormat::Gzip(niffler::Format::Gzip)
+        );
+
+        s = "l";
+        assert_eq!(
+            CompressionFormat::from_str(s).unwrap(),
+            CompressionFormat::Lzma(niffler::Format::Lzma)
+        );
+
+        s = "U";
+        assert_eq!(
+            CompressionFormat::from_str(s).unwrap(),
+            CompressionFormat::Uncompressed(niffler::Format::No)
+        );
+
+        s = "a";
+        assert_eq!(
+            CompressionFormat::from_str(s).unwrap_err(),
+            CliError::InvalidCompression(s.to_string())
+        );
+    }
+
+    #[test]
+    fn test_in_compress_range() {
+        assert!(in_compress_range("1".to_string()).is_ok());
+        assert!(in_compress_range("9".to_string()).is_ok());
+        assert!(in_compress_range("0".to_string()).is_err());
+        assert!(in_compress_range("10".to_string()).is_err());
+        assert!(in_compress_range("f".to_string()).is_err());
+        assert!(in_compress_range("5.5".to_string()).is_err());
+        assert!(in_compress_range("-3".to_string()).is_err());
     }
 }
