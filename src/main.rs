@@ -63,7 +63,10 @@ fn main() -> Result<()> {
     let input_fastx = Fastx::from_path(&args.input[0]);
 
     let mut output_handle = match args.output.len() {
-        0 => Box::new(stdout()),
+        0 => match args.output_type {
+            None => Box::new(stdout()),
+            Some(fmt) => niffler::basic::get_writer(Box::new(stdout()), fmt, compress_level)?,
+        },
         _ => {
             let out_fastx = Fastx::from_path(&args.output[0]);
             out_fastx

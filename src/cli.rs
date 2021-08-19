@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::ffi::{OsStr, OsString};
 use std::ops::{Div, Mul};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use structopt::StructOpt;
 use thiserror::Error;
@@ -47,17 +47,17 @@ pub struct Cli {
     #[structopt(short)]
     pub verbose: bool,
 
-    /// u: uncompressed; b: Bgzip; g: Gzip; l: Lzma
+    /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma
     ///
     /// Rasusa will attempt to infer the output compression format automatically from the filename
     /// extension. This option is used to override that. If writing to stdout, the default is
     /// uncompressed
     #[structopt(short = "O", long, value_name = "u|b|g|l")]
-    output_type: Option<CompressionFormat>,
+    pub output_type: Option<CompressionFormat>,
 
     /// Compression level to use if compressing output
     #[structopt(short = "l", long, validator = in_compress_range, default_value="6", value_name = "1-9")]
-    compress_level: u8,
+    pub compress_level: u8,
 }
 
 impl Cli {
@@ -338,11 +338,25 @@ impl Mul<GenomeSize> for Coverage {
 
 /// A wrapper around niffler's compression format so I can add some convenience methods
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum CompressionFormat {
+pub(crate) enum CompressionFormat {
     Uncompressed(niffler::compression::Format),
     Gzip(niffler::compression::Format),
-    Bgzip(niffler::compression::Format),
+    Bzip(niffler::compression::Format),
     Lzma(niffler::compression::Format),
+}
+
+impl CompressionFormat {
+    /// Attempts to infer the compression type from the file extension. If the extension is not
+    /// known, then Uncompressed is returned.
+    fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self {
+        let path = Path::new(p);
+        match path.extension().map(|s| s.to_str()) {
+            Some(Some("gz")) => Self::Gzip(niffler::Format::Gzip),
+            Some(Some("bz") | Some("bz2")) => Self::Bzip(niffler::Format::Bzip),
+            Some(Some("lzma")) => Self::Lzma(niffler::Format::Lzma),
+            _ => Self::Uncompressed(niffler::Format::No),
+        }
+    }
 }
 
 impl FromStr for CompressionFormat {
@@ -350,7 +364,7 @@ impl FromStr for CompressionFormat {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let fmt = match s {
-            "b" | "B" => Self::Bgzip(niffler::Format::Bzip),
+            "b" | "B" => Self::Bzip(niffler::Format::Bzip),
             "g" | "G" => Self::Gzip(niffler::Format::Gzip),
             "l" | "L" => Self::Lzma(niffler::Format::Lzma),
             "u" | "U" => Self::Uncompressed(niffler::Format::No),
@@ -919,7 +933,7 @@ mod tests {
         let mut s = "B";
         assert_eq!(
             CompressionFormat::from_str(s).unwrap(),
-            CompressionFormat::Bgzip(niffler::Format::Bzip)
+            CompressionFormat::Bzip(niffler::Format::Bzip)
         );
 
         s = "g";
@@ -956,5 +970,37 @@ mod tests {
         assert!(in_compress_range("f".to_string()).is_err());
         assert!(in_compress_range("5.5".to_string()).is_err());
         assert!(in_compress_range("-3".to_string()).is_err());
+    }
+
+    #[test]
+    fn compression_format_from_path() {
+        assert_eq!(
+            CompressionFormat::from_path("foo.gz"),
+            CompressionFormat::Gzip(niffler::Format::Gzip)
+        );
+        assert_eq!(
+            CompressionFormat::from_path(Path::new("foo.gz")),
+            CompressionFormat::Gzip(niffler::Format::Gzip)
+        );
+        assert_eq!(
+            CompressionFormat::from_path("baz"),
+            CompressionFormat::Uncompressed(niffler::Format::No)
+        );
+        assert_eq!(
+            CompressionFormat::from_path("baz.fq"),
+            CompressionFormat::Uncompressed(niffler::Format::No)
+        );
+        assert_eq!(
+            CompressionFormat::from_path("baz.fq.bz2"),
+            CompressionFormat::Bzip(niffler::Format::Bzip)
+        );
+        assert_eq!(
+            CompressionFormat::from_path("baz.fq.bz"),
+            CompressionFormat::Bzip(niffler::Format::Bzip)
+        );
+        assert_eq!(
+            CompressionFormat::from_path("baz.fq.lzma"),
+            CompressionFormat::Lzma(niffler::Format::Lzma)
+        );
     }
 }

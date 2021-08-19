@@ -1,3 +1,4 @@
+use crate::cli::CompressionFormat;
 use needletail::errors::ParseErrorKind::EmptyFile;
 use needletail::parse_fastx_file;
 use std::fs::File;
@@ -27,6 +28,10 @@ pub enum FastxError {
     /// Indicates that the specified output file could not be created.
     #[error("Output file could not be created")]
     CreateError { source: std::io::Error },
+
+    /// Indicates and error trying to create the compressor
+    #[error(transparent)]
+    CompressOutputError(#[from] niffler::Error),
 
     /// Indicates that some indices we expected to find in the input file weren't found.
     #[error("Some expected indices were not in the input file")]
@@ -70,15 +75,19 @@ impl Fastx {
     /// let path = std::path::Path::new("output.fa");
     /// let fastx = Fastx{ path };
     /// { // this scoping means the file handle is closed afterwards.
-    ///     let file_handle = fastx.create()?;
+    ///     let file_handle = fastx.create(6, None)?;
     ///     write!(file_handle, ">read1\nACGT\n")?
     /// }
     /// ```
-    pub fn create(&self) -> Result<Box<dyn Write>, FastxError> {
+    pub fn create(
+        &self,
+        compression_lvl: niffler::compression::Level,
+        compression_fmt: CompressionFormat,
+    ) -> Result<Box<dyn Write>, FastxError> {
         let file = File::create(&self.path).map_err(|source| FastxError::CreateError { source })?;
-        let file_handle = BufWriter::new(file);
-
-        Ok(Box::new(file_handle))
+        let file_handle = Box::new(BufWriter::new(file));
+        niffler::get_writer(file_handle, compression_fmt.0, compression_lvl)
+            .map_err(FastxError::CompressOutputError)
     }
 
     /// Returns a vector containing the lengths of all the reads in the file.
