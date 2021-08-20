@@ -9,7 +9,6 @@
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
 [TOC]: #
-
 ## Table of Contents
 - [Motivation](#motivation)
 - [Install](#install)
@@ -75,7 +74,7 @@ number of options available.
 
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
 
-Prerequisite: [`rust` toolchain][rust] (min. v1.43.0)
+Prerequisite: [`rust` toolchain][rust] (min. v1.51.0)
 
 ```sh
 cargo install rasusa
