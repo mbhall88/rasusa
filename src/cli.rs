@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::ffi::{OsStr, OsString};
 use std::ops::{Div, Mul};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use structopt::StructOpt;
 use thiserror::Error;
@@ -10,8 +10,10 @@ use thiserror::Error;
 #[derive(Debug, StructOpt)]
 #[structopt()]
 pub struct Cli {
-    /// The fast{a,q} file(s) to subsample. For paired Illumina you may either pass this flag twice
-    /// `-i r1.fq -i r2.fq` or give two files consecutively `-i r1.fq r2.fq`.
+    /// The fast{a,q} file(s) to subsample.
+    ///
+    /// For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
+    /// files consecutively `-i r1.fq r2.fq`.
     #[structopt(
         short = "i",
         long = "input",
@@ -21,28 +23,41 @@ pub struct Cli {
     )]
     pub input: Vec<PathBuf>,
 
-    /// Output file(s), stdout if not present. For paired Illumina you may either pass this flag twice
-    /// `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the
-    /// pairs is assumed to be the same as that given for --input. This option is required for paired
-    /// input.
+    /// Output filepath(s); stdout if not present.
+    ///
+    /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
+    /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
+    /// same as that given for --input. This option is required for paired input.
     #[structopt(short = "o", long = "output", parse(from_os_str), multiple = true)]
     pub output: Vec<PathBuf>,
 
-    /// Size of the genome to calculate coverage with respect to. i.e 4.3kb, 7Tb, 9000, 4.1MB etc.
+    /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
     #[structopt(short = "g", long = "genome-size")]
     pub genome_size: GenomeSize,
 
     /// The desired coverage to sub-sample the reads to.
-    #[structopt(short = "c", long = "coverage")]
+    #[structopt(short = "c", long = "coverage", value_name = "FLOAT")]
     pub coverage: Coverage,
 
     /// Random seed to use.
-    #[structopt(short = "s", long = "seed")]
+    #[structopt(short = "s", long = "seed", value_name = "INT")]
     pub seed: Option<u64>,
 
     /// Switch on verbosity.
     #[structopt(short)]
     pub verbose: bool,
+
+    /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma
+    ///
+    /// Rasusa will attempt to infer the output compression format automatically from the filename
+    /// extension. This option is used to override that. If writing to stdout, the default is
+    /// uncompressed
+    #[structopt(short = "O", long, value_name = "u|b|g|l", parse(try_from_str = parse_compression_format), possible_values = &["u", "b", "g", "l"], case_insensitive=true, hide_possible_values = true)]
+    pub output_type: Option<niffler::compression::Format>,
+
+    /// Compression level to use if compressing output
+    #[structopt(short = "l", long, parse(try_from_str = parse_level), default_value="6", value_name = "1-9")]
+    pub compress_level: niffler::Level,
 }
 
 impl Cli {
@@ -91,6 +106,10 @@ pub enum CliError {
     /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
     #[error("{0} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character")]
     InvalidCoverageValue(String),
+
+    /// Indicates that a string cannot be parsed into a [`CompressionFormat`](#compressionformat).
+    #[error("{0} is not a valid output format")]
+    InvalidCompression(String),
 
     /// Indicates a bad combination of input and output files was passed.
     #[error("Bad combination of input and output files: {0}")]
@@ -317,6 +336,33 @@ impl Mul<GenomeSize> for Coverage {
     }
 }
 
+pub trait CompressionExt {
+    fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self;
+}
+
+impl CompressionExt for niffler::compression::Format {
+    /// Attempts to infer the compression type from the file extension. If the extension is not
+    /// known, then Uncompressed is returned.
+    fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self {
+        let path = Path::new(p);
+        match path.extension().map(|s| s.to_str()) {
+            Some(Some("gz")) => Self::Gzip,
+            Some(Some("bz") | Some("bz2")) => Self::Bzip,
+            Some(Some("lzma")) => Self::Lzma,
+            _ => Self::No,
+        }
+    }
+}
+
+fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, CliError> {
+    match s {
+        "b" | "B" => Ok(niffler::Format::Bzip),
+        "g" | "G" => Ok(niffler::Format::Gzip),
+        "l" | "L" => Ok(niffler::Format::Lzma),
+        "u" | "U" => Ok(niffler::Format::No),
+        _ => Err(CliError::InvalidCompression(s.to_string())),
+    }
+}
 /// A utility function that allows the CLI to error if a path doesn't exist
 fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsString> {
     let path = PathBuf::from(s);
@@ -325,6 +371,24 @@ fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsStrin
     } else {
         Err(OsString::from(format!("{:?} does not exist", path)))
     }
+}
+
+/// A utility function to validate compression level is in allowed range
+#[allow(clippy::redundant_clone)]
+fn parse_level(s: &str) -> Result<niffler::Level, String> {
+    let lvl = match s.parse::<u8>() {
+        Ok(1) => niffler::Level::One,
+        Ok(2) => niffler::Level::Two,
+        Ok(3) => niffler::Level::Three,
+        Ok(4) => niffler::Level::Four,
+        Ok(5) => niffler::Level::Five,
+        Ok(6) => niffler::Level::Six,
+        Ok(7) => niffler::Level::Seven,
+        Ok(8) => niffler::Level::Eight,
+        Ok(9) => niffler::Level::Nine,
+        _ => return Err(format!("Compression level {} not in the range 1-9", s)),
+    };
+    Ok(lvl)
 }
 
 #[cfg(test)]
@@ -861,5 +925,60 @@ mod tests {
 
         let diff = (actual.abs() - expected).abs();
         assert!(diff < f64::EPSILON)
+    }
+
+    #[test]
+    fn compression_format_from_str() {
+        let mut s = "B";
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::Bzip);
+
+        s = "g";
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::Gzip);
+
+        s = "l";
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::Lzma);
+
+        s = "U";
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::No);
+
+        s = "a";
+        assert_eq!(
+            parse_compression_format(s).unwrap_err(),
+            CliError::InvalidCompression(s.to_string())
+        );
+    }
+
+    #[test]
+    fn test_in_compress_range() {
+        assert!(parse_level("1").is_ok());
+        assert!(parse_level("9").is_ok());
+        assert!(parse_level("0").is_err());
+        assert!(parse_level("10").is_err());
+        assert!(parse_level("f").is_err());
+        assert!(parse_level("5.5").is_err());
+        assert!(parse_level("-3").is_err());
+    }
+
+    #[test]
+    fn compression_format_from_path() {
+        assert_eq!(niffler::Format::from_path("foo.gz"), niffler::Format::Gzip);
+        assert_eq!(
+            niffler::Format::from_path(Path::new("foo.gz")),
+            niffler::Format::Gzip
+        );
+        assert_eq!(niffler::Format::from_path("baz"), niffler::Format::No);
+        assert_eq!(niffler::Format::from_path("baz.fq"), niffler::Format::No);
+        assert_eq!(
+            niffler::Format::from_path("baz.fq.bz2"),
+            niffler::Format::Bzip
+        );
+        assert_eq!(
+            niffler::Format::from_path("baz.fq.bz"),
+            niffler::Format::Bzip
+        );
+        assert_eq!(
+            niffler::Format::from_path("baz.fq.lzma"),
+            niffler::Format::Lzma
+        );
     }
 }

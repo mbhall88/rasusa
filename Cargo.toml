@@ -16,7 +16,7 @@ license-file = "LICENSE"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-structopt = "0.3.2"
+structopt = "0.3"
 clap = "2.33.0"
 regex = "1"
 thiserror = "1.0"
@@ -27,6 +27,7 @@ rand_pcg = "0.2.1"
 log = "0.4"
 fern = { version = "0.5", features = ["colored"] }
 chrono = "0.4"
+niffler = "2.3"
 
 [dev-dependencies]
 assert_cmd = "0.10"
