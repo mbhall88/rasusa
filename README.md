@@ -74,7 +74,7 @@ number of options available.
 
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
 
-Prerequisite: [`rust` toolchain][rust] (min. v1.51.0)
+Prerequisite: [`rust` toolchain][rust] (min. v1.53.0)
 
 ```sh
 cargo install rasusa
