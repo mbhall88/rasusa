@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### Added
 
 - Support for LZMA, Bzip, and Gzip output compression (thanks to
@@ -80,11 +82,12 @@ be 1070.
 [0.4.0]: https://github.com/mbhall88/rasusa/releases/tag/0.4.0
 [0.4.1]: https://github.com/mbhall88/rasusa/releases/tag/0.4.1
 [0.4.2]: https://github.com/mbhall88/rasusa/releases/tag/0.4.2
+[0.5.0]: https://github.com/mbhall88/rasusa/releases/tag/0.5.0
 [19]: https://github.com/mbhall88/rasusa/issues/19
 [22]: https://github.com/mbhall88/rasusa/issues/22
 [27]: https://github.com/mbhall88/rasusa/issues/27
 [28]: https://github.com/mbhall88/rasusa/pull/28
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/
-[unreleased]: https://github.com/mbhall88/rasusa/compare/0.4.2...HEAD
+[unreleased]: https://github.com/mbhall88/rasusa/compare/0.5.0...HEAD
 
