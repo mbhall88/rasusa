@@ -1,3 +1,4 @@
+#![allow(clippy::redundant_clone)] // due to a structopt problem
 use std::io::stdout;
 
 use anyhow::{Context, Result};
@@ -50,27 +51,26 @@ fn setup_logger(verbose: bool) -> Result<(), fern::InitError> {
 
 fn main() -> Result<()> {
     let args: Cli = Cli::from_args();
+    setup_logger(args.verbose).context("Failed to setup the logger")?;
+    debug!("{:?}", args);
+
     args.validate_input_output_combination()?;
     let is_illumina = args.input.len() == 2;
     if is_illumina {
         info!("Two input files given. Assuming paired Illumina...")
     }
 
-    setup_logger(args.verbose).context("Failed to setup the logger")?;
-
-    debug!("{:?}", args);
-
     let input_fastx = Fastx::from_path(&args.input[0]);
 
     let mut output_handle = match args.output.len() {
         0 => match args.output_type {
             None => Box::new(stdout()),
-            Some(fmt) => niffler::basic::get_writer(Box::new(stdout()), fmt, compress_level)?,
+            Some(fmt) => niffler::basic::get_writer(Box::new(stdout()), fmt, args.compress_level)?,
         },
         _ => {
             let out_fastx = Fastx::from_path(&args.output[0]);
             out_fastx
-                .create()
+                .create(args.compress_level, args.output_type)
                 .context("unable to create the first output file")?
         }
     };
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
         let second_input_fastx = Fastx::from_path(&args.input[1]);
         let second_out_fastx = Fastx::from_path(&args.output[1]);
         let mut second_output_handle = second_out_fastx
-            .create()
+            .create(args.compress_level, args.output_type)
             .context("unable to create the second output file")?;
 
         total_kept_bases += second_input_fastx.filter_reads_into(

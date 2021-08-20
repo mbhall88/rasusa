@@ -52,12 +52,12 @@ pub struct Cli {
     /// Rasusa will attempt to infer the output compression format automatically from the filename
     /// extension. This option is used to override that. If writing to stdout, the default is
     /// uncompressed
-    #[structopt(short = "O", long, value_name = "u|b|g|l")]
-    pub output_type: Option<CompressionFormat>,
+    #[structopt(short = "O", long, value_name = "u|b|g|l", parse(try_from_str = parse_compression_format), possible_values = &["u", "b", "g", "l"], case_insensitive=true, hide_possible_values = true)]
+    pub output_type: Option<niffler::compression::Format>,
 
     /// Compression level to use if compressing output
-    #[structopt(short = "l", long, validator = in_compress_range, default_value="6", value_name = "1-9")]
-    pub compress_level: u8,
+    #[structopt(short = "l", long, parse(try_from_str = parse_level), default_value="6", value_name = "1-9")]
+    pub compress_level: niffler::Level,
 }
 
 impl Cli {
@@ -336,44 +336,33 @@ impl Mul<GenomeSize> for Coverage {
     }
 }
 
-/// A wrapper around niffler's compression format so I can add some convenience methods
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub(crate) enum CompressionFormat {
-    Uncompressed(niffler::compression::Format),
-    Gzip(niffler::compression::Format),
-    Bzip(niffler::compression::Format),
-    Lzma(niffler::compression::Format),
+pub trait CompressionExt {
+    fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self;
 }
 
-impl CompressionFormat {
+impl CompressionExt for niffler::compression::Format {
     /// Attempts to infer the compression type from the file extension. If the extension is not
     /// known, then Uncompressed is returned.
     fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self {
         let path = Path::new(p);
         match path.extension().map(|s| s.to_str()) {
-            Some(Some("gz")) => Self::Gzip(niffler::Format::Gzip),
-            Some(Some("bz") | Some("bz2")) => Self::Bzip(niffler::Format::Bzip),
-            Some(Some("lzma")) => Self::Lzma(niffler::Format::Lzma),
-            _ => Self::Uncompressed(niffler::Format::No),
+            Some(Some("gz")) => Self::Gzip,
+            Some(Some("bz") | Some("bz2")) => Self::Bzip,
+            Some(Some("lzma")) => Self::Lzma,
+            _ => Self::No,
         }
     }
 }
 
-impl FromStr for CompressionFormat {
-    type Err = CliError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let fmt = match s {
-            "b" | "B" => Self::Bzip(niffler::Format::Bzip),
-            "g" | "G" => Self::Gzip(niffler::Format::Gzip),
-            "l" | "L" => Self::Lzma(niffler::Format::Lzma),
-            "u" | "U" => Self::Uncompressed(niffler::Format::No),
-            _ => return Err(CliError::InvalidCompression(s.to_string())),
-        };
-        Ok(fmt)
+fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, CliError> {
+    match s {
+        "b" | "B" => Ok(niffler::Format::Bzip),
+        "g" | "G" => Ok(niffler::Format::Gzip),
+        "l" | "L" => Ok(niffler::Format::Lzma),
+        "u" | "U" => Ok(niffler::Format::No),
+        _ => Err(CliError::InvalidCompression(s.to_string())),
     }
 }
-
 /// A utility function that allows the CLI to error if a path doesn't exist
 fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsString> {
     let path = PathBuf::from(s);
@@ -385,11 +374,21 @@ fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsStrin
 }
 
 /// A utility function to validate compression level is in allowed range
-fn in_compress_range(s: String) -> Result<(), String> {
-    match s.parse::<u8>() {
-        Ok(1..=9) => Ok(()),
-        _ => Err(format!("Compression level {} not in the range 1-9", s)),
-    }
+#[allow(clippy::redundant_clone)]
+fn parse_level(s: &str) -> Result<niffler::Level, String> {
+    let lvl = match s.parse::<u8>() {
+        Ok(1) => niffler::Level::One,
+        Ok(2) => niffler::Level::Two,
+        Ok(3) => niffler::Level::Three,
+        Ok(4) => niffler::Level::Four,
+        Ok(5) => niffler::Level::Five,
+        Ok(6) => niffler::Level::Six,
+        Ok(7) => niffler::Level::Seven,
+        Ok(8) => niffler::Level::Eight,
+        Ok(9) => niffler::Level::Nine,
+        _ => return Err(format!("Compression level {} not in the range 1-9", s)),
+    };
+    Ok(lvl)
 }
 
 #[cfg(test)]
@@ -931,76 +930,55 @@ mod tests {
     #[test]
     fn compression_format_from_str() {
         let mut s = "B";
-        assert_eq!(
-            CompressionFormat::from_str(s).unwrap(),
-            CompressionFormat::Bzip(niffler::Format::Bzip)
-        );
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::Bzip);
 
         s = "g";
-        assert_eq!(
-            CompressionFormat::from_str(s).unwrap(),
-            CompressionFormat::Gzip(niffler::Format::Gzip)
-        );
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::Gzip);
 
         s = "l";
-        assert_eq!(
-            CompressionFormat::from_str(s).unwrap(),
-            CompressionFormat::Lzma(niffler::Format::Lzma)
-        );
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::Lzma);
 
         s = "U";
-        assert_eq!(
-            CompressionFormat::from_str(s).unwrap(),
-            CompressionFormat::Uncompressed(niffler::Format::No)
-        );
+        assert_eq!(parse_compression_format(s).unwrap(), niffler::Format::No);
 
         s = "a";
         assert_eq!(
-            CompressionFormat::from_str(s).unwrap_err(),
+            parse_compression_format(s).unwrap_err(),
             CliError::InvalidCompression(s.to_string())
         );
     }
 
     #[test]
     fn test_in_compress_range() {
-        assert!(in_compress_range("1".to_string()).is_ok());
-        assert!(in_compress_range("9".to_string()).is_ok());
-        assert!(in_compress_range("0".to_string()).is_err());
-        assert!(in_compress_range("10".to_string()).is_err());
-        assert!(in_compress_range("f".to_string()).is_err());
-        assert!(in_compress_range("5.5".to_string()).is_err());
-        assert!(in_compress_range("-3".to_string()).is_err());
+        assert!(parse_level("1").is_ok());
+        assert!(parse_level("9").is_ok());
+        assert!(parse_level("0").is_err());
+        assert!(parse_level("10").is_err());
+        assert!(parse_level("f").is_err());
+        assert!(parse_level("5.5").is_err());
+        assert!(parse_level("-3").is_err());
     }
 
     #[test]
     fn compression_format_from_path() {
+        assert_eq!(niffler::Format::from_path("foo.gz"), niffler::Format::Gzip);
         assert_eq!(
-            CompressionFormat::from_path("foo.gz"),
-            CompressionFormat::Gzip(niffler::Format::Gzip)
+            niffler::Format::from_path(Path::new("foo.gz")),
+            niffler::Format::Gzip
+        );
+        assert_eq!(niffler::Format::from_path("baz"), niffler::Format::No);
+        assert_eq!(niffler::Format::from_path("baz.fq"), niffler::Format::No);
+        assert_eq!(
+            niffler::Format::from_path("baz.fq.bz2"),
+            niffler::Format::Bzip
         );
         assert_eq!(
-            CompressionFormat::from_path(Path::new("foo.gz")),
-            CompressionFormat::Gzip(niffler::Format::Gzip)
+            niffler::Format::from_path("baz.fq.bz"),
+            niffler::Format::Bzip
         );
         assert_eq!(
-            CompressionFormat::from_path("baz"),
-            CompressionFormat::Uncompressed(niffler::Format::No)
-        );
-        assert_eq!(
-            CompressionFormat::from_path("baz.fq"),
-            CompressionFormat::Uncompressed(niffler::Format::No)
-        );
-        assert_eq!(
-            CompressionFormat::from_path("baz.fq.bz2"),
-            CompressionFormat::Bzip(niffler::Format::Bzip)
-        );
-        assert_eq!(
-            CompressionFormat::from_path("baz.fq.bz"),
-            CompressionFormat::Bzip(niffler::Format::Bzip)
-        );
-        assert_eq!(
-            CompressionFormat::from_path("baz.fq.lzma"),
-            CompressionFormat::Lzma(niffler::Format::Lzma)
+            niffler::Format::from_path("baz.fq.lzma"),
+            niffler::Format::Lzma
         );
     }
 }

@@ -4,3 +4,4 @@
 code_coverage_report.sh
 data
 benchmark
+.DS_Store
