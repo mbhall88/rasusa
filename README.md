@@ -233,14 +233,6 @@ Illumina paired files can be passed in two ways.
 
 > Bash wizard tip 🧙: Let globs do the work for you `-i r*.fq`
 
-_**Note**: The file format is (lazily) determined from the file name._ File suffixes
-that are deemed valid are:
-
-- fasta: `.fa`, `.fasta`, `.fa.gz`, `.fasta.gz`
-- fastq: `.fq`, `.fastq`, `.fq.gz`, `.fastq.gz`
-
-If there is a naming convention you feel is missing, please raise an issue.
-
 #### Coverage
 
 ##### `-c`, `--coverage`
