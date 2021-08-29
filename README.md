@@ -268,6 +268,11 @@ suffixes include:
 - Giga (g) - multiplies by 1,000,000,000
 - Tera (t) - multiplies by 1,000,000,000,000
 
+Alternatively, a [FASTA/Q index file][faidx] can be given and the genome size will be
+set to the sum of all reference sequences in it.
+
+[faidx]: https://www.htslib.org/doc/faidx.html
+
 ### Optional parameters
 
 #### Output
@@ -360,7 +365,7 @@ rasusa 0.5.0
 Randomly subsample reads to a specified coverage.
 
 USAGE:
-    rasusa [FLAGS] [OPTIONS] --bases <bases> --coverage <FLOAT> --genome-size <genome-size> --input <input>...
+    rasusa [FLAGS] [OPTIONS] --bases <bases> --coverage <FLOAT> --genome-size <size|faidx> --input <input>...
 
 FLAGS:
     -h, --help
@@ -385,8 +390,11 @@ OPTIONS:
             The desired coverage to sub-sample the reads to
 
             If --bases is not provided, this option and --genome-size are required
-    -g, --genome-size <genome-size>
+    -g, --genome-size <size|faidx>
             Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
+
+            Alternatively, a path to a FASTA/Q index file can be provided and the genome size will be set to the sum of
+            all reference sequences.
 
             If --bases is not provided, this option and --coverage are required
     -i, --input <input>...
@@ -406,7 +414,7 @@ OPTIONS:
             Rasusa will attempt to infer the output compression format automatically from the filename extension. This
             option is used to override that. If writing to stdout, the default is uncompressed
     -s, --seed <INT>
-            Random seed to use..
+            Random seed to use.
 ```
 
 ### Snakemake

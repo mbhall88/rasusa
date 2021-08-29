@@ -35,8 +35,16 @@ pub struct Cli {
 
     /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
     ///
+    /// Alternatively, a FASTA/Q index file can be provided and the genome size will be
+    /// set to the sum of all reference sequences.
+    ///
     /// If --bases is not provided, this option and --coverage are required
-    #[structopt(short = "g", long, required_unless = "bases")]
+    #[structopt(
+        short = "g",
+        long,
+        required_unless = "bases",
+        value_name = "size|faidx"
+    )]
     pub genome_size: Option<GenomeSize>,
 
     /// The desired coverage to sub-sample the reads to
