@@ -237,6 +237,8 @@ Illumina paired files can be passed in two ways.
 
 ##### `-c`, `--coverage`
 
+> Not required if [`--bases`](#target-number-of-bases) is present
+
 This option is used to determine the minimum coverage to subsample the reads to. It can
 be specified as an integer (100), a decimal/float (100.7), or either of the previous
 suffixed with an 'x' (100x).
@@ -249,6 +251,8 @@ inform you of the actual coverage in the end._
 #### Genome size
 
 ##### `-g`, `--genome-size`
+
+> Not required if [`--bases`](#target-number-of-bases) is present
 
 The genome size of the input is also required. It is used to determine how many bases
 are necessary to achieve the desired coverage. This can, of course, be as precise or
@@ -318,6 +322,16 @@ Compression level to use if compressing the output. 1 is for fastest/least compr
 and 9 is for slowest/best. By default this is set to 6, which is also the default for
 most compression programs.
 
+#### Target number of bases
+
+##### `-b`, `--bases`
+
+Explicitly set the number of bases required in the subsample. This option takes the
+number in the same format as [genome size](#genome-size).
+
+*Note: if this option is given, genome size and coverage are not required, or ignored if
+they are provided.*
+
 #### Random seed
 
 ##### `-s`, `--seed`
@@ -346,7 +360,7 @@ rasusa 0.5.0
 Randomly subsample reads to a specified coverage.
 
 USAGE:
-    rasusa [FLAGS] [OPTIONS] --coverage <FLOAT> --genome-size <genome-size> --input <input>...
+    rasusa [FLAGS] [OPTIONS] --bases <bases> --coverage <FLOAT> --genome-size <genome-size> --input <input>...
 
 FLAGS:
     -h, --help
@@ -360,15 +374,21 @@ FLAGS:
 
 
 OPTIONS:
+    -b, --bases <bases>
+            Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
+
+            If this option is given, --coverage and --genome-size are ignored
     -l, --compress-level <1-9>
             Compression level to use if compressing output [default: 6]
 
     -c, --coverage <FLOAT>
-            The desired coverage to sub-sample the reads to.
+            The desired coverage to sub-sample the reads to
 
+            If --bases is not provided, this option and --genome-size are required
     -g, --genome-size <genome-size>
             Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
+            If --bases is not provided, this option and --coverage are required
     -i, --input <input>...
             The fast{a,q} file(s) to subsample.
 
@@ -386,7 +406,7 @@ OPTIONS:
             Rasusa will attempt to infer the output compression format automatically from the filename extension. This
             option is used to override that. If writing to stdout, the default is uncompressed
     -s, --seed <INT>
-            Random seed to use.
+            Random seed to use..
 ```
 
 ### Snakemake

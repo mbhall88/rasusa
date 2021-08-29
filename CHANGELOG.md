@@ -7,6 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Addedd
+- `--bases` option to allow for manually setting the target number of bases to keep
+  [[#30][30]]
+
+
 ## [0.5.0]
 
 ### Added
@@ -86,6 +91,7 @@ be 1070.
 [19]: https://github.com/mbhall88/rasusa/issues/19
 [22]: https://github.com/mbhall88/rasusa/issues/22
 [27]: https://github.com/mbhall88/rasusa/issues/27
+[30]: https://github.com/mbhall88/rasusa/issues/30
 [28]: https://github.com/mbhall88/rasusa/pull/28
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/
