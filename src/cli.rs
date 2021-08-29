@@ -32,12 +32,27 @@ pub struct Cli {
     pub output: Vec<PathBuf>,
 
     /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
-    #[structopt(short = "g", long = "genome-size")]
-    pub genome_size: GenomeSize,
+    ///
+    /// If --bases is not provided, this option and --coverage are required
+    #[structopt(short = "g", long, required_unless = "bases")]
+    pub genome_size: Option<GenomeSize>,
 
-    /// The desired coverage to sub-sample the reads to.
-    #[structopt(short = "c", long = "coverage", value_name = "FLOAT")]
-    pub coverage: Coverage,
+    /// The desired coverage to sub-sample the reads to
+    ///
+    /// If --bases is not provided, this option and --genome-size are required
+    #[structopt(
+        short = "c",
+        long = "coverage",
+        value_name = "FLOAT",
+        required_unless = "bases"
+    )]
+    pub coverage: Option<Coverage>,
+
+    /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
+    ///
+    /// If this option is given, --coverage and --genome-size are ignored
+    #[structopt(short = "b", long = "bases", value_name = "bases", required_unless_all = &["coverage", "genome-size"])]
+    pub bases: Option<GenomeSize>,
 
     /// Random seed to use.
     #[structopt(short = "s", long = "seed", value_name = "INT")]
@@ -194,6 +209,12 @@ pub struct GenomeSize(u64);
 impl PartialEq<u64> for GenomeSize {
     fn eq(&self, other: &u64) -> bool {
         self.0 == *other
+    }
+}
+
+impl From<GenomeSize> for u64 {
+    fn from(g: GenomeSize) -> Self {
+        g.0
     }
 }
 
@@ -453,6 +474,36 @@ mod tests {
     }
 
     #[test]
+    fn no_genome_size_but_bases() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-c", "7"];
+
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert_eq!(args.bases.unwrap(), GenomeSize(5));
+    }
+
+    #[test]
+    fn bases_and_coverage_and_genome_size_all_llowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-c", "7", "-g", "5m"];
+
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert_eq!(args.bases.unwrap(), GenomeSize(5));
+    }
+
+    #[test]
+    fn no_genome_size_or_coverage_given_but_bases_given() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-b", "5"];
+
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert_eq!(args.bases.unwrap(), GenomeSize(5));
+    }
+
+    #[test]
     fn invalid_genome_size_given_raises_error() {
         let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8jb"];
         let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
@@ -493,8 +544,8 @@ mod tests {
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
         assert_eq!(args.input[0], PathBuf::from_str(infile).unwrap());
-        assert_eq!(args.coverage, Coverage(5.0));
-        assert_eq!(args.genome_size, GenomeSize(8_000_000));
+        assert_eq!(args.coverage.unwrap(), Coverage(5.0));
+        assert_eq!(args.genome_size.unwrap(), GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
         assert_eq!(
             args.output[0],
@@ -526,8 +577,8 @@ mod tests {
             PathBuf::from_str(infile).unwrap(),
         ];
         assert_eq!(args.input, expected_input);
-        assert_eq!(args.coverage, Coverage(5.0));
-        assert_eq!(args.genome_size, GenomeSize(8_000_000));
+        assert_eq!(args.coverage.unwrap(), Coverage(5.0));
+        assert_eq!(args.genome_size.unwrap(), GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
         assert_eq!(
             args.output[0],
@@ -560,8 +611,8 @@ mod tests {
             PathBuf::from_str(infile).unwrap(),
         ];
         assert_eq!(args.input, expected_input);
-        assert_eq!(args.coverage, Coverage(5.0));
-        assert_eq!(args.genome_size, GenomeSize(8_000_000));
+        assert_eq!(args.coverage.unwrap(), Coverage(5.0));
+        assert_eq!(args.genome_size.unwrap(), GenomeSize(8_000_000));
         assert_eq!(args.seed, Some(88));
         assert_eq!(
             args.output[0],

@@ -75,7 +75,11 @@ fn main() -> Result<()> {
         }
     };
 
-    let target_total_bases: u64 = args.genome_size * args.coverage;
+    let target_total_bases: u64 = match (args.genome_size, args.coverage, args.bases) {
+        (_, _, Some(bases)) => u64::from(bases),
+        (Some(gsize), Some(cov), _) => gsize * cov,
+        _ => panic!("Require either target bases or both coverage and genome size - should not have gotten to this point before failing. Please report!")
+    };
     info!(
         "Target number of bases to subsample to is: {}",
         target_total_bases
@@ -141,8 +145,12 @@ fn main() -> Result<()> {
         )? as u64;
     }
 
-    let actual_covg = total_kept_bases / args.genome_size;
-    info!("Actual coverage of kept reads is {:.2}x", actual_covg);
+    if let Some(gsize) = args.genome_size {
+        let actual_covg = total_kept_bases / gsize;
+        info!("Actual coverage of kept reads is {:.2}x", actual_covg);
+    } else {
+        info!("Kept {} bases", total_kept_bases);
+    }
 
     info!("Done 🎉");
 
