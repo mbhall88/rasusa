@@ -112,7 +112,7 @@ The above will use the latest version. If you want to specify a version then use
 [tag][quay.io] (or commit) like so.
 
 ```sh
-VERSION="0.5.0"
+VERSION="0.6.0"
 URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
@@ -162,7 +162,7 @@ else
     echo "ERROR: $OS not a recognised operating system"
 fi              
 if [ -n "$triple" ]; then   
-    URL="https://github.com/mbhall88/rasusa/releases/download/0.5.0/rasusa-0.5.0-${triple}.tar.gz"
+    URL="https://github.com/mbhall88/rasusa/releases/download/0.6.0/rasusa-0.6.0-${triple}.tar.gz"
     wget "$URL" -O - | tar -xzf -
     ./rasusa --help             
 fi
@@ -177,7 +177,7 @@ Currently, there are two pre-compiled binaries available:
 An example of downloading one of these binaries using `wget`
 
 ```sh
-URL="https://github.com/mbhall88/rasusa/releases/download/0.5.0/rasusa-0.5.0-x86_64-unknown-linux-musl.tar.gz"
+URL="https://github.com/mbhall88/rasusa/releases/download/0.6.0/rasusa-0.6.0-x86_64-unknown-linux-musl.tar.gz"
 wget "$URL" -O - | tar -xzf -
 ./rasusa --help
 ```
@@ -361,7 +361,7 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 ```text
 $ rasusa --help
 
-rasusa 0.5.0
+rasusa 0.6.0
 Randomly subsample reads to a specified coverage.
 
 USAGE:
