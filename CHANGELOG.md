@@ -10,6 +10,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Addedd
 - `--bases` option to allow for manually setting the target number of bases to keep
   [[#30][30]]
+- `--genome-size` can now take a FASTA/Q index file and the sum of all reference
+  sequences will be used as the genome size [[#31][31]]
 
 
 ## [0.5.0]
@@ -92,6 +94,7 @@ be 1070.
 [22]: https://github.com/mbhall88/rasusa/issues/22
 [27]: https://github.com/mbhall88/rasusa/issues/27
 [30]: https://github.com/mbhall88/rasusa/issues/30
+[31]: https://github.com/mbhall88/rasusa/issues/31
 [28]: https://github.com/mbhall88/rasusa/pull/28
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/

@@ -1,5 +1,7 @@
 use regex::Regex;
 use std::ffi::{OsStr, OsString};
+use std::fs::File;
+use std::io::BufRead;
 use std::ops::{Div, Mul};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -33,8 +35,16 @@ pub struct Cli {
 
     /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
     ///
+    /// Alternatively, a FASTA/Q index file can be provided and the genome size will be
+    /// set to the sum of all reference sequences.
+    ///
     /// If --bases is not provided, this option and --coverage are required
-    #[structopt(short = "g", long, required_unless = "bases")]
+    #[structopt(
+        short = "g",
+        long,
+        required_unless = "bases",
+        value_name = "size|faidx"
+    )]
     pub genome_size: Option<GenomeSize>,
 
     /// The desired coverage to sub-sample the reads to
@@ -129,6 +139,10 @@ pub enum CliError {
     /// Indicates a bad combination of input and output files was passed.
     #[error("Bad combination of input and output files: {0}")]
     BadInputOutputCombination(String),
+
+    /// Faidx IO error
+    #[error("Failed to open/parse faidx file {0}")]
+    FaidxError(String),
 }
 
 /// A metric suffix is a unit suffix used to indicate the multiples of (in this case) base pairs.
@@ -235,9 +249,10 @@ impl FromStr for GenomeSize {
         let re = Regex::new(r"(?P<size>[0-9]*\.?[0-9]+)(?P<sfx>\w*)$").unwrap();
         let captures = match re.captures(text.as_str()) {
             Some(cap) => cap,
-            None => {
-                return Err(CliError::InvalidGenomeSizeString(s.to_string()));
-            }
+            None => match Self::from_faidx(Path::new(&s)) {
+                Ok(g) => return Ok(g),
+                _ => return Err(CliError::InvalidGenomeSizeString(s.to_string())),
+            },
         };
         let size = captures
             .name("size")
@@ -248,6 +263,23 @@ impl FromStr for GenomeSize {
         let metric_suffix = MetricSuffix::from_str(captures.name("sfx").unwrap().as_str())?;
 
         Ok(GenomeSize((size * metric_suffix) as u64))
+    }
+}
+
+impl GenomeSize {
+    fn from_faidx(path: &Path) -> Result<Self, CliError> {
+        let mut size = 0;
+        let file = File::open(path)
+            .map_err(|_| CliError::FaidxError(path.to_string_lossy().to_string()))?;
+        let rdr = std::io::BufReader::new(file);
+        for result in rdr.lines() {
+            let line =
+                result.map_err(|_| CliError::FaidxError(path.to_string_lossy().to_string()))?;
+            let fields: Vec<&str> = line.split('\t').collect();
+            size += u64::from_str(fields[1])
+                .map_err(|_| CliError::FaidxError(path.to_string_lossy().to_string()))?;
+        }
+        Ok(GenomeSize(size))
     }
 }
 
@@ -512,6 +544,16 @@ mod tests {
         let expected = clap::ErrorKind::ValueValidation;
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn faidx_given_as_genome_size() {
+        let infile = "tests/cases/r1.fq.gz";
+        let faidx = "tests/cases/h37rv.fa.fai";
+        let passed_args = vec!["rasusa", "-i", infile, "-c", "5", "-g", faidx];
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert_eq!(args.genome_size.unwrap(), GenomeSize(4411532))
     }
 
     #[test]
@@ -824,6 +866,32 @@ mod tests {
         let actual = GenomeSize::from_str("gb");
 
         assert!(actual.is_err());
+    }
+
+    #[test]
+    fn genome_size_from_faidx() {
+        let p = Path::new("tests/cases/h37rv.fa.fai");
+        let actual = GenomeSize::from_faidx(p).unwrap();
+        let expected = GenomeSize(4411532);
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn genome_size_from_faidx_fastq_index() {
+        let p = Path::new("tests/cases/file1.fq.fai");
+        let actual = GenomeSize::from_faidx(p).unwrap();
+        let expected = GenomeSize(10050);
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn genome_size_from_str_fastq_index() {
+        let actual = GenomeSize::from_str("tests/cases/file1.fq.fai").unwrap();
+        let expected = GenomeSize(10050);
+
+        assert_eq!(actual, expected)
     }
 
     #[test]
