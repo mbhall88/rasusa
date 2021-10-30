@@ -31,7 +31,7 @@ as strings of letters (A, C, G, and T/U).
 The amount of data in one of these read files depends on how much genetic material was
 present and how long the sequencing device was operated. Read depth (coverage) is a
 measure of the volume of genetic data contained in a read file. For example, coverage of
-5x indicates that each nucleotide in the original genetic material is represented five
+5x indicates that, on average, each nucleotide in the original genetic material is represented five
 times in the read file.
 
 Many of the computational methods employed in genomics are affected by coverage;
@@ -46,6 +46,7 @@ specified coverage. Rasusa is written in the Rust programming language and is mu
 faster than current solutions for subsampling read files. In addition, it provides an
 ergonomic command-line interface and allows users to specify a desired coverage or a
 target number of nucleotides.
+
 
 # Statement of need
 
@@ -69,7 +70,7 @@ of the original reads but is biased towards those with the greatest length or qu
 While this may sound like a good thing, in some applications, such as genome assembly,
 it has been shown that a random subsample produces superior results to a filtered subset
 [@Maio2019].
-    
+
 Seqtk does do random subsampling via the sample subcommand. However, the only option
 available is to specify the number of reads required. Thus, it is up to the user to
 determine the number of reads required to reach the desired coverage. While this serves
