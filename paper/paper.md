@@ -13,7 +13,7 @@ authors:
     orcid: 0000-0003-3683-6208
     affiliation: 1
 affiliations:
- - name: EMBL-EBI, Hinxton, UK
+ - name: European Molecular Biology Laboratory, European Bioinformatics Institute EMBL-EBI, Hinxton, UK
    index: 1
 date: 18 October 2021
 bibliography: paper.bib
