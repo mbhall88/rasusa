@@ -82,7 +82,8 @@ Rasusa provides a random subsample of a read file (FASTA or FASTQ), with two way
 specifying the size of the subset. One method takes a genome size and the desired
 coverage, while the other takes a target number of bases (nucleotides). In the genome
 size and coverage option, we multiply the genome size by the coverage to obtain the
-target number of bases for the subset. In addition, Rasusa allows setting a random seed
+target number of bases for the subset. As such, the resulting read file will have, on 
+average, the amount of coverage requested. In addition, Rasusa allows setting a random seed
 to allow reproducible subsampling. Other features include user control over whether the
 output is compressed and specifying the compression algorithm and level.
 
