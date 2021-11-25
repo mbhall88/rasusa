@@ -13,11 +13,12 @@ RUN apt update \
     && strip target/${TARGET}/release/rasusa
 
 
-FROM bash:5.0
+FROM bash:5.1
 
 ARG TARGET="x86_64-unknown-linux-musl"
 COPY --from=builder /rasusa/target/${TARGET}/release/rasusa /bin/
 
 RUN rasusa --version
 
-ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
+ENTRYPOINT [ "/usr/local/bin/bash", "-l", "-c", "rasusa" ]
+

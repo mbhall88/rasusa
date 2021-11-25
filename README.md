@@ -124,11 +124,12 @@ Prerequisite: [`docker`][docker]
 
 ```sh
 docker pull quay.io/mbhall88/rasusa
-docker run quay.io/mbhall88/rasusa rasusa --help
+docker run quay.io/mbhall88/rasusa --help
 ```
 
 You can find all the available tags on the [quay.io repository][quay.io]. Note: versions
 prior to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
+
 
 ### `homebrew`
 
@@ -197,6 +198,7 @@ target/release/rasusa --help
 # if you want to check everything is working ok
 cargo test --all
 ```
+
 
 ## Usage
 
@@ -595,4 +597,5 @@ cite it.
 [snakemake]: https://snakemake.readthedocs.io/en/stable/
 [triples]: https://clang.llvm.org/docs/CrossCompilation.html#target-triple
 [wrapper]: https://snakemake-wrappers.readthedocs.io/en/stable/wrappers/rasusa.html
+
 
