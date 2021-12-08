@@ -20,5 +20,5 @@ COPY --from=builder /rasusa/target/${TARGET}/release/rasusa /bin/
 
 RUN rasusa --version
 
-ENTRYPOINT [ "/usr/local/bin/bash", "-l", "-c", "rasusa" ]
+ENTRYPOINT [ "rasusa" ]
 
