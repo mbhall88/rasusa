@@ -325,7 +325,7 @@ impl Div<GenomeSize> for u64 {
 /// An object for collecting together methods for working with the coverage parameter for this
 /// package.
 #[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
-pub struct Coverage(f32);
+pub struct Coverage(pub f32);
 
 /// Allow for comparison of a `f32` and a `Coverage`.
 ///

@@ -7,14 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Warning if the actual coverage of the file(s) is less than the requested coverage
+  [[#36][36]]
+
+### Changed
+
+- Use `rasusa` as the entry command for docker container [[#35][35]]
+
 ## [0.6.0]
 
 ### Addedd
+
 - `--bases` option to allow for manually setting the target number of bases to keep
   [[#30][30]]
 - `--genome-size` can now take a FASTA/Q index file and the sum of all reference
   sequences will be used as the genome size [[#31][31]]
-
 
 ## [0.5.0]
 
@@ -32,6 +41,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   [@natir](https://github.com/natir) for this.
 
 ### Fixed
+
 - Restore compression of output files [[#27][27]]
 
 ## [0.4.2]
@@ -96,9 +106,11 @@ be 1070.
 [19]: https://github.com/mbhall88/rasusa/issues/19
 [22]: https://github.com/mbhall88/rasusa/issues/22
 [27]: https://github.com/mbhall88/rasusa/issues/27
+[28]: https://github.com/mbhall88/rasusa/pull/28
 [30]: https://github.com/mbhall88/rasusa/issues/30
 [31]: https://github.com/mbhall88/rasusa/issues/31
-[28]: https://github.com/mbhall88/rasusa/pull/28
+[35]: https://github.com/mbhall88/rasusa/issues/35
+[36]: https://github.com/mbhall88/rasusa/issues/36
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/
 [unreleased]: https://github.com/mbhall88/rasusa/compare/0.6.0...HEAD

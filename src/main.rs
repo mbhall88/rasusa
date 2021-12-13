@@ -3,10 +3,11 @@ use std::io::stdout;
 
 use anyhow::{Context, Result};
 use fern::colors::{Color, ColoredLevelConfig};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use structopt::StructOpt;
 
 pub use crate::cli::Cli;
+use crate::cli::Coverage;
 pub use crate::fastx::Fastx;
 pub use crate::subsampler::SubSampler;
 
@@ -147,7 +148,17 @@ fn main() -> Result<()> {
 
     if let Some(gsize) = args.genome_size {
         let actual_covg = total_kept_bases / gsize;
-        info!("Actual coverage of kept reads is {:.2}x", actual_covg);
+        // safe to unwrap args.coverage as we have already ensured genome size and coverage co-occur
+        if Coverage(actual_covg as f32) < args.coverage.unwrap() {
+            warn!(
+                "Requested coverage ({:.2}x) is not possible as the actual coverage is {:.2}x - \
+                output will be the same as the input",
+                args.coverage.unwrap().0,
+                actual_covg
+            );
+        } else {
+            info!("Actual coverage of kept reads is {:.2}x", actual_covg);
+        }
     } else {
         info!("Kept {} bases", total_kept_bases);
     }
