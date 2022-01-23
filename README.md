@@ -112,7 +112,7 @@ The above will use the latest version. If you want to specify a version then use
 [tag][quay.io] (or commit) like so.
 
 ```sh
-VERSION="0.6.0"
+VERSION="0.6.1"
 URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
@@ -154,6 +154,7 @@ brew install brewsci/bio/rasusa
 current directory and show the help menu.
 
 ```shell
+VERSION="0.6.1"  # change accordingly
 OS=$(uname -s)                                                                                                       
 if [ "$OS" = "Linux" ]; then                                                                                         
     triple="x86_64-unknown-linux-musl"                                                                              
@@ -163,7 +164,7 @@ else
     echo "ERROR: $OS not a recognised operating system"
 fi              
 if [ -n "$triple" ]; then   
-    URL="https://github.com/mbhall88/rasusa/releases/download/0.6.0/rasusa-0.6.0-${triple}.tar.gz"
+    URL="https://github.com/mbhall88/rasusa/releases/download/${VERSION}/rasusa-${VERSION}-${triple}.tar.gz"
     wget "$URL" -O - | tar -xzf -
     ./rasusa --help             
 fi
@@ -174,14 +175,6 @@ These binaries _do not_ require that you have the `rust` toolchain installed.
 Currently, there are two pre-compiled binaries available:
 - Linux kernel `x86_64-unknown-linux-musl` (works on most Linux distributions I tested)
 - OSX kernel `x86_64-apple-darwin` (works for any post-2007 Mac)
-
-An example of downloading one of these binaries using `wget`
-
-```sh
-URL="https://github.com/mbhall88/rasusa/releases/download/0.6.0/rasusa-0.6.0-x86_64-unknown-linux-musl.tar.gz"
-wget "$URL" -O - | tar -xzf -
-./rasusa --help
-```
 
 If these binaries do not work on your system please raise an issue and I will
 potentially add some additional [target triples][triples].
@@ -363,7 +356,7 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 ```text
 $ rasusa --help
 
-rasusa 0.6.0
+rasusa 0.6.1
 Randomly subsample reads to a specified coverage.
 
 USAGE:
