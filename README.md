@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/mbhall88/rasusa/branch/master/graph/badge.svg)](https://codecov.io/gh/mbhall88/rasusa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3546168.svg)](https://doi.org/10.5281/zenodo.3546168)
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
 
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
@@ -547,23 +547,26 @@ For changes to be accepted, they must pass the CI and coverage checks. These inc
 If you use `rasusa` in your research, it would be very much appreciated if you could
 cite it.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3731394.svg)](https://doi.org/10.5281/zenodo.3731394)
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
 
-> Hall, Michael B. Rasusa: Randomly subsample sequencing reads to a specified coverage.
-> (2019). doi:10.5281/zenodo.3731394
+> Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
 
 ### Bibtex
 
 ```Bibtex
-@article{
-    rasusa2019,
-    title={Rasusa: Randomly subsample sequencing reads to a specified coverage},
-    DOI={10.5281/zenodo.3731394},
-    publisher={Zenodo},
-    author={Hall, Michael B.},
-    year={2019},
-    month={Nov}
+@article{Hall2022,
+  doi = {10.21105/joss.03941},
+  url = {https://doi.org/10.21105/joss.03941},
+  year = {2022},
+  publisher = {The Open Journal},
+  volume = {7},
+  number = {69},
+  pages = {3941},
+  author = {Michael B. Hall},
+  title = {Rasusa: Randomly subsample sequencing reads to a specified coverage},
+  journal = {Journal of Open Source Software}
 }
+
 ```
 
 [1]: https://doi.org/10.1099/mgen.0.000188
