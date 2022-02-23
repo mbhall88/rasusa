@@ -84,6 +84,7 @@ cargo install rasusa
 
 [![Conda (channel only)](https://img.shields.io/conda/vn/bioconda/rasusa)](https://anaconda.org/bioconda/rasusa)
 [![bioconda version](https://anaconda.org/bioconda/rasusa/badges/platforms.svg)](https://anaconda.org/bioconda/rasusa)
+![Conda](https://img.shields.io/conda/dn/bioconda/rasusa)
 
 Prerequisite: [`conda`][conda] (and bioconda channel [correctly set up][channels])
 
