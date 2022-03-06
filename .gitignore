@@ -1,7 +1,0 @@
-/target
-**/*.rs.bk
-.idea/
-code_coverage_report.sh
-data
-benchmark
-.DS_Store
