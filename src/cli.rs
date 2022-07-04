@@ -63,6 +63,19 @@ pub struct Cli {
     #[clap(short = 'b', long = "bases", value_name = "bases", required_unless_all = &["coverage", "genome-size"])]
     pub bases: Option<GenomeSize>,
 
+    /// Subsample to a specific number of reads
+    ///
+    /// If paired-end reads are passed, this number will be the total across both read sets.
+    /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
+    #[clap(short, long, value_name = "INT")]
+    pub num: Option<GenomeSize>,
+
+    /// Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
+    ///
+    /// Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
+    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction)]
+    pub frac: Option<f32>,
+
     /// Random seed to use.
     #[clap(short = 's', long = "seed", value_name = "INT")]
     pub seed: Option<u64>,
@@ -134,6 +147,10 @@ pub enum CliError {
     /// Indicates that a string cannot be parsed into a [`CompressionFormat`](#compressionformat).
     #[error("{0} is not a valid output format")]
     InvalidCompression(String),
+
+    /// Indicates the fraction could not be parsed to the range 0-1
+    #[error("{0} could not be parsed to the range 0-1")]
+    FractionOutOfRange(String),
 
     /// Indicates a bad combination of input and output files was passed.
     #[error("Bad combination of input and output files: {0}")]
@@ -443,11 +460,133 @@ fn parse_level(s: &str) -> Result<niffler::Level, String> {
     Ok(lvl)
 }
 
+/// A utility function to parse the fraction CLI option to the range 0-1
+fn parse_fraction(s: &str) -> Result<f32, CliError> {
+    let f = f32::from_str(s).map_err(|_| CliError::FractionOutOfRange(s.to_string()))?;
+    if !(0.0..=100.0).contains(&f) {
+        return Err(CliError::FractionOutOfRange(s.to_string()));
+    }
+
+    let result = if f.ceil() > 1.0_f32 { f / 100.0_f32 } else { f };
+
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const ERROR: f32 = f32::EPSILON;
+
+    #[test]
+    fn parse_fraction_negative_fraction_returns_error() {
+        let s = "-0.1";
+
+        let actual = parse_fraction(s).unwrap_err();
+        let expected = CliError::FractionOutOfRange(s.to_string());
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn parse_fraction_zero_is_zero() {
+        let s = "0";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 0.0_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_one_is_one() {
+        let s = "1";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 1.0_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_one_asf32_is_one() {
+        let s = "1.0";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 1.0_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_less_one_unchanged() {
+        let s = "0.25";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 0.25_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_over_100_fails() {
+        let s = "101.5";
+
+        let actual = parse_fraction(s).unwrap_err();
+        let expected = CliError::FractionOutOfRange(s.to_string());
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn parse_fraction_check_upper_range() {
+        let s = "100";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 1.0_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_check_lower_range() {
+        let s = "1";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 1_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_non_fraction_fails() {
+        let s = "foo";
+
+        let actual = parse_fraction(s).unwrap_err();
+        let expected = CliError::FractionOutOfRange(s.to_string());
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn parse_fraction_over_one_converts() {
+        let s = "25";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 0.25_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
+
+    #[test]
+    fn parse_fraction_over_one_as_fration_converts() {
+        let s = "25.6";
+
+        let actual = parse_fraction(s).unwrap();
+        let expected = 0.256_f32;
+
+        assert!((expected - actual).abs() < ERROR)
+    }
 
     #[test]
     fn no_args_given_raises_error() {
