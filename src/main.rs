@@ -2,9 +2,9 @@
 use std::io::stdout;
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use fern::colors::{Color, ColoredLevelConfig};
 use log::{debug, error, info, warn};
-use structopt::StructOpt;
 
 pub use crate::cli::Cli;
 use crate::cli::Coverage;
@@ -51,7 +51,7 @@ fn setup_logger(verbose: bool) -> Result<(), fern::InitError> {
 }
 
 fn main() -> Result<()> {
-    let args: Cli = Cli::from_args();
+    let args: Cli = Cli::parse();
     setup_logger(args.verbose).context("Failed to setup the logger")?;
     debug!("{:?}", args);
 
