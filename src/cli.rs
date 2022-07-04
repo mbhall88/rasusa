@@ -1,23 +1,22 @@
+use clap::Parser;
 use regex::Regex;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::BufRead;
 use std::ops::{Div, Mul};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use structopt::StructOpt;
 use thiserror::Error;
 
 /// Randomly subsample reads to a specified coverage.
-#[derive(Debug, StructOpt)]
-#[structopt()]
+#[derive(Debug, Parser)]
 pub struct Cli {
     /// The fast{a,q} file(s) to subsample.
     ///
     /// For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
     /// files consecutively `-i r1.fq r2.fq`.
-    #[structopt(
-        short = "i",
+    #[clap(
+        short = 'i',
         long = "input",
         parse(try_from_os_str = check_path_exists),
         multiple = true,
@@ -30,7 +29,7 @@ pub struct Cli {
     /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
     /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
     /// same as that given for --input. This option is required for paired input.
-    #[structopt(short = "o", long = "output", parse(from_os_str), multiple = true)]
+    #[clap(short = 'o', long = "output", parse(from_os_str), multiple = true)]
     pub output: Vec<PathBuf>,
 
     /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
@@ -39,8 +38,8 @@ pub struct Cli {
     /// set to the sum of all reference sequences.
     ///
     /// If --bases is not provided, this option and --coverage are required
-    #[structopt(
-        short = "g",
+    #[clap(
+        short = 'g',
         long,
         required_unless = "bases",
         value_name = "size|faidx"
@@ -50,8 +49,8 @@ pub struct Cli {
     /// The desired coverage to sub-sample the reads to
     ///
     /// If --bases is not provided, this option and --genome-size are required
-    #[structopt(
-        short = "c",
+    #[clap(
+        short = 'c',
         long = "coverage",
         value_name = "FLOAT",
         required_unless = "bases"
@@ -61,15 +60,15 @@ pub struct Cli {
     /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
     ///
     /// If this option is given, --coverage and --genome-size are ignored
-    #[structopt(short = "b", long = "bases", value_name = "bases", required_unless_all = &["coverage", "genome-size"])]
+    #[clap(short = 'b', long = "bases", value_name = "bases", required_unless_all = &["coverage", "genome-size"])]
     pub bases: Option<GenomeSize>,
 
     /// Random seed to use.
-    #[structopt(short = "s", long = "seed", value_name = "INT")]
+    #[clap(short = 's', long = "seed", value_name = "INT")]
     pub seed: Option<u64>,
 
     /// Switch on verbosity.
-    #[structopt(short)]
+    #[clap(short)]
     pub verbose: bool,
 
     /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma
@@ -77,11 +76,11 @@ pub struct Cli {
     /// Rasusa will attempt to infer the output compression format automatically from the filename
     /// extension. This option is used to override that. If writing to stdout, the default is
     /// uncompressed
-    #[structopt(short = "O", long, value_name = "u|b|g|l", parse(try_from_str = parse_compression_format), possible_values = &["u", "b", "g", "l"], case_insensitive=true, hide_possible_values = true)]
+    #[clap(short = 'O', long, value_name = "u|b|g|l", parse(try_from_str = parse_compression_format), possible_values = &["u", "b", "g", "l"], case_insensitive=true, hide_possible_values = true)]
     pub output_type: Option<niffler::compression::Format>,
 
     /// Compression level to use if compressing output
-    #[structopt(short = "l", long, parse(try_from_str = parse_level), default_value="6", value_name = "1-9")]
+    #[clap(short = 'l', long, parse(try_from_str = parse_level), default_value="6", value_name = "1-9")]
     pub compress_level: niffler::Level,
 }
 
@@ -417,12 +416,12 @@ fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, Cli
     }
 }
 /// A utility function that allows the CLI to error if a path doesn't exist
-fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, OsString> {
+fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
     if path.exists() {
         Ok(path)
     } else {
-        Err(OsString::from(format!("{:?} does not exist", path)))
+        Err(format!("{:?} does not exist", path))
     }
 }
 
