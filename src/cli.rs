@@ -10,6 +10,7 @@ use thiserror::Error;
 
 /// Randomly subsample reads to a specified coverage.
 #[derive(Debug, Parser)]
+#[clap(author, version, about)]
 pub struct Cli {
     /// The fast{a,q} file(s) to subsample.
     ///

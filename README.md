@@ -74,7 +74,7 @@ number of options available.
 
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
 
-Prerequisite: [`rust` toolchain][rust] (min. v1.53.0)
+Prerequisite: [`rust` toolchain][rust] (min. v1.56.1)
 
 ```sh
 cargo install rasusa
@@ -177,7 +177,7 @@ Currently, there are two pre-compiled binaries available:
 - Linux kernel `x86_64-unknown-linux-musl` (works on most Linux distributions I tested)
 - OSX kernel `x86_64-apple-darwin` (works for any post-2007 Mac)
 
-If these binaries do not work on your system please raise an issue and I will
+If these binaries do not work on your system please raise an issue, and I will
 potentially add some additional [target triples][triples].
 
 ### Build locally
@@ -333,6 +333,29 @@ number in the same format as [genome size](#genome-size).
 *Note: if this option is given, genome size and coverage are not required, or ignored if
 they are provided.*
 
+#### Number of reads
+
+##### `-n`, `--num`
+
+Explicitly set the number of reads in the subsample. This option takes the number in 
+the same format as [genome size](#genome-size).
+
+When providing paired reads as input, this option will sample this many total read 
+pairs. For example, when passing `-n 20 -i r1.fq r2.fq`, the two output files will have 
+20 reads each, and the read ids will be the same in both.
+
+*Note: if this option is given, genome size and coverage are not required.*
+
+#### Fraction of reads
+
+##### `-f`, `--frac`
+
+Explicitly set the fraction of total reads in the subsample. The value given to this 
+option can be a float or a percentage - i.e., `-f 0.5` and `-f 50` will both take half 
+of the reads.
+
+*Note: if this option is given, genome size and coverage are not required.*
+
 #### Random seed
 
 ##### `-s`, `--seed`
@@ -358,59 +381,78 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 $ rasusa --help
 
 rasusa 0.6.1
-Randomly subsample reads to a specified coverage.
+Michael Hall <michael@mbh.sh>
+Randomly subsample reads to a specified coverage
 
 USAGE:
-    rasusa [FLAGS] [OPTIONS] --bases <bases> --coverage <FLOAT> --genome-size <size|faidx> --input <input>...
-
-FLAGS:
-    -h, --help
-            Prints help information
-
-    -V, --version
-            Prints version information
-
-    -v
-            Switch on verbosity.
-
+    rasusa [OPTIONS] --input <INPUT>...
 
 OPTIONS:
     -b, --bases <bases>
             Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
             If this option is given, --coverage and --genome-size are ignored
-    -l, --compress-level <1-9>
-            Compression level to use if compressing output [default: 6]
 
     -c, --coverage <FLOAT>
             The desired coverage to sub-sample the reads to
 
             If --bases is not provided, this option and --genome-size are required
+
+    -f, --frac <FLOAT>
+            Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
+
+            Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
+
     -g, --genome-size <size|faidx>
             Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
-            Alternatively, a path to a FASTA/Q index file can be provided and the genome size will be set to the sum of
-            all reference sequences.
+            Alternatively, a FASTA/Q index file can be provided and the genome size will be set to
+            the sum of all reference sequences.
 
             If --bases is not provided, this option and --coverage are required
-    -i, --input <input>...
+
+    -h, --help
+            Print help information
+
+    -i, --input <INPUT>...
             The fast{a,q} file(s) to subsample.
 
-            For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two files consecutively
-            `-i r1.fq r2.fq`.
-    -o, --output <output>...
+            For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
+            files consecutively `-i r1.fq r2.fq`.
+
+    -l, --compress-level <1-9>
+            Compression level to use if compressing output
+
+            [default: 6]
+
+    -n, --num <INT>
+            Subsample to a specific number of reads
+
+            If paired-end reads are passed, this is the number of (matched) reads from EACH file.
+            This option accepts the same format as genome size - e.g., 1k will take 1000 reads
+
+    -o, --output <OUTPUT>...
             Output filepath(s); stdout if not present.
 
-            For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two files consecutively
-            `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the same as that given for --input. This
-            option is required for paired input.
+            For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
+            files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
+            same as that given for --input. This option is required for paired input.
+
     -O, --output-type <u|b|g|l>
             u: uncompressed; b: Bzip2; g: Gzip; l: Lzma
 
-            Rasusa will attempt to infer the output compression format automatically from the filename extension. This
-            option is used to override that. If writing to stdout, the default is uncompressed
+            Rasusa will attempt to infer the output compression format automatically from the
+            filename extension. This option is used to override that. If writing to stdout, the
+            default is uncompressed
+
     -s, --seed <INT>
-            Random seed to use.
+            Random seed to use
+
+    -v
+            Switch on verbosity
+
+    -V, --version
+            Print version information
 ```
 
 ### Snakemake
