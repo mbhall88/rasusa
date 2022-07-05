@@ -7,9 +7,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.7.0]
+
 ### Added
 
-- Fraction (`--frac`) and number (`--num`) options. This allows users to replicate the functionality of `seqtk sample` [[#34][34]]
+- Fraction (`--frac`) and number (`--num`) options. This allows users to replicate the
+  functionality of `seqtk sample` [[#34][34]]
 
 ## [0.6.1]
 
@@ -104,23 +107,44 @@ be 1070.
 - Support paired Illumina [#15](https://github.com/mbhall88/rasusa/issues/15)
 
 [0.2.0]: https://github.com/mbhall88/rasusa/releases/tag/0.2.0
+
 [0.3.0]: https://github.com/mbhall88/rasusa/releases/tag/0.3.0
+
 [0.4.0]: https://github.com/mbhall88/rasusa/releases/tag/0.4.0
+
 [0.4.1]: https://github.com/mbhall88/rasusa/releases/tag/0.4.1
+
 [0.4.2]: https://github.com/mbhall88/rasusa/releases/tag/0.4.2
+
 [0.5.0]: https://github.com/mbhall88/rasusa/releases/tag/0.5.0
+
 [0.6.0]: https://github.com/mbhall88/rasusa/releases/tag/0.6.0
+
 [0.6.1]: https://github.com/mbhall88/rasusa/releases/tag/0.6.1
+
+[0.7.0]: https://github.com/mbhall88/rasusa/compare/0.6.1...0.7.0
+
 [19]: https://github.com/mbhall88/rasusa/issues/19
+
 [22]: https://github.com/mbhall88/rasusa/issues/22
+
 [27]: https://github.com/mbhall88/rasusa/issues/27
+
 [28]: https://github.com/mbhall88/rasusa/pull/28
+
 [30]: https://github.com/mbhall88/rasusa/issues/30
+
 [31]: https://github.com/mbhall88/rasusa/issues/31
+
 [34]: https://github.com/mbhall88/rasusa/issues/34
+
 [35]: https://github.com/mbhall88/rasusa/issues/35
+
 [36]: https://github.com/mbhall88/rasusa/issues/36
+
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
+
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/
-[unreleased]: https://github.com/mbhall88/rasusa/compare/0.6.1...HEAD
+
+[unreleased]: https://github.com/mbhall88/rasusa/compare/0.7.0...HEAD
 

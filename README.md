@@ -113,7 +113,7 @@ The above will use the latest version. If you want to specify a version then use
 [tag][quay.io] (or commit) like so.
 
 ```sh
-VERSION="0.6.1"
+VERSION="0.7.0"
 URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
@@ -155,7 +155,7 @@ brew install brewsci/bio/rasusa
 current directory and show the help menu.
 
 ```shell
-VERSION="0.6.1"  # change accordingly
+VERSION="0.7.0"  # change accordingly
 OS=$(uname -s)                                                                                                       
 if [ "$OS" = "Linux" ]; then                                                                                         
     triple="x86_64-unknown-linux-musl"                                                                              
@@ -380,7 +380,7 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 ```text
 $ rasusa --help
 
-rasusa 0.6.1
+rasusa 0.7.0
 Michael Hall <michael@mbh.sh>
 Randomly subsample reads to a specified coverage
 
