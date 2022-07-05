@@ -69,7 +69,7 @@ pub struct Cli {
 
     /// Subsample to a specific number of reads
     ///
-    /// If paired-end reads are passed, this number will be the total across both read sets.
+    /// If paired-end reads are passed, this is the number of (matched) reads from EACH file.
     /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
     #[clap(short, long, value_name = "INT", conflicts_with = "frac")]
     pub num: Option<GenomeSize>,

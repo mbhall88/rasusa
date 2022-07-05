@@ -159,3 +159,43 @@ fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>>
 
     Ok(())
 }
+
+#[test]
+fn num_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::main_binary()?;
+    cmd.args(vec![
+        "-i",
+        "tests/cases/r1.fq.gz",
+        "tests/cases/r2.fq.gz",
+        "-n",
+        "1",
+        "-o",
+        "/tmp/out.fq",
+        "-o",
+        "/tmp/out2.fq",
+    ]);
+
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn frac_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::main_binary()?;
+    cmd.args(vec![
+        "-i",
+        "tests/cases/r1.fq.gz",
+        "tests/cases/r2.fq.gz",
+        "-f",
+        "10",
+        "-o",
+        "/tmp/out.fq",
+        "-o",
+        "/tmp/out2.fq",
+    ]);
+
+    cmd.assert().success();
+
+    Ok(())
+}
