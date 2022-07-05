@@ -7,6 +7,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Fraction (`--frac`) and number (`--num`) options. This allows users to replicate the functionality of `seqtk sample` [[#34][34]]
+
 ## [0.6.1]
 
 ### Added
@@ -113,6 +117,7 @@ be 1070.
 [28]: https://github.com/mbhall88/rasusa/pull/28
 [30]: https://github.com/mbhall88/rasusa/issues/30
 [31]: https://github.com/mbhall88/rasusa/issues/31
+[34]: https://github.com/mbhall88/rasusa/issues/34
 [35]: https://github.com/mbhall88/rasusa/issues/35
 [36]: https://github.com/mbhall88/rasusa/issues/36
 [benchmark]: https://github.com/mbhall88/rasusa#benchmark
