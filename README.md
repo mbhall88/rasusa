@@ -540,32 +540,27 @@ wget "$URL" -O - | gzip -d -c - | fastaq deinterleave - r1.fq r2.fq
 ```
 
 Each file's size is 179M and has 283,590 reads.  
-For this benchmark, we will use [`seqtk`][seqtk]. As `seqtk` requires a fixed number of
-reads to subsample to, I ran `rasusa` initially and got the number of reads it was using
-for its subsample. We will also test `seqtk`'s 2-pass mode as this is analogous to
-`rasusa`.  
-We use a lower coverage for the Illumina as the samples only have ~38x coverage.
+For this benchmark, we will use [`seqtk`][seqtk]. We will also test `seqtk`'s 2-pass 
+mode as this is analogous to `rasusa`.  
 
 ```shell
-TB_GENOME_SIZE=4411532
-COVG=20
-NUM_READS=147052
+NUM_READS=140000
 SEQTK_CMD_1="seqtk sample -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
 SEQTK_CMD_2="seqtk sample -2 -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
-RASUSA_CMD="rasusa -i r1.fq r2.fq -c $COVG -g $TB_GENOME_SIZE -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
-hyperfine --warmup 5 --runs 20 --export-markdown results-paired.md \
+RASUSA_CMD="rasusa -i r1.fq r2.fq -n $NUM_READS -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
+hyperfine --warmup 10 --runs 100 --export-markdown results-paired.md \
      "$SEQTK_CMD_1" "$SEQTK_CMD_2" "$RASUSA_CMD"
 ```
 
 #### Results
 
-| Command                                                                                           |    Mean [ms] | Min [ms] | Max [ms] |    Relative |
-|:--------------------------------------------------------------------------------------------------|-------------:|---------:|---------:|------------:|
-| `seqtk sample -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 147052 > /tmp/r2.fq;`       | 693.8 ± 17.4 |    678.8 |    780.5 | 1.21 ± 0.19 |
-| `seqtk sample -2 -s 1 r1.fq 147052 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 147052 > /tmp/r2.fq;` | 739.5 ± 28.4 |    695.6 |    811.8 | 1.29 ± 0.20 |
-| `./rasusa -i r1.fq r2.fq -c 20 -g 4411532 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq`                       | 574.7 ± 88.1 |    432.3 |    784.4 |        1.00 |
+| Command                                                                                           |     Mean [ms] | Min [ms] | Max [ms] |    Relative |
+|:--------------------------------------------------------------------------------------------------|--------------:|---------:|---------:|------------:|
+| `seqtk sample -s 1 r1.fq 140000 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 140000 > /tmp/r2.fq;`       |  907.7 ± 23.6 |    875.4 |    997.8 | 1.84 ± 0.62 |
+| `seqtk sample -2 -s 1 r1.fq 140000 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 140000 > /tmp/r2.fq;` |  870.8 ± 54.9 |    818.2 |   1219.8 | 1.77 ± 0.61 |
+| `rasusa -i r1.fq r2.fq -n 140000 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq`                                | 492.2 ± 165.4 |    327.4 |    887.4 |        1.00 |
 
-**Summary**: `rasusa` ran 1.21 times faster than `seqtk` (1-pass) and 1.29 times faster
+**Summary**: `rasusa` ran 1.84 times faster than `seqtk` (1-pass) and 1.77 times faster
 than `seqtk` (2-pass)
 
 So, `rasusa` is faster than `seqtk` but doesn't require a fixed number of reads -
