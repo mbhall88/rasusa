@@ -95,6 +95,26 @@ fn invalid_input_and_output_combination_raises_error() -> Result<(), Box<dyn std
 }
 
 #[test]
+fn num_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::main_binary()?;
+    cmd.args(vec!["-i", "tests/cases/file1.fq.gz", "-n", "5m"]);
+
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn frac_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::main_binary()?;
+    cmd.args(vec!["-i", "tests/cases/file1.fq.gz", "-f", "0.2"]);
+
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
 fn unequal_number_of_reads_raises_error() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::main_binary()?;
     cmd.args(vec![

@@ -39,10 +39,12 @@ pub struct Cli {
     ///
     /// If --bases is not provided, this option and --coverage are required
     #[clap(
-        short = 'g',
+        short,
         long,
-        required_unless = "bases",
-        value_name = "size|faidx"
+        required_unless_present_any = &["bases", "num", "frac"],
+        requires = "coverage",
+        value_name = "size|faidx",
+        conflicts_with_all = &["num", "frac"]
     )]
     pub genome_size: Option<GenomeSize>,
 
@@ -50,30 +52,32 @@ pub struct Cli {
     ///
     /// If --bases is not provided, this option and --genome-size are required
     #[clap(
-        short = 'c',
-        long = "coverage",
+        short,
+        long,
         value_name = "FLOAT",
-        required_unless = "bases"
+        required_unless_present_any = &["bases", "num", "frac"],
+        requires = "genome-size",
+        conflicts_with_all = &["num", "frac"]
     )]
     pub coverage: Option<Coverage>,
 
     /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
     ///
     /// If this option is given, --coverage and --genome-size are ignored
-    #[clap(short = 'b', long = "bases", value_name = "bases", required_unless_all = &["coverage", "genome-size"])]
+    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac"])]
     pub bases: Option<GenomeSize>,
 
     /// Subsample to a specific number of reads
     ///
     /// If paired-end reads are passed, this number will be the total across both read sets.
     /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
-    #[clap(short, long, value_name = "INT")]
+    #[clap(short, long, value_name = "INT", conflicts_with = "frac")]
     pub num: Option<GenomeSize>,
 
     /// Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
     ///
     /// Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
-    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction)]
+    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
     pub frac: Option<f32>,
 
     /// Random seed to use.
@@ -644,17 +648,20 @@ mod tests {
     }
 
     #[test]
-    fn no_genome_size_but_bases() {
+    fn no_genome_size_but_bases_and_coverage() {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-c", "7"];
 
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
 
-        assert_eq!(args.bases.unwrap(), GenomeSize(5));
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::MissingRequiredArgument;
+
+        assert_eq!(actual, expected)
     }
 
     #[test]
-    fn bases_and_coverage_and_genome_size_all_llowed() {
+    fn bases_and_coverage_and_genome_size_all_allowed() {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-c", "7", "-g", "5m"];
 
@@ -671,6 +678,91 @@ mod tests {
         let args = Cli::from_iter_safe(passed_args).unwrap();
 
         assert_eq!(args.bases.unwrap(), GenomeSize(5));
+    }
+
+    #[test]
+    fn no_genome_size_or_coverage_given_but_num_given() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-n", "5"];
+
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert_eq!(args.num.unwrap(), GenomeSize(5));
+    }
+
+    #[test]
+    fn no_genome_size_or_coverage_given_but_frac_given() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-f", "5"];
+
+        let args = Cli::from_iter_safe(passed_args).unwrap();
+
+        assert!((args.frac.unwrap() - 0.05_f32).abs() < ERROR);
+    }
+
+    #[test]
+    fn num_and_coverage_and_genome_size_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-n", "5", "-c", "7", "-g", "5m"];
+
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ArgumentConflict;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn frac_and_coverage_and_genome_size_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-f", "5", "-c", "7", "-g", "5m"];
+
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ArgumentConflict;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn frac_and_bases_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-f", "5", "-b", "7"];
+
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ArgumentConflict;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn frac_and_num_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-f", "5", "-n", "7"];
+
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ArgumentConflict;
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn bases_and_num_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-n", "7"];
+
+        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+
+        let actual = args.unwrap_err().kind;
+        let expected = clap::ErrorKind::ArgumentConflict;
+
+        assert_eq!(actual, expected)
     }
 
     #[test]
