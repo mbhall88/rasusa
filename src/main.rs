@@ -1,4 +1,8 @@
-#![allow(clippy::redundant_clone)] // due to a structopt problem
+#![allow(clippy::redundant_clone)]
+
+extern crate core;
+
+// due to a structopt problem
 use std::io::stdout;
 
 use anyhow::{Context, Result};
@@ -56,8 +60,8 @@ fn main() -> Result<()> {
     debug!("{:?}", args);
 
     args.validate_input_output_combination()?;
-    let is_illumina = args.input.len() == 2;
-    if is_illumina {
+    let is_paired = args.input.len() == 2;
+    if is_paired {
         info!("Two input files given. Assuming paired Illumina...")
     }
 
@@ -76,22 +80,25 @@ fn main() -> Result<()> {
         }
     };
 
-    let target_total_bases: u64 = match (args.genome_size, args.coverage, args.bases) {
-        (_, _, Some(bases)) => u64::from(bases),
-        (Some(gsize), Some(cov), _) => gsize * cov,
-        _ => panic!("Require either target bases or both coverage and genome size - should not have gotten to this point before failing. Please report!")
+    let target_total_bases: Option<u64> = match (args.genome_size, args.coverage, args.bases) {
+        (_, _, Some(bases)) => Some(u64::from(bases)),
+        (Some(gsize), Some(cov), _) => Some(gsize * cov),
+        _ => None,
     };
-    info!(
-        "Target number of bases to subsample to is: {}",
-        target_total_bases
-    );
+
+    if target_total_bases.is_some() {
+        info!(
+            "Target number of bases to subsample to is: {}",
+            target_total_bases.unwrap()
+        );
+    }
 
     info!("Gathering read lengths...");
     let mut read_lengths = input_fastx
         .read_lengths()
         .context("unable to gather read lengths for the first input file")?;
 
-    if is_illumina {
+    if is_paired {
         let second_input_fastx = Fastx::from_path(&args.input[1]);
         let expected_num_reads = read_lengths.len();
         info!("Gathering read lengths for second input file...");
@@ -115,13 +122,30 @@ fn main() -> Result<()> {
     }
     info!("{} reads detected", read_lengths.len());
 
+    let num_reads = match (args.num, args.frac) {
+        (Some(n), None) => Some(u64::from(n)),
+        (None, Some(f)) => {
+            let n = ((f as f64) * (read_lengths.len() as f64)).round() as u64;
+            if n == 0 {
+                warn!(
+                    "Requested fraction of reads ({} * {}) was rounded to 0",
+                    f,
+                    read_lengths.len()
+                );
+            }
+            Some(n)
+        }
+        _ => None,
+    };
+
     let subsampler = SubSampler {
         target_total_bases,
         seed: args.seed,
+        num_reads,
     };
 
     let (reads_to_keep, nb_reads_to_keep) = subsampler.indices(&read_lengths);
-    if is_illumina {
+    if is_paired {
         info!("Keeping {} reads from each input", nb_reads_to_keep);
     } else {
         info!("Keeping {} reads", nb_reads_to_keep);
@@ -132,7 +156,7 @@ fn main() -> Result<()> {
         input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle)? as u64;
 
     // repeat the same process for the second input fastx (if illumina)
-    if is_illumina {
+    if is_paired {
         let second_input_fastx = Fastx::from_path(&args.input[1]);
         let second_out_fastx = Fastx::from_path(&args.output[1]);
         let mut second_output_handle = second_out_fastx
