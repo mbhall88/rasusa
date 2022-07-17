@@ -8,6 +8,8 @@
 
 **Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
 
+> Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
+
 [TOC]: #
 ## Table of Contents
 - [Motivation](#motivation)
