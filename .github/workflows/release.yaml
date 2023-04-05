@@ -40,7 +40,11 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, use-cross: true }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, use-cross: true }
+          - { os: ubuntu-latest, target: aarch64-unknown-linux-musl, use-cross: true }
+          - { os: ubuntu-latest, target: i686-unknown-linux-musl, use-cross: true }
           - { os: macos-latest, target: x86_64-apple-darwin, use-cross: true }
+          - { os: macOS-11, target: aarch64-apple-darwin, use-cross: true }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v2
@@ -149,7 +153,7 @@ jobs:
           unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/[0-9].* ]]; then IS_RELEASE='true' ; fi
           echo ::set-output name=IS_RELEASE::${IS_RELEASE}
       - name: Publish archives and packages
-        uses: softprops/action-gh-release@59c3b4891632ff9a897f99a91d7bc557467a3a22 # https://github.com/softprops/action-gh-release/issues/139
+        uses: softprops/action-gh-release@v1
         if: steps.is-release.outputs.IS_RELEASE
         with:
           files: |

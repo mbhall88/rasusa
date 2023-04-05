@@ -123,7 +123,7 @@ impl Cli {
             let msg = String::from("Got more than 2 files for output.");
             return Err(CliError::BadInputOutputCombination(msg));
         }
-        match (in_len as isize - out_len as isize) as isize {
+        match in_len as isize - out_len as isize {
             diff if diff == 1 && in_len == 1 => Ok(()),
             diff if diff != 0 => Err(CliError::BadInputOutputCombination(format!(
                 "Got {} --input but {} --output",

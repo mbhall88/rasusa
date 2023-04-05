@@ -7,6 +7,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Install script and support for more binary triple targets
+
+### Changed
+
+- Updated needletail dependecy due to dependency deprecation
+
 ## [0.7.0]
 
 ### Added
