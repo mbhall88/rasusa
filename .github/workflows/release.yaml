@@ -15,22 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Run `cargo publish` - upload to crates.io
-        uses: actions-rs/cargo@v1
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          command: publish
+        run: cargo publish
 
   upload:
     name: ${{ matrix.job.os }} (${{ matrix.job.target }})
@@ -47,7 +41,7 @@ jobs:
           - { os: macOS-11, target: aarch64-apple-darwin, use-cross: true }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Extract crate information
         shell: bash
@@ -56,13 +50,11 @@ jobs:
           echo "PROJECT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)" >> $GITHUB_ENV
           echo "PROJECT_MAINTAINER=$(sed -n 's/^authors = \["\(.*\)"\]/\1/p' Cargo.toml)" >> $GITHUB_ENV
           echo "PROJECT_HOMEPAGE=$(sed -n 's/^homepage = "\(.*\)"/\1/p' Cargo.toml)" >> $GITHUB_ENV
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -74,11 +66,10 @@ jobs:
           cargo -V
           rustc -V
       - name: Build
-        uses: actions-rs/cargo@v1
+        uses: taiki-e/install-action@v2
         with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: build
-          args: --release --target=${{ matrix.job.target }}
+          tool: cross@0.2.5
+        run: cross build --release --target=${{ matrix.job.target }}
 
       - name: Strip debug information from executable
         id: strip
@@ -110,11 +101,7 @@ jobs:
           unset CARGO_TEST_OPTIONS ; case ${{ matrix.job.target }} in arm-* | aarch64-*) CARGO_TEST_OPTIONS="--bin ${PROJECT_NAME}" ;; esac;
           echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: test
-          args: --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+        run: cross test --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
 
       - name: Create tarball
         id: package
