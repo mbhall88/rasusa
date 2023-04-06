@@ -113,7 +113,7 @@ download() {
 
   error "Command failed (exit code $rc): ${BLUE}${cmd}${NO_COLOR}"
   printf "\n" >&2
-  info "This is likely due to Starship not yet supporting your configuration."
+  info "This is likely due to $PROJECT not yet supporting your configuration."
   info "If you would like to see a build for your configuration,"
   info "please create an issue requesting a build for ${MAGENTA}${TARGET}${NO_COLOR}:"
   info "${BOLD}${UNDERLINE}https://github.com/${GH_USER}/${PROJECT}/issues/new/${NO_COLOR}"
@@ -322,7 +322,7 @@ is_build_available() {
   )
 
   if [ "${good}" != "1" ]; then
-    error "${arch} builds for ${platform} are not yet available for Starship"
+    error "${arch} builds for ${platform} are not yet available for $PROJECT"
     printf "\n" >&2
     info "If you would like to see a build for your configuration,"
     info "please create an issue requesting a build for ${MAGENTA}${target}${NO_COLOR}:"
