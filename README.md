@@ -68,9 +68,45 @@ you need. And if this is the case, `rasusa` has you covered.
 
 ## Install
 
-Some of these installation options require the [`rust` toolchain][rust], which is
-extremely easy to set up. However, if you do not wish to install `rust` then there are a
-number of options available.
+**tl;dr**: precompiled binary
+
+```shell
+curl -sSL rasusa.mbh.sh | sh
+# or with wget
+wget -nv -O - rasusa.mbh.sh | sh
+```
+
+You can also pass options to the script like so
+
+```
+$ curl -sSL rasusa.mbh.sh | sh -s -- --help
+install.sh [option]
+
+Fetch and install the latest version of rasusa, if rasusa is already
+installed it will be updated to the latest version.
+
+Options
+        -V, --verbose
+                Enable verbose output for the installer
+
+        -f, -y, --force, --yes
+                Skip the confirmation prompt during installation
+
+        -p, --platform
+                Override the platform identified by the installer [default: apple-darwin]
+
+        -b, --bin-dir
+                Override the bin installation directory [default: /usr/local/bin]
+
+        -a, --arch
+                Override the architecture identified by the installer [default: x86_64]
+
+        -B, --base-url
+                Override the base URL used for downloading releases [default: https://github.com/mbhall88/ssubmit/releases]
+
+        -h, --help
+                Display this help message
+```
 
 ### `cargo`
 
@@ -115,7 +151,7 @@ The above will use the latest version. If you want to specify a version then use
 [tag][quay.io] (or commit) like so.
 
 ```sh
-VERSION="0.7.0"
+VERSION="0.7.1"
 URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
@@ -132,55 +168,6 @@ docker run quay.io/mbhall88/rasusa --help
 
 You can find all the available tags on the [quay.io repository][quay.io]. Note: versions
 prior to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
-
-
-### `homebrew`
-
-Prerequisite: [`homebrew`][homebrew]
-
-The `homebrew` installation is done via the [homebrew-bio tap][brew-tap].
-
-```sh
-brew tap brewsci/bio
-brew install rasusa
-```
-
-or
-
-```sh
-brew install brewsci/bio/rasusa
-```
-
-### Release binaries
-
-**tl;dr**: Run the following snippet to download the binary for your system to the
-current directory and show the help menu.
-
-```shell
-VERSION="0.7.0"  # change accordingly
-OS=$(uname -s)                                                                                                       
-if [ "$OS" = "Linux" ]; then                                                                                         
-    triple="x86_64-unknown-linux-musl"                                                                              
-elif [ "$OS" = "Darwin" ]; then                                                                                        
-    triple="x86_64-apple-darwin"                                                         
-else                                                      
-    echo "ERROR: $OS not a recognised operating system"
-fi              
-if [ -n "$triple" ]; then   
-    URL="https://github.com/mbhall88/rasusa/releases/download/${VERSION}/rasusa-${VERSION}-${triple}.tar.gz"
-    wget "$URL" -O - | tar -xzf -
-    ./rasusa --help             
-fi
-```
-
-These binaries _do not_ require that you have the `rust` toolchain installed.
-
-Currently, there are two pre-compiled binaries available:
-- Linux kernel `x86_64-unknown-linux-musl` (works on most Linux distributions I tested)
-- OSX kernel `x86_64-apple-darwin` (works for any post-2007 Mac)
-
-If these binaries do not work on your system please raise an issue, and I will
-potentially add some additional [target triples][triples].
 
 ### Build locally
 
@@ -382,7 +369,7 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 ```text
 $ rasusa --help
 
-rasusa 0.7.0
+rasusa 0.7.1
 Michael Hall <michael@mbh.sh>
 Randomly subsample reads to a specified coverage
 

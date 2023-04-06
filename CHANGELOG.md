@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.7.1]
+
 ### Added
 
 - Install script and support for more binary triple targets
@@ -131,6 +133,8 @@ be 1070.
 [0.6.1]: https://github.com/mbhall88/rasusa/releases/tag/0.6.1
 
 [0.7.0]: https://github.com/mbhall88/rasusa/compare/0.6.1...0.7.0
+
+[0.7.1]: https://github.com/mbhall88/rasusa/compare/0.7.0...0.7.1
 
 [19]: https://github.com/mbhall88/rasusa/issues/19
 
