@@ -50,6 +50,7 @@ jobs:
           echo "PROJECT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)" >> $GITHUB_ENV
           echo "PROJECT_MAINTAINER=$(sed -n 's/^authors = \["\(.*\)"\]/\1/p' Cargo.toml)" >> $GITHUB_ENV
           echo "PROJECT_HOMEPAGE=$(sed -n 's/^homepage = "\(.*\)"/\1/p' Cargo.toml)" >> $GITHUB_ENV
+          
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -64,10 +65,13 @@ jobs:
           rustup default
           cargo -V
           rustc -V
-      - name: Build
+
+      - name: Install cross
         uses: taiki-e/install-action@v2
         with:
           tool: cross@0.2.5
+
+      - name: Build with cross
         run: cross build --release --target=${{ matrix.job.target }}
 
       - name: Strip debug information from executable
@@ -92,6 +96,7 @@ jobs:
           # Let subsequent steps know where to find the (stripped) bin
           echo ::set-output name=BIN_PATH::${BIN_PATH}
           echo ::set-output name=BIN_NAME::${BIN_NAME}
+
       - name: Set testing options
         id: test-options
         shell: bash
@@ -99,6 +104,7 @@ jobs:
           unset CARGO_TEST_OPTIONS
           unset CARGO_TEST_OPTIONS ; case ${{ matrix.job.target }} in arm-* | aarch64-*) CARGO_TEST_OPTIONS="--bin ${PROJECT_NAME}" ;; esac;
           echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+
       - name: Run tests
         run: cross test --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
 
@@ -126,6 +132,7 @@ jobs:
           popd >/dev/null
           # Let subsequent steps know where to find the compressed package
           echo ::set-output name=PKG_PATH::"${PKG_STAGING}/${PKG_NAME}"
+
       - name: "Artifact upload: tarball"
         uses: actions/upload-artifact@master
         with:
@@ -138,6 +145,7 @@ jobs:
         run: |
           unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/[0-9].* ]]; then IS_RELEASE='true' ; fi
           echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+
       - name: Publish archives and packages
         uses: softprops/action-gh-release@v1
         if: steps.is-release.outputs.IS_RELEASE
