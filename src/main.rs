@@ -7,8 +7,8 @@ use std::io::stdout;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use fern::colors::{Color, ColoredLevelConfig};
-use log::{debug, error, info, warn};
+use env_logger::Builder;
+use log::{debug, error, info, warn, LevelFilter};
 
 pub use crate::cli::Cli;
 use crate::cli::Coverage;
@@ -19,44 +19,21 @@ mod cli;
 mod fastx;
 mod subsampler;
 
-/// Sets up the logging based on whether you want verbose logging or not. If `verbose` is `false`
-/// then info, warning, and error messages will be printed. If `verbose` is `true` then debug
-/// messages will also be printed.
-///
-/// # Errors
-/// Will error if `fern` fails to apply the logging setup.
-fn setup_logger(verbose: bool) -> Result<(), fern::InitError> {
-    let colors = ColoredLevelConfig::new()
-        .warn(Color::Yellow)
-        .debug(Color::Magenta)
-        .error(Color::Red)
-        .trace(Color::Green);
-
-    let log_level = if verbose {
-        log::LevelFilter::Debug
-    } else {
-        log::LevelFilter::Info
-    };
-
-    fern::Dispatch::new()
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "{}[{}][{}] {}",
-                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                record.target(),
-                colors.color(record.level()),
-                message
-            ))
-        })
-        .level(log_level)
-        .chain(std::io::stderr())
-        .apply()?;
-    Ok(())
-}
-
 fn main() -> Result<()> {
     let args: Cli = Cli::parse();
-    setup_logger(args.verbose).context("Failed to setup the logger")?;
+    // Initialize logger
+    let log_lvl = if args.verbose {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+    let mut log_builder = Builder::new();
+    log_builder
+        .filter(None, log_lvl)
+        .format_module_path(false)
+        .format_target(false)
+        .init();
+
     debug!("{:?}", args);
 
     args.validate_input_output_combination()?;
