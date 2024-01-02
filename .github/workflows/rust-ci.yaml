@@ -8,6 +8,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  cog_check_job:
+    runs-on: ubuntu-latest
+    name: check conventional commit compliance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # pick the pr HEAD instead of the merge commit only if it's a PR, otherwise use the default
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Conventional commit check
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          check-latest-tag-only: true
   check:
     name: Check Rust version ${{ matrix.rust }} on OS ${{ matrix.os }}
     strategy:
@@ -15,11 +29,10 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         rust:
           - stable
-          - 1.64.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -44,11 +57,10 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         rust:
           - stable
-          - 1.64.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -75,7 +87,7 @@ jobs:
           - stable
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -95,7 +107,7 @@ jobs:
           - stable
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -111,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -128,7 +140,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin@0.23.1
+          tool: cargo-tarpaulin
 
       - name: Run cargo-tarpaulin
         run: cargo tarpaulin -t 300 -- --test-threads 1

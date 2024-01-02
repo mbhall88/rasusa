@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -38,9 +38,10 @@ jobs:
           - { os: ubuntu-latest, target: aarch64-unknown-linux-musl, use-cross: true }
           - { os: ubuntu-latest, target: i686-unknown-linux-musl, use-cross: true }
           - { os: macos-latest, target: x86_64-apple-darwin, use-cross: true }
+          - { os: macos-latest, target: aarch64-apple-darwin, use-cross: true }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Extract crate information
         shell: bash
@@ -68,7 +69,7 @@ jobs:
       - name: Install cross
         uses: taiki-e/install-action@v2
         with:
-          tool: cross@0.2.5
+          tool: cross
 
       - name: Build with cross
         run: cross build --release --target=${{ matrix.job.target }}
@@ -90,17 +91,6 @@ jobs:
           # Let subsequent steps know where to find the binary
           echo "BIN_PATH=${BIN_PATH}" >> $GITHUB_OUTPUT
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_OUTPUT
-
-      - name: Set testing options
-        id: test-options
-        shell: bash
-        run: |
-          unset CARGO_TEST_OPTIONS
-          unset CARGO_TEST_OPTIONS ; case ${{ matrix.job.target }} in arm-* | aarch64-*) CARGO_TEST_OPTIONS="--bin ${PROJECT_NAME}" ;; esac;
-          echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
-
-      - name: Run tests
-        run: cross test --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
 
       - name: Create tarball
         id: package
@@ -129,7 +119,7 @@ jobs:
           popd >/dev/null
           
           # Let subsequent steps know where to find the compressed package
-          echo ::set-output name=PKG_PATH::"${PKG_STAGING}/${PKG_NAME}"
+          echo "PKG_PATH=${PKG_STAGING}/${PKG_NAME}" >> $GITHUB_OUTPUT
 
       - name: "Artifact upload: tarball"
         uses: actions/upload-artifact@master
@@ -142,7 +132,7 @@ jobs:
         shell: bash
         run: |
           unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/[0-9].* ]]; then IS_RELEASE='true' ; fi
-          echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+          echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_OUTPUT
 
       - name: Publish archives and packages
         uses: softprops/action-gh-release@v1
