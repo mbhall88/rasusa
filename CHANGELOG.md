@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/mbhall88/rasusa/compare/0.7.1...0.8.0) (2024-01-03)
+
+
+### Features
+
+* add logging message with coverage of input before downsampling ([79445fc](https://github.com/mbhall88/rasusa/commit/79445fc8b40302ed197f8330e61a797b81a47db6))
+* support ztsd ([cfa50f8](https://github.com/mbhall88/rasusa/commit/cfa50f8aca00d6e2321ca45ea09579b95da25f7f))
+* use default compression level for compression output type ([cfa50f8](https://github.com/mbhall88/rasusa/commit/cfa50f8aca00d6e2321ca45ea09579b95da25f7f))
+
+
+### Bug Fixes
+
+* update logging so colour not sent to file ([bc62c3f](https://github.com/mbhall88/rasusa/commit/bc62c3fb4db2b9de903440a2d2a9ef9c7a06107f))
+
 ## [Unreleased]
 
 ## [0.7.1]
@@ -159,4 +173,3 @@ be 1070.
 [error-blog]: https://nick.groenen.me/posts/rust-error-handling/
 
 [unreleased]: https://github.com/mbhall88/rasusa/compare/0.7.0...HEAD
-
