@@ -1,11 +1,11 @@
-use assert_cmd::prelude::*;
+use assert_cmd::Command;
 // Add methods on commands
 use predicates::prelude::*;
-use std::process::Command; // Run programs // Used for writing assertions
 
+const BIN: &str = "rasusa";
 #[test]
 fn input_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec!["-i", "file/doesnt/exist.fa", "-g", "5mb", "-c", "20"]);
     cmd.assert()
         .failure()
@@ -16,7 +16,7 @@ fn input_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn output_file_in_nonexistant_dir() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/file1.fq.gz",
@@ -36,7 +36,7 @@ fn output_file_in_nonexistant_dir() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn valid_inputs_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/file1.fq.gz",
@@ -54,7 +54,7 @@ fn valid_inputs_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn input_and_output_filetypes_different_raises_no_errors() -> Result<(), Box<dyn std::error::Error>>
 {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/file1.fq.gz",
@@ -73,7 +73,7 @@ fn input_and_output_filetypes_different_raises_no_errors() -> Result<(), Box<dyn
 
 #[test]
 fn invalid_input_and_output_combination_raises_error() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/file1.fq.gz",
@@ -96,7 +96,7 @@ fn invalid_input_and_output_combination_raises_error() -> Result<(), Box<dyn std
 
 #[test]
 fn num_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec!["-i", "tests/cases/file1.fq.gz", "-n", "5m"]);
 
     cmd.assert().success();
@@ -106,7 +106,7 @@ fn num_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::e
 
 #[test]
 fn frac_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec!["-i", "tests/cases/file1.fq.gz", "-f", "0.2"]);
 
     cmd.assert().success();
@@ -116,7 +116,7 @@ fn frac_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::
 
 #[test]
 fn unequal_number_of_reads_raises_error() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/file1.fq.gz",
@@ -140,7 +140,7 @@ fn unequal_number_of_reads_raises_error() -> Result<(), Box<dyn std::error::Erro
 
 #[test]
 fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/r1.fq.gz",
@@ -151,7 +151,6 @@ fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>>
         "2",
         "-o",
         "/tmp/out.fq",
-        "-o",
         "/tmp/out2.fq",
     ]);
 
@@ -162,10 +161,11 @@ fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>>
 
 #[test]
 fn num_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/r1.fq.gz",
+        "-i",
         "tests/cases/r2.fq.gz",
         "-n",
         "1",
@@ -182,7 +182,7 @@ fn num_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn frac_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::main_binary()?;
+    let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         "-i",
         "tests/cases/r1.fq.gz",

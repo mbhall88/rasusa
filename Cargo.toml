@@ -16,19 +16,18 @@ license-file = "LICENSE"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-clap = { version = "3.2.8", features = ["derive"]}
-regex = "1.5.5"
+clap = { version = "4.4.12", features = ["derive"]}
+regex = "1.10.2"
 thiserror = "1.0"
 anyhow = "1.0"
 needletail = { version = "0.5.1", features = ["compression"] }
-rand = "0.7.2"
-rand_pcg = "0.2.1"
+rand = "0.8.5"
+rand_pcg = "0.3.1"
 log = "0.4"
-chrono = "0.4"
-niffler = "2.3"
+niffler = "2.5"
 env_logger = "0.10.1"
 
 [dev-dependencies]
-assert_cmd = "0.10"
-predicates = "1"
-tempfile = "3.1.0"
+assert_cmd = "2.0.12"
+predicates = "3.0.4"
+tempfile = "3.9.0"

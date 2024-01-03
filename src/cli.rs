@@ -19,8 +19,8 @@ pub struct Cli {
     #[clap(
         short = 'i',
         long = "input",
-        parse(try_from_os_str = check_path_exists),
-        multiple = true,
+        value_parser = check_path_exists,
+        num_args = 1..=2,
         required = true
     )]
     pub input: Vec<PathBuf>,
@@ -30,7 +30,7 @@ pub struct Cli {
     /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
     /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
     /// same as that given for --input. This option is required for paired input.
-    #[clap(short = 'o', long = "output", parse(from_os_str), multiple = true)]
+    #[clap(short = 'o', long = "output", num_args = 1..=2)]
     pub output: Vec<PathBuf>,
 
     /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
@@ -57,7 +57,7 @@ pub struct Cli {
         long,
         value_name = "FLOAT",
         required_unless_present_any = &["bases", "num", "frac"],
-        requires = "genome-size",
+        requires = "genome_size",
         conflicts_with_all = &["num", "frac"]
     )]
     pub coverage: Option<Coverage>,
@@ -94,11 +94,11 @@ pub struct Cli {
     /// Rasusa will attempt to infer the output compression format automatically from the filename
     /// extension. This option is used to override that. If writing to stdout, the default is
     /// uncompressed
-    #[clap(short = 'O', long, value_name = "u|b|g|l", parse(try_from_str = parse_compression_format), possible_values = &["u", "b", "g", "l"], case_insensitive=true, hide_possible_values = true)]
+    #[clap(short = 'O', long, value_name = "u|b|g|l", value_parser = parse_compression_format)]
     pub output_type: Option<niffler::compression::Format>,
 
     /// Compression level to use if compressing output
-    #[clap(short = 'l', long, parse(try_from_str = parse_level), default_value="6", value_name = "1-9")]
+    #[clap(short = 'l', long, value_parser = parse_level, default_value="6", value_name = "1-9")]
     pub compress_level: niffler::Level,
 }
 
@@ -596,10 +596,10 @@ mod tests {
     #[test]
     fn no_args_given_raises_error() {
         let passed_args = vec!["rasusa"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::MissingRequiredArgument;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::MissingRequiredArgument;
 
         assert_eq!(actual, expected)
     }
@@ -607,21 +607,22 @@ mod tests {
     #[test]
     fn no_input_file_given_raises_error() {
         let passed_args = vec!["rasusa", "-c", "30", "-g", "3mb"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::MissingRequiredArgument;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::MissingRequiredArgument;
 
         assert_eq!(actual, expected)
     }
 
     #[test]
     fn no_coverage_given_raises_error() {
-        let passed_args = vec!["rasusa", "-i", "in.fq", "-g", "3mb"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-g", "3mb"];
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::MissingRequiredArgument;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::MissingRequiredArgument;
 
         assert_eq!(actual, expected)
     }
@@ -629,21 +630,22 @@ mod tests {
     #[test]
     fn invalid_coverage_given_raises_error() {
         let passed_args = vec!["rasusa", "-i", "in.fq", "-g", "3mb", "-c", "foo"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ValueValidation;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ValueValidation;
 
         assert_eq!(actual, expected)
     }
 
     #[test]
     fn no_genome_size_given_raises_error() {
-        let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec!["rasusa", "-i", infile, "-c", "5"];
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::MissingRequiredArgument;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::MissingRequiredArgument;
 
         assert_eq!(actual, expected)
     }
@@ -653,10 +655,10 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-c", "7"];
 
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::MissingRequiredArgument;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::MissingRequiredArgument;
 
         assert_eq!(actual, expected)
     }
@@ -666,7 +668,7 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-c", "7", "-g", "5m"];
 
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         assert_eq!(args.bases.unwrap(), GenomeSize(5));
     }
@@ -676,7 +678,7 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-b", "5"];
 
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         assert_eq!(args.bases.unwrap(), GenomeSize(5));
     }
@@ -686,7 +688,7 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-n", "5"];
 
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         assert_eq!(args.num.unwrap(), GenomeSize(5));
     }
@@ -696,7 +698,7 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-f", "5"];
 
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         assert!((args.frac.unwrap() - 0.05_f32).abs() < ERROR);
     }
@@ -706,10 +708,10 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-n", "5", "-c", "7", "-g", "5m"];
 
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ArgumentConflict;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ArgumentConflict;
 
         assert_eq!(actual, expected)
     }
@@ -719,10 +721,10 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-f", "5", "-c", "7", "-g", "5m"];
 
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ArgumentConflict;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ArgumentConflict;
 
         assert_eq!(actual, expected)
     }
@@ -732,10 +734,10 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-f", "5", "-b", "7"];
 
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ArgumentConflict;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ArgumentConflict;
 
         assert_eq!(actual, expected)
     }
@@ -745,10 +747,10 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-f", "5", "-n", "7"];
 
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ArgumentConflict;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ArgumentConflict;
 
         assert_eq!(actual, expected)
     }
@@ -758,10 +760,10 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-b", "5", "-n", "7"];
 
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ArgumentConflict;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ArgumentConflict;
 
         assert_eq!(actual, expected)
     }
@@ -769,10 +771,10 @@ mod tests {
     #[test]
     fn invalid_genome_size_given_raises_error() {
         let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8jb"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ValueValidation;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ValueValidation;
 
         assert_eq!(actual, expected)
     }
@@ -782,7 +784,7 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let faidx = "tests/cases/h37rv.fa.fai";
         let passed_args = vec!["rasusa", "-i", infile, "-c", "5", "-g", faidx];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         assert_eq!(args.genome_size.unwrap(), GenomeSize(4411532))
     }
@@ -790,10 +792,10 @@ mod tests {
     #[test]
     fn invalid_seed_given_raises_error() {
         let passed_args = vec!["rasusa", "-i", "in.fq", "-c", "5", "-g", "8mb", "-s", "foo"];
-        let args: Result<Cli, clap::Error> = Cli::from_iter_safe(passed_args);
+        let args: Result<Cli, clap::Error> = Cli::try_parse_from(passed_args);
 
-        let actual = args.unwrap_err().kind;
-        let expected = clap::ErrorKind::ValueValidation;
+        let actual = args.unwrap_err().kind();
+        let expected = clap::error::ErrorKind::ValueValidation;
 
         assert_eq!(actual, expected)
     }
@@ -814,7 +816,7 @@ mod tests {
             "-o",
             "my/output/file.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         assert_eq!(args.input[0], PathBuf::from_str(infile).unwrap());
         assert_eq!(args.coverage.unwrap(), Coverage(5.0));
@@ -843,7 +845,7 @@ mod tests {
             "-o",
             "my/output/file.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let expected_input = vec![
             PathBuf::from_str(infile).unwrap(),
@@ -877,7 +879,7 @@ mod tests {
             "-o",
             "my/output/file.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let expected_input = vec![
             PathBuf::from_str(infile).unwrap(),
@@ -913,7 +915,7 @@ mod tests {
             "-o",
             "my/output/file.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let actual: CliError = args.validate_input_output_combination().unwrap_err();
         let expected =
@@ -944,7 +946,7 @@ mod tests {
             "-o",
             "out.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let actual: CliError = args.validate_input_output_combination().unwrap_err();
         let expected =
@@ -957,7 +959,7 @@ mod tests {
     fn one_input_no_output_is_ok() {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec!["rasusa", "-i", infile, "-c", "5", "-g", "8mb", "-s", "88"];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let actual = args.validate_input_output_combination();
 
@@ -971,7 +973,7 @@ mod tests {
             "rasusa", "-i", infile, "-i", infile, "-c", "5", "-g", "8mb", "-s", "88", "-o",
             "out.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let actual: CliError = args.validate_input_output_combination().unwrap_err();
         let expected =
@@ -987,7 +989,7 @@ mod tests {
             "rasusa", "-i", infile, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o",
             "out.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let actual: CliError = args.validate_input_output_combination().unwrap_err();
         let expected =
@@ -1003,7 +1005,7 @@ mod tests {
             "rasusa", "-i", infile, "-i", infile, "-c", "5", "-g", "8mb", "-s", "88", "-o",
             "out.fq", "-o", "out.fq",
         ];
-        let args = Cli::from_iter_safe(passed_args).unwrap();
+        let args = Cli::try_parse_from(passed_args).unwrap();
 
         let actual = args.validate_input_output_combination();
 
