@@ -5,6 +5,19 @@ pre_bump_hooks = [
     "cargo bump {{version}}",
 ]
 
+[commit_types]
+chore = { changelog_title = "Chores", omit_from_changelog = false }
+feat = { changelog_title = "Features", omit_from_changelog = false }
+fix = { changelog_title = "Bug Fixes", omit_from_changelog = false }
+perf = { changelog_title = "Performance Improvements", omit_from_changelog = false }
+refactor = { changelog_title = "Code Refactoring", omit_from_changelog = false }
+revert = { changelog_title = "Reverts", omit_from_changelog = false }
+style = { changelog_title = "Styles", omit_from_changelog = false }
+test = { changelog_title = "Tests", omit_from_changelog = false }
+ci = { changelog_title = "Continuous Integration", omit_from_changelog = false }
+build = { changelog_title = "Build System", omit_from_changelog = false }
+docs = { changelog_title = "Documentation", omit_from_changelog = false }
+
 [changelog]
 path = "CHANGELOG.md"
 template = "remote"
