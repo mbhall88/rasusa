@@ -253,6 +253,13 @@ impl From<GenomeSize> for u64 {
     }
 }
 
+// add method to convert to f64
+impl From<GenomeSize> for f64 {
+    fn from(g: GenomeSize) -> Self {
+        g.0 as f64
+    }
+}
+
 impl FromStr for GenomeSize {
     type Err = CliError;
 

@@ -99,6 +99,13 @@ fn main() -> Result<()> {
     }
     info!("{} reads detected", read_lengths.len());
 
+    // calculate the depth of coverage if using coverage-based subsampling
+    if args.genome_size.is_some() {
+        let number_of_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
+        let depth_of_covg = (number_of_bases as f64) / f64::from(args.genome_size.unwrap());
+        info!("Input coverage is {:.2}x", depth_of_covg);
+    }
+
     let num_reads = match (args.num, args.frac) {
         (Some(n), None) => Some(u64::from(n)),
         (None, Some(f)) => {
