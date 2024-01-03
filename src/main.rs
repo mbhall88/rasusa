@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use env_logger::Builder;
 use log::{debug, error, info, warn, LevelFilter};
+use niffler::compression;
 
 pub use crate::cli::Cli;
 use crate::cli::Coverage;
@@ -47,7 +48,16 @@ fn main() -> Result<()> {
     let mut output_handle = match args.output.len() {
         0 => match args.output_type {
             None => Box::new(stdout()),
-            Some(fmt) => niffler::basic::get_writer(Box::new(stdout()), fmt, args.compress_level)?,
+            Some(fmt) => {
+                let lvl = match fmt {
+                    compression::Format::Gzip => compression::Level::Six,
+                    compression::Format::Bzip => compression::Level::Nine,
+                    compression::Format::Lzma => compression::Level::Six,
+                    compression::Format::Zstd => compression::Level::Three,
+                    _ => compression::Level::Zero,
+                };
+                niffler::basic::get_writer(Box::new(stdout()), fmt, lvl)?
+            }
         },
         _ => {
             let out_fastx = Fastx::from_path(&args.output[0]);

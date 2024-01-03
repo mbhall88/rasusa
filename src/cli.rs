@@ -89,17 +89,18 @@ pub struct Cli {
     #[clap(short)]
     pub verbose: bool,
 
-    /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma
+    /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma; x: Xz (Lzma); z: Zstd
     ///
     /// Rasusa will attempt to infer the output compression format automatically from the filename
     /// extension. This option is used to override that. If writing to stdout, the default is
     /// uncompressed
-    #[clap(short = 'O', long, value_name = "u|b|g|l", value_parser = parse_compression_format)]
+    #[clap(short = 'O', long, value_name = "u|b|g|l|x|z", value_parser = parse_compression_format)]
     pub output_type: Option<niffler::compression::Format>,
 
-    /// Compression level to use if compressing output
-    #[clap(short = 'l', long, value_parser = parse_level, default_value="6", value_name = "1-9")]
-    pub compress_level: niffler::Level,
+    /// Compression level to use if compressing output. Uses the default level for the format if
+    /// not specified.
+    #[clap(short = 'l', long, value_parser = parse_level, value_name = "1-21")]
+    pub compress_level: Option<niffler::Level>,
 }
 
 impl Cli {
@@ -440,6 +441,8 @@ fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, Cli
         "b" | "B" => Ok(niffler::Format::Bzip),
         "g" | "G" => Ok(niffler::Format::Gzip),
         "l" | "L" => Ok(niffler::Format::Lzma),
+        "x" | "X" => Ok(niffler::Format::Xz),
+        "z" | "Z" => Ok(niffler::Format::Zstd),
         "u" | "U" => Ok(niffler::Format::No),
         _ => Err(CliError::InvalidCompression(s.to_string())),
     }
@@ -467,7 +470,19 @@ fn parse_level(s: &str) -> Result<niffler::Level, String> {
         Ok(7) => niffler::Level::Seven,
         Ok(8) => niffler::Level::Eight,
         Ok(9) => niffler::Level::Nine,
-        _ => return Err(format!("Compression level {} not in the range 1-9", s)),
+        Ok(10) => niffler::Level::Ten,
+        Ok(11) => niffler::Level::Eleven,
+        Ok(12) => niffler::Level::Twelve,
+        Ok(13) => niffler::Level::Thirteen,
+        Ok(14) => niffler::Level::Fourteen,
+        Ok(15) => niffler::Level::Fifteen,
+        Ok(16) => niffler::Level::Sixteen,
+        Ok(17) => niffler::Level::Seventeen,
+        Ok(18) => niffler::Level::Eighteen,
+        Ok(19) => niffler::Level::Nineteen,
+        Ok(20) => niffler::Level::Twenty,
+        Ok(21) => niffler::Level::TwentyOne,
+        _ => return Err(format!("Compression level {} not in the range 1-21", s)),
     };
     Ok(lvl)
 }
@@ -1312,7 +1327,7 @@ mod tests {
         assert!(parse_level("1").is_ok());
         assert!(parse_level("9").is_ok());
         assert!(parse_level("0").is_err());
-        assert!(parse_level("10").is_err());
+        assert!(parse_level("22").is_err());
         assert!(parse_level("f").is_err());
         assert!(parse_level("5.5").is_err());
         assert!(parse_level("-3").is_err());

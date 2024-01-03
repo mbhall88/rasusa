@@ -151,7 +151,7 @@ The above will use the latest version. If you want to specify a version then use
 [tag][quay.io] (or commit) like so.
 
 ```sh
-VERSION="0.7.1"
+VERSION="0.8.0"
 URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
 ```
 
@@ -299,7 +299,8 @@ It will override any format automatically detected from the output path.
 Valid options are:
 - `g`: [`gzip`][gzip]
 - `b`: [`bzip2`][bzip]
-- `l`: [`xz`][xz] LZMA algorithm
+- `l` or `x`: [`xz`][xz] LZMA algorithm
+- `z`: [`zstd`][zstd]
 - `u`: no compression
 
 *Note: these options are case insensitive.*
@@ -308,9 +309,7 @@ Valid options are:
 
 ##### `-l`, `--compress-level`
 
-Compression level to use if compressing the output. 1 is for fastest/least compression
-and 9 is for slowest/best. By default this is set to 6, which is also the default for
-most compression programs.
+Compression level to use if compressing the output. By default this is set to the default for the compression type being output.
 
 #### Target number of bases
 
@@ -368,107 +367,68 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 
 ```text
 $ rasusa --help
-
-rasusa 0.7.1
-Michael Hall <michael@mbh.sh>
 Randomly subsample reads to a specified coverage
 
-USAGE:
-    rasusa [OPTIONS] --input <INPUT>...
+Usage: rasusa [OPTIONS] --input <INPUT>...
 
-OPTIONS:
-    -b, --bases <bases>
-            Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
+Options:
+  -i, --input <INPUT>...
+          The fast{a,q} file(s) to subsample.
 
-            If this option is given, --coverage and --genome-size are ignored
+          For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two files consecutively `-i r1.fq r2.fq`.
 
-    -c, --coverage <FLOAT>
-            The desired coverage to sub-sample the reads to
+  -o, --output <OUTPUT>...
+          Output filepath(s); stdout if not present.
 
-            If --bases is not provided, this option and --genome-size are required
+          For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the same as that given for --input. This option is required for paired input.
 
-    -f, --frac <FLOAT>
-            Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
+  -g, --genome-size <size|faidx>
+          Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
-            Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
+          Alternatively, a FASTA/Q index file can be provided and the genome size will be set to the sum of all reference sequences.
 
-    -g, --genome-size <size|faidx>
-            Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
+          If --bases is not provided, this option and --coverage are required
 
-            Alternatively, a FASTA/Q index file can be provided and the genome size will be set to
-            the sum of all reference sequences.
+  -c, --coverage <FLOAT>
+          The desired coverage to sub-sample the reads to
 
-            If --bases is not provided, this option and --coverage are required
+          If --bases is not provided, this option and --genome-size are required
 
-    -h, --help
-            Print help information
+  -b, --bases <bases>
+          Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
-    -i, --input <INPUT>...
-            The fast{a,q} file(s) to subsample.
+          If this option is given, --coverage and --genome-size are ignored
 
-            For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
-            files consecutively `-i r1.fq r2.fq`.
+  -n, --num <INT>
+          Subsample to a specific number of reads
 
-    -l, --compress-level <1-9>
-            Compression level to use if compressing output
+          If paired-end reads are passed, this is the number of (matched) reads from EACH file. This option accepts the same format as genome size - e.g., 1k will take 1000 reads
 
-            [default: 6]
+  -f, --frac <FLOAT>
+          Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
 
-    -n, --num <INT>
-            Subsample to a specific number of reads
+          Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
 
-            If paired-end reads are passed, this is the number of (matched) reads from EACH file.
-            This option accepts the same format as genome size - e.g., 1k will take 1000 reads
+  -s, --seed <INT>
+          Random seed to use
 
-    -o, --output <OUTPUT>...
-            Output filepath(s); stdout if not present.
+  -v
+          Switch on verbosity
 
-            For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
-            files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
-            same as that given for --input. This option is required for paired input.
+  -O, --output-type <u|b|g|l|x|z>
+          u: uncompressed; b: Bzip2; g: Gzip; l: Lzma; x: Xz (Lzma); z: Zstd
 
-    -O, --output-type <u|b|g|l>
-            u: uncompressed; b: Bzip2; g: Gzip; l: Lzma
+          Rasusa will attempt to infer the output compression format automatically from the filename extension. This option is used to override that. If writing to stdout, the default is uncompressed
 
-            Rasusa will attempt to infer the output compression format automatically from the
-            filename extension. This option is used to override that. If writing to stdout, the
-            default is uncompressed
+  -l, --compress-level <1-21>
+          Compression level to use if compressing output. Uses the default level for the format if not specified
 
-    -s, --seed <INT>
-            Random seed to use
+  -h, --help
+          Print help (see a summary with '-h')
 
-    -v
-            Switch on verbosity
-
-    -V, --version
-            Print version information
+  -V, --version
+          Print version
 ```
-
-### Snakemake
-
-If you want to use `rasusa` in a [`snakemake`][snakemake] pipeline, it is advised to use
-the [wrapper][wrapper].
-
-```py
-rule subsample:
-    input:
-        r1="{sample}.r1.fq",
-        r2="{sample}.r2.fq",
-    output:
-        r1="{sample}.subsampled.r1.fq",
-        r2="{sample}.subsampled.r2.fq",
-    params:
-        options="--seed 15",  # optional
-        genome_size="3mb",  # required
-        coverage=20,  # required
-    log:
-        "logs/subsample/{sample}.log",
-    wrapper:
-        "0.70.0/bio/rasusa"
-```
-
-*See the [latest wrapper][wrapper] documentation for the most up-to-date version
-number.*
 
 ## Benchmark
 
@@ -620,5 +580,5 @@ cite it.
 [snakemake]: https://snakemake.readthedocs.io/en/stable/
 [triples]: https://clang.llvm.org/docs/CrossCompilation.html#target-triple
 [wrapper]: https://snakemake-wrappers.readthedocs.io/en/stable/wrappers/rasusa.html
-
+[zstd]: https://github.com/facebook/zstd
 
