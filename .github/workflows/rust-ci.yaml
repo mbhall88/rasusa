@@ -67,6 +67,8 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
+      - uses: taiki-e/install-action@just
+
       - uses: actions/cache@v3
         with:
           path: |
@@ -76,7 +78,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run cargo test
-        run: cargo test -v --all-targets --no-fail-fast
+        run: just test
 
   fmt:
     name: Rustfmt
@@ -115,8 +117,10 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: clippy
 
+      - uses: taiki-e/install-action@just
+
       - name: Run cargo clippy
-        run: cargo clippy --all-features --all-targets -- -D warnings
+        run: just lint
 
   coverage:
     name: Coverage
@@ -140,10 +144,10 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin
+          tool: cargo-tarpaulin,just
 
       - name: Run cargo-tarpaulin
-        run: cargo tarpaulin -t 300 -- --test-threads 1
+        run: just coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
