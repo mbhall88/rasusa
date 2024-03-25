@@ -6,7 +6,7 @@
 [![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
 
-**Ra**ndomly **su**b**sa**mple sequencing reads to a specified coverage.
+**Ra**ndomly **su**b**sa**mple sequencing reads.
 
 > Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
 
