@@ -2,25 +2,21 @@
 
 extern crate core;
 
-// due to a structopt problem
-use std::io::stdout;
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use env_logger::Builder;
-use log::{debug, error, info, warn, LevelFilter};
-use niffler::compression;
+use log::{debug, LevelFilter};
 
 pub use crate::cli::Cli;
-use crate::cli::{Commands, Coverage};
+use crate::cli::Commands;
 pub use crate::fastx::Fastx;
 pub use crate::subsampler::SubSampler;
 
+mod alignment;
 mod cli;
 mod fastx;
-mod subsampler;
 mod reads;
-mod alignment;
+mod subsampler;
 
 pub trait Runner {
     fn run(&mut self) -> Result<()>;

@@ -1,25 +1,26 @@
-use std::io::stdout;
-use std::path::PathBuf;
+use crate::cli::{
+    check_path_exists, parse_compression_format, parse_fraction, parse_level, CliError, Coverage,
+    GenomeSize,
+};
+use crate::{Fastx, Runner, SubSampler};
+use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, error, info, warn};
 use niffler::compression;
-use crate::cli::{Coverage, GenomeSize, check_path_exists, parse_fraction, parse_compression_format, parse_level, CliError};
-use crate::{Cli, Fastx, Runner, SubSampler};
-use anyhow::{anyhow, Context, Result};
+use std::io::stdout;
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 pub struct Reads {
     /// The fast{a,q} file(s) to subsample.
     ///
-    /// For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
-    /// files consecutively `-i r1.fq r2.fq`.
-    #[clap(
-    short = 'i',
-    long = "input",
+    /// For paired Illumina, the order matters. i.e., R1 then R2.
+    #[arg(
     value_parser = check_path_exists,
     num_args = 1..=2,
-    required = true
+    required = true,
+    name = "FILE(S)"
     )]
     pub input: Vec<PathBuf>,
 
@@ -27,7 +28,7 @@ pub struct Reads {
     ///
     /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
     /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
-    /// same as that given for --input. This option is required for paired input.
+    /// same as the input - e.g., R1 then R2. This option is required for paired input.
     #[clap(short = 'o', long = "output", num_args = 1..=2)]
     pub output: Vec<PathBuf>,
 
@@ -135,7 +136,6 @@ impl Reads {
 
 impl Runner for Reads {
     fn run(&mut self) -> Result<()> {
-
         self.validate_input_output_combination()?;
         let is_paired = self.input.len() == 2;
         if is_paired {
@@ -174,9 +174,9 @@ impl Runner for Reads {
 
         if target_total_bases.is_some() {
             info!(
-            "Target number of bases to subsample to is: {}",
-            target_total_bases.unwrap()
-        );
+                "Target number of bases to subsample to is: {}",
+                target_total_bases.unwrap()
+            );
         }
 
         info!("Gathering read lengths...");
@@ -197,9 +197,9 @@ impl Runner for Reads {
                 std::process::exit(1);
             } else {
                 info!(
-                "Both input files have the same number of reads ({}) 👍",
-                expected_num_reads
-            );
+                    "Both input files have the same number of reads ({}) 👍",
+                    expected_num_reads
+                );
             }
             // add the paired read lengths to the existing lengths
             for (i, len) in mate_lengths.iter().enumerate() {
@@ -221,10 +221,10 @@ impl Runner for Reads {
                 let n = ((f as f64) * (read_lengths.len() as f64)).round() as u64;
                 if n == 0 {
                     warn!(
-                    "Requested fraction of reads ({} * {}) was rounded to 0",
-                    f,
-                    read_lengths.len()
-                );
+                        "Requested fraction of reads ({} * {}) was rounded to 0",
+                        f,
+                        read_lengths.len()
+                    );
                 }
                 Some(n)
             }
@@ -246,7 +246,8 @@ impl Runner for Reads {
         debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
         let mut total_kept_bases =
-            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle)? as u64;
+            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle)?
+                as u64;
 
         // repeat the same process for the second input fastx (if illumina)
         if is_paired {
@@ -282,5 +283,302 @@ impl Runner for Reads {
 
         info!("Done 🎉");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_cmd::Command;
+
+    const SUB: &str = "reads";
+
+    #[test]
+    fn no_args_given_raises_error() {
+        let passed_args = vec![SUB];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn no_input_file_given_raises_error() {
+        let passed_args = vec![SUB, "-c", "30", "-g", "3mb"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn no_coverage_given_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-g", "3mb"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn invalid_coverage_given_raises_error() {
+        let passed_args = vec![SUB, "in.fq", "-g", "3mb", "-c", "foo"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn no_genome_size_given_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-c", "5"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn no_genome_size_but_bases_and_coverage() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-b", "5", "-c", "7"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn bases_and_coverage_and_genome_size_all_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-b", "5", "-c", "7", "-g", "5m"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn no_genome_size_or_coverage_given_but_bases_given() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-b", "5"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn no_genome_size_or_coverage_given_but_num_given() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-n", "5"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn no_genome_size_or_coverage_given_but_frac_given() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-f", "5"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn num_and_coverage_and_genome_size_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-n", "5", "-c", "7", "-g", "5m"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn frac_and_coverage_and_genome_size_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-f", "5", "-c", "7", "-g", "5m"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn frac_and_bases_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-f", "5", "-b", "7"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn frac_and_num_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-f", "5", "-n", "7"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn bases_and_num_not_allowed() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-b", "5", "-n", "7"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn invalid_genome_size_given_raises_error() {
+        let passed_args = vec![SUB, "in.fq", "-c", "5", "-g", "8jb"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn faidx_given_as_genome_size() {
+        let infile = "tests/cases/r1.fq.gz";
+        let faidx = "tests/cases/h37rv.fa.fai";
+        let passed_args = vec![SUB, infile, "-c", "5", "-g", faidx];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn invalid_seed_given_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-c", "5", "-g", "8mb", "-s", "foo"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn all_valid_args_parsed_as_expected() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB,
+            infile,
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "/dev/null",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn all_valid_args_with_two_inputs_parsed_as_expected() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB,
+            infile,
+            infile,
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "/dev/null",
+            "/dev/null",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn three_inputs_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB,
+            infile,
+            infile,
+            infile,
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn three_outputs_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB,
+            infile,
+            infile,
+            "-c",
+            "5",
+            "-g",
+            "8mb",
+            "-s",
+            "88",
+            "-o",
+            "my/output/file.fq",
+            "-o",
+            "out.fq",
+            "-o",
+            "out.fq",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn one_input_no_output_is_ok() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![SUB, infile, "-c", "5", "-g", "8mb", "-s", "88"];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn two_inputs_one_output_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB, infile, infile, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn one_input_two_outputs_raises_error() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB, infile, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o", "out.fq",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn two_input_two_outputs_is_ok() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB, infile, infile, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o", "out.fq",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
     }
 }

@@ -1,11 +1,9 @@
-use std::io::stdout;
-use std::path::PathBuf;
+use crate::cli::{check_path_exists, Coverage};
+use crate::Runner;
+use anyhow::Result;
 use clap::Parser;
-use log::{debug, error, info, warn};
-use niffler::compression;
-use crate::cli::{Coverage, GenomeSize, check_path_exists, parse_fraction, parse_compression_format, parse_level, CliError};
-use crate::{Cli, Fastx, Runner, SubSampler};
-use anyhow::{anyhow, Context, Result};
+use log::info;
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -15,11 +13,7 @@ pub struct Alignment {
     pub aln: PathBuf,
 
     /// The desired depth of coverage to subsample the reads to
-    #[clap(
-    short,
-    long,
-    value_name = "FLOAT",
-    )]
+    #[clap(short, long, value_name = "FLOAT")]
     pub coverage: Option<Coverage>,
 }
 
