@@ -3,10 +3,11 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 const BIN: &str = "rasusa";
+const READS: &str = "reads";
 #[test]
 fn input_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec!["-i", "file/doesnt/exist.fa", "-g", "5mb", "-c", "20"]);
+    cmd.args(vec![READS, "file/doesnt/exist.fa", "-g", "5mb", "-c", "20"]);
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("does not exist"));
@@ -18,7 +19,7 @@ fn input_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
 fn output_file_in_nonexistant_dir() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/file1.fq.gz",
         "-g",
         "5mb",
@@ -38,7 +39,7 @@ fn output_file_in_nonexistant_dir() -> Result<(), Box<dyn std::error::Error>> {
 fn valid_inputs_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/file1.fq.gz",
         "-g",
         "5mb",
@@ -56,7 +57,7 @@ fn input_and_output_filetypes_different_raises_no_errors() -> Result<(), Box<dyn
 {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/file1.fq.gz",
         "-g",
         "5mb",
@@ -75,7 +76,7 @@ fn input_and_output_filetypes_different_raises_no_errors() -> Result<(), Box<dyn
 fn invalid_input_and_output_combination_raises_error() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/file1.fq.gz",
         "-g",
         "5mb",
@@ -97,7 +98,7 @@ fn invalid_input_and_output_combination_raises_error() -> Result<(), Box<dyn std
 #[test]
 fn num_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec!["-i", "tests/cases/file1.fq.gz", "-n", "5m"]);
+    cmd.args(vec![READS, "tests/cases/file1.fq.gz", "-n", "5m"]);
 
     cmd.assert().success();
 
@@ -107,7 +108,7 @@ fn num_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::e
 #[test]
 fn frac_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec!["-i", "tests/cases/file1.fq.gz", "-f", "0.2"]);
+    cmd.args(vec![READS, "tests/cases/file1.fq.gz", "-f", "0.2"]);
 
     cmd.assert().success();
 
@@ -118,7 +119,7 @@ fn frac_instead_of_coverage_based_raises_no_errors() -> Result<(), Box<dyn std::
 fn unequal_number_of_reads_raises_error() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/file1.fq.gz",
         "tests/cases/r2.fq.gz",
         "-g",
@@ -142,7 +143,7 @@ fn unequal_number_of_reads_raises_error() -> Result<(), Box<dyn std::error::Erro
 fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/r1.fq.gz",
         "tests/cases/r2.fq.gz",
         "-g",
@@ -163,9 +164,8 @@ fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>>
 fn num_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/r1.fq.gz",
-        "-i",
         "tests/cases/r2.fq.gz",
         "-n",
         "1",
@@ -184,7 +184,7 @@ fn num_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
 fn frac_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
-        "-i",
+        READS,
         "tests/cases/r1.fq.gz",
         "tests/cases/r2.fq.gz",
         "-f",
