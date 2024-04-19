@@ -1,0 +1,286 @@
+use std::io::stdout;
+use std::path::PathBuf;
+use clap::Parser;
+use log::{debug, error, info, warn};
+use niffler::compression;
+use crate::cli::{Coverage, GenomeSize, check_path_exists, parse_fraction, parse_compression_format, parse_level, CliError};
+use crate::{Cli, Fastx, Runner, SubSampler};
+use anyhow::{anyhow, Context, Result};
+
+#[derive(Debug, Parser)]
+#[command(author, version, about)]
+pub struct Reads {
+    /// The fast{a,q} file(s) to subsample.
+    ///
+    /// For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
+    /// files consecutively `-i r1.fq r2.fq`.
+    #[clap(
+    short = 'i',
+    long = "input",
+    value_parser = check_path_exists,
+    num_args = 1..=2,
+    required = true
+    )]
+    pub input: Vec<PathBuf>,
+
+    /// Output filepath(s); stdout if not present.
+    ///
+    /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
+    /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
+    /// same as that given for --input. This option is required for paired input.
+    #[clap(short = 'o', long = "output", num_args = 1..=2)]
+    pub output: Vec<PathBuf>,
+
+    /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
+    ///
+    /// Alternatively, a FASTA/Q index file can be provided and the genome size will be
+    /// set to the sum of all reference sequences.
+    ///
+    /// If --bases is not provided, this option and --coverage are required
+    #[clap(
+    short,
+    long,
+    required_unless_present_any = &["bases", "num", "frac"],
+    requires = "coverage",
+    value_name = "size|faidx",
+    conflicts_with_all = &["num", "frac"]
+    )]
+    pub genome_size: Option<GenomeSize>,
+
+    /// The desired depth of coverage to subsample the reads to
+    ///
+    /// If --bases is not provided, this option and --genome-size are required
+    #[clap(
+    short,
+    long,
+    value_name = "FLOAT",
+    required_unless_present_any = &["bases", "num", "frac"],
+    requires = "genome_size",
+    conflicts_with_all = &["num", "frac"]
+    )]
+    pub coverage: Option<Coverage>,
+
+    /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
+    ///
+    /// If this option is given, --coverage and --genome-size are ignored
+    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac"])]
+    pub bases: Option<GenomeSize>,
+
+    /// Subsample to a specific number of reads
+    ///
+    /// If paired-end reads are passed, this is the number of (matched) reads from EACH file.
+    /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
+    #[clap(short, long, value_name = "INT", conflicts_with = "frac")]
+    pub num: Option<GenomeSize>,
+
+    /// Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
+    ///
+    /// Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
+    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
+    pub frac: Option<f32>,
+
+    /// Random seed to use.
+    #[clap(short = 's', long = "seed", value_name = "INT")]
+    pub seed: Option<u64>,
+
+    /// Switch on verbosity.
+    #[clap(short)]
+    pub verbose: bool,
+
+    /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma; x: Xz (Lzma); z: Zstd
+    ///
+    /// Rasusa will attempt to infer the output compression format automatically from the filename
+    /// extension. This option is used to override that. If writing to stdout, the default is
+    /// uncompressed
+    #[clap(short = 'O', long, value_name = "u|b|g|l|x|z", value_parser = parse_compression_format)]
+    pub output_type: Option<niffler::compression::Format>,
+
+    /// Compression level to use if compressing output. Uses the default level for the format if
+    /// not specified.
+    #[clap(short = 'l', long, value_parser = parse_level, value_name = "1-21")]
+    pub compress_level: Option<niffler::Level>,
+}
+
+impl Reads {
+    /// Checks there is a valid and equal number of `--input` and `--output` arguments given.
+    ///
+    /// # Errors
+    /// A [`CliError::BadInputOutputCombination`](#clierror) is returned for the following:
+    /// - Either `--input` or `--output` are passed more than twice
+    /// - An unequal number of `--input` and `--output` are passed. The only exception to
+    /// this is if one `--input` and zero `--output` are passed, in which case, the output
+    /// will be sent to STDOUT.
+    pub fn validate_input_output_combination(&self) -> std::result::Result<(), CliError> {
+        let out_len = self.output.len();
+        let in_len = self.input.len();
+
+        if in_len > 2 {
+            let msg = String::from("Got more than 2 files for input.");
+            return Err(CliError::BadInputOutputCombination(msg));
+        }
+        if out_len > 2 {
+            let msg = String::from("Got more than 2 files for output.");
+            return Err(CliError::BadInputOutputCombination(msg));
+        }
+        match in_len as isize - out_len as isize {
+            diff if diff == 1 && in_len == 1 => Ok(()),
+            diff if diff != 0 => Err(CliError::BadInputOutputCombination(format!(
+                "Got {} --input but {} --output",
+                in_len, out_len
+            ))),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl Runner for Reads {
+    fn run(&mut self) -> Result<()> {
+
+        self.validate_input_output_combination()?;
+        let is_paired = self.input.len() == 2;
+        if is_paired {
+            info!("Two input files given. Assuming paired Illumina...")
+        }
+
+        let input_fastx = Fastx::from_path(&self.input[0]);
+
+        let mut output_handle = match self.output.len() {
+            0 => match self.output_type {
+                None => Box::new(stdout()),
+                Some(fmt) => {
+                    let lvl = match fmt {
+                        compression::Format::Gzip => compression::Level::Six,
+                        compression::Format::Bzip => compression::Level::Nine,
+                        compression::Format::Lzma => compression::Level::Six,
+                        compression::Format::Zstd => compression::Level::Three,
+                        _ => compression::Level::Zero,
+                    };
+                    niffler::basic::get_writer(Box::new(stdout()), fmt, lvl)?
+                }
+            },
+            _ => {
+                let out_fastx = Fastx::from_path(&self.output[0]);
+                out_fastx
+                    .create(self.compress_level, self.output_type)
+                    .context("unable to create the first output file")?
+            }
+        };
+
+        let target_total_bases: Option<u64> = match (self.genome_size, self.coverage, self.bases) {
+            (_, _, Some(bases)) => Some(u64::from(bases)),
+            (Some(gsize), Some(cov), _) => Some(gsize * cov),
+            _ => None,
+        };
+
+        if target_total_bases.is_some() {
+            info!(
+            "Target number of bases to subsample to is: {}",
+            target_total_bases.unwrap()
+        );
+        }
+
+        info!("Gathering read lengths...");
+        let mut read_lengths = input_fastx
+            .read_lengths()
+            .context("unable to gather read lengths for the first input file")?;
+
+        if is_paired {
+            let second_input_fastx = Fastx::from_path(&self.input[1]);
+            let expected_num_reads = read_lengths.len();
+            info!("Gathering read lengths for second input file...");
+            let mate_lengths = second_input_fastx
+                .read_lengths()
+                .context("unable to gather read lengths for the second input file")?;
+
+            if mate_lengths.len() != expected_num_reads {
+                error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len());
+                std::process::exit(1);
+            } else {
+                info!(
+                "Both input files have the same number of reads ({}) 👍",
+                expected_num_reads
+            );
+            }
+            // add the paired read lengths to the existing lengths
+            for (i, len) in mate_lengths.iter().enumerate() {
+                read_lengths[i] += len;
+            }
+        }
+        info!("{} reads detected", read_lengths.len());
+
+        // calculate the depth of coverage if using coverage-based subsampling
+        if self.genome_size.is_some() {
+            let number_of_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
+            let depth_of_covg = (number_of_bases as f64) / f64::from(self.genome_size.unwrap());
+            info!("Input coverage is {:.2}x", depth_of_covg);
+        }
+
+        let num_reads = match (self.num, self.frac) {
+            (Some(n), None) => Some(u64::from(n)),
+            (None, Some(f)) => {
+                let n = ((f as f64) * (read_lengths.len() as f64)).round() as u64;
+                if n == 0 {
+                    warn!(
+                    "Requested fraction of reads ({} * {}) was rounded to 0",
+                    f,
+                    read_lengths.len()
+                );
+                }
+                Some(n)
+            }
+            _ => None,
+        };
+
+        let subsampler = SubSampler {
+            target_total_bases,
+            seed: self.seed,
+            num_reads,
+        };
+
+        let (reads_to_keep, nb_reads_to_keep) = subsampler.indices(&read_lengths);
+        if is_paired {
+            info!("Keeping {} reads from each input", nb_reads_to_keep);
+        } else {
+            info!("Keeping {} reads", nb_reads_to_keep);
+        }
+        debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
+
+        let mut total_kept_bases =
+            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle)? as u64;
+
+        // repeat the same process for the second input fastx (if illumina)
+        if is_paired {
+            let second_input_fastx = Fastx::from_path(&self.input[1]);
+            let second_out_fastx = Fastx::from_path(&self.output[1]);
+            let mut second_output_handle = second_out_fastx
+                .create(self.compress_level, self.output_type)
+                .context("unable to create the second output file")?;
+
+            total_kept_bases += second_input_fastx.filter_reads_into(
+                &reads_to_keep,
+                nb_reads_to_keep,
+                &mut second_output_handle,
+            )? as u64;
+        }
+
+        if let Some(gsize) = self.genome_size {
+            let actual_covg = total_kept_bases / gsize;
+            // safe to unwrap self.coverage as we have already ensured genome size and coverage co-occur
+            if Coverage(actual_covg as f32) < self.coverage.unwrap() {
+                warn!(
+                "Requested coverage ({:.2}x) is not possible as the actual coverage is {:.2}x - \
+                output will be the same as the input",
+                self.coverage.unwrap().0,
+                actual_covg
+            );
+            } else {
+                info!("Actual coverage of kept reads is {:.2}x", actual_covg);
+            }
+        } else {
+            info!("Kept {} bases", total_kept_bases);
+        }
+
+        info!("Done 🎉");
+        Ok(())
+    }
+}

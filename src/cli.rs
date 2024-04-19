@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Subcommand, Parser};
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -7,133 +7,32 @@ use std::ops::{Div, Mul};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
+use crate::alignment::Alignment;
+use crate::reads::Reads;
 
 /// Randomly subsample reads to a specified coverage.
 #[derive(Debug, Parser)]
-#[clap(author, version, about)]
+#[command(author, version, about)]
+#[command(propagate_version = true)]
 pub struct Cli {
-    /// The fast{a,q} file(s) to subsample.
-    ///
-    /// For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two
-    /// files consecutively `-i r1.fq r2.fq`.
-    #[clap(
-        short = 'i',
-        long = "input",
-        value_parser = check_path_exists,
-        num_args = 1..=2,
-        required = true
-    )]
-    pub input: Vec<PathBuf>,
-
-    /// Output filepath(s); stdout if not present.
-    ///
-    /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
-    /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
-    /// same as that given for --input. This option is required for paired input.
-    #[clap(short = 'o', long = "output", num_args = 1..=2)]
-    pub output: Vec<PathBuf>,
-
-    /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
-    ///
-    /// Alternatively, a FASTA/Q index file can be provided and the genome size will be
-    /// set to the sum of all reference sequences.
-    ///
-    /// If --bases is not provided, this option and --coverage are required
-    #[clap(
-        short,
-        long,
-        required_unless_present_any = &["bases", "num", "frac"],
-        requires = "coverage",
-        value_name = "size|faidx",
-        conflicts_with_all = &["num", "frac"]
-    )]
-    pub genome_size: Option<GenomeSize>,
-
-    /// The desired coverage to sub-sample the reads to
-    ///
-    /// If --bases is not provided, this option and --genome-size are required
-    #[clap(
-        short,
-        long,
-        value_name = "FLOAT",
-        required_unless_present_any = &["bases", "num", "frac"],
-        requires = "genome_size",
-        conflicts_with_all = &["num", "frac"]
-    )]
-    pub coverage: Option<Coverage>,
-
-    /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
-    ///
-    /// If this option is given, --coverage and --genome-size are ignored
-    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac"])]
-    pub bases: Option<GenomeSize>,
-
-    /// Subsample to a specific number of reads
-    ///
-    /// If paired-end reads are passed, this is the number of (matched) reads from EACH file.
-    /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
-    #[clap(short, long, value_name = "INT", conflicts_with = "frac")]
-    pub num: Option<GenomeSize>,
-
-    /// Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
-    ///
-    /// Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
-    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
-    pub frac: Option<f32>,
-
-    /// Random seed to use.
-    #[clap(short = 's', long = "seed", value_name = "INT")]
-    pub seed: Option<u64>,
-
     /// Switch on verbosity.
     #[clap(short)]
     pub verbose: bool,
 
-    /// u: uncompressed; b: Bzip2; g: Gzip; l: Lzma; x: Xz (Lzma); z: Zstd
-    ///
-    /// Rasusa will attempt to infer the output compression format automatically from the filename
-    /// extension. This option is used to override that. If writing to stdout, the default is
-    /// uncompressed
-    #[clap(short = 'O', long, value_name = "u|b|g|l|x|z", value_parser = parse_compression_format)]
-    pub output_type: Option<niffler::compression::Format>,
-
-    /// Compression level to use if compressing output. Uses the default level for the format if
-    /// not specified.
-    #[clap(short = 'l', long, value_parser = parse_level, value_name = "1-21")]
-    pub compress_level: Option<niffler::Level>,
+    #[command(subcommand)]
+    pub(crate) command: Commands,
 }
 
-impl Cli {
-    /// Checks there is a valid and equal number of `--input` and `--output` arguments given.
-    ///
-    /// # Errors
-    /// A [`CliError::BadInputOutputCombination`](#clierror) is returned for the following:
-    /// - Either `--input` or `--output` are passed more than twice
-    /// - An unequal number of `--input` and `--output` are passed. The only exception to
-    /// this is if one `--input` and zero `--output` are passed, in which case, the output
-    /// will be sent to STDOUT.
-    pub fn validate_input_output_combination(&self) -> Result<(), CliError> {
-        let out_len = self.output.len();
-        let in_len = self.input.len();
-
-        if in_len > 2 {
-            let msg = String::from("Got more than 2 files for input.");
-            return Err(CliError::BadInputOutputCombination(msg));
-        }
-        if out_len > 2 {
-            let msg = String::from("Got more than 2 files for output.");
-            return Err(CliError::BadInputOutputCombination(msg));
-        }
-        match in_len as isize - out_len as isize {
-            diff if diff == 1 && in_len == 1 => Ok(()),
-            diff if diff != 0 => Err(CliError::BadInputOutputCombination(format!(
-                "Got {} --input but {} --output",
-                in_len, out_len
-            ))),
-            _ => Ok(()),
-        }
-    }
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// Randomly subsample reads to a specified depth of coverage.
+    Reads(Reads),
+    /// Randomly subsample alignment to a specified depth of coverage.
+    #[command(name="aln")]
+    Alignment(Alignment),
 }
+
+
 
 /// A collection of custom errors relating to the command line interface for this package.
 #[derive(Error, Debug, PartialEq)]
@@ -436,7 +335,7 @@ impl CompressionExt for niffler::compression::Format {
     }
 }
 
-fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, CliError> {
+pub(crate) fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, CliError> {
     match s {
         "b" | "B" => Ok(niffler::Format::Bzip),
         "g" | "G" => Ok(niffler::Format::Gzip),
@@ -448,7 +347,7 @@ fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, Cli
     }
 }
 /// A utility function that allows the CLI to error if a path doesn't exist
-fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, String> {
+pub(crate) fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
     if path.exists() {
         Ok(path)
@@ -459,7 +358,7 @@ fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathBuf, String>
 
 /// A utility function to validate compression level is in allowed range
 #[allow(clippy::redundant_clone)]
-fn parse_level(s: &str) -> Result<niffler::Level, String> {
+pub(crate) fn parse_level(s: &str) -> Result<niffler::Level, String> {
     let lvl = match s.parse::<u8>() {
         Ok(1) => niffler::Level::One,
         Ok(2) => niffler::Level::Two,
@@ -488,7 +387,7 @@ fn parse_level(s: &str) -> Result<niffler::Level, String> {
 }
 
 /// A utility function to parse the fraction CLI option to the range 0-1
-fn parse_fraction(s: &str) -> Result<f32, CliError> {
+pub(crate) fn parse_fraction(s: &str) -> Result<f32, CliError> {
     let f = f32::from_str(s).map_err(|_| CliError::FractionOutOfRange(s.to_string()))?;
     if !(0.0..=100.0).contains(&f) {
         return Err(CliError::FractionOutOfRange(s.to_string()));
