@@ -42,6 +42,7 @@ fn main() -> Result<()> {
     let mut subcmd: Box<dyn Runner> = match args.command {
         Commands::Reads(cmd) => Box::new(cmd),
         Commands::Alignment(cmd) => Box::new(cmd),
+        Commands::Cite(cmd) => Box::new(cmd),
     };
 
     subcmd.run()?;

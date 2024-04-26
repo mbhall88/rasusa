@@ -1,5 +1,6 @@
 use crate::alignment::Alignment;
 use crate::reads::Reads;
+use crate::Runner;
 use clap::{Parser, Subcommand};
 use regex::Regex;
 use std::ffi::OsStr;
@@ -9,6 +10,19 @@ use std::ops::{Div, Mul};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
+
+const CITATION: &str = r#"@article{Hall2022,
+  doi = {10.21105/joss.03941},
+  url = {https://doi.org/10.21105/joss.03941},
+  year = {2022},
+  publisher = {The Open Journal},
+  volume = {7},
+  number = {69},
+  pages = {3941},
+  author = {Michael B. Hall},
+  title = {Rasusa: Randomly subsample sequencing reads to a specified coverage},
+  journal = {Journal of Open Source Software}
+}"#;
 
 /// Randomly subsample reads or alignments
 #[derive(Debug, Parser)]
@@ -30,6 +44,8 @@ pub enum Commands {
     /// Randomly subsample alignments to a specified depth of coverage
     #[command(name = "aln")]
     Alignment(Alignment),
+    /// Get a bibtex formatted citation for this package.
+    Cite(Cite),
 }
 
 /// A collection of custom errors relating to the command line interface for this package.
@@ -62,6 +78,17 @@ pub enum CliError {
     /// Faidx IO error
     #[error("Failed to open/parse faidx file {0}")]
     FaidxError(String),
+}
+
+#[derive(Debug, Parser)]
+#[command(author, version, about)]
+pub struct Cite {}
+
+impl Runner for Cite {
+    fn run(&mut self) -> anyhow::Result<()> {
+        println!("{}", CITATION);
+        Ok(())
+    }
 }
 
 /// A metric suffix is a unit suffix used to indicate the multiples of (in this case) base pairs.
