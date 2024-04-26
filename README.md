@@ -6,36 +6,39 @@
 [![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
 
-**Ra**ndomly **su**b**sa**mple sequencing reads.
+**Ra**ndomly **su**b**sa**mple sequencing reads or alignments.
 
-> Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
+> Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source
+> Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
 
 [TOC]: #
+
 ## Table of Contents
+
 - [Motivation](#motivation)
 - [Install](#install)
-  - [`cargo`](#cargo)
-  - [`conda`](#conda)
-  - [Container](#container)
-  - [`homebrew`](#homebrew)
-  - [Release binaries](#release-binaries)
-  - [Build locally](#build-locally)
+    - [`cargo`](#cargo)
+    - [`conda`](#conda)
+    - [Container](#container)
+    - [`homebrew`](#homebrew)
+    - [Release binaries](#release-binaries)
+    - [Build locally](#build-locally)
 - [Usage](#usage)
-  - [Basic usage](#basic-usage)
-  - [Required parameters](#required-parameters)
-  - [Optional parameters](#optional-parameters)
-  - [Full usage](#full-usage)
-  - [Snakemake](#snakemake)
+    - [Basic usage](#basic-usage)
+    - [Required parameters](#required-parameters)
+    - [Optional parameters](#optional-parameters)
+    - [Full usage](#full-usage)
+    - [Snakemake](#snakemake)
 - [Benchmark](#benchmark)
-  - [Single long read input](#single-long-read-input)
-  - [Paired-end input](#paired-end-input)
+    - [Single long read input](#single-long-read-input)
+    - [Paired-end input](#paired-end-input)
 - [Contributing](#contributing)
 - [Citing](#citing)
-  - [Bibtex](#bibtex)
+    - [Bibtex](#bibtex)
 
 ## Motivation
 
-I couldn't find a tool for subsampling reads that met my requirements. All the
+I couldn't find a tool for subsampling fastq reads that met my requirements. All the
 strategies I could find fell short as they either just wanted a number or percentage of
 reads to subsample to or, if they did subsample to a coverage, they assume all reads are
 the same size (i.e Illumina). As I mostly work with long-read data this posed a problem
@@ -112,7 +115,7 @@ Options
 
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
 
-Prerequisite: [`rust` toolchain][rust] (min. v1.64.0)
+Prerequisite: [`rust` toolchain][rust] (min. v1.74.1)
 
 ```sh
 cargo install rasusa
@@ -182,13 +185,14 @@ target/release/rasusa --help
 cargo test --all
 ```
 
-
 ## Usage
 
-### Basic usage
+### Basic usage - reads
+
+Subsample fastq reads
 
 ```
-rasusa --input in.fq --coverage 30 --genome-size 4.6mb
+rasusa reads --coverage 30 --genome-size 4.6mb in.fq
 ```
 
 The above command will output the subsampled file to `stdout`.
@@ -196,48 +200,67 @@ The above command will output the subsampled file to `stdout`.
 Or, if you have paired Illumina
 
 ```
-rasusa -i r1.fq -i r2.fq --coverage 30 --genome-size 4g -o out.r1.fq -o out.r2.fq
+rasusa --coverage 30 --genome-size 4g -o out.r1.fq -o out.r2.fq r1.fq r2.fq
 ```
 
 For more details on the above options, and additional options, see below.
 
+### Basic usage - alignments
+
+Subsample alignments
+
+```
+rasusa aln --coverage 30 in.bam | samtools sort -o out.bam
+```
+
+this will subsample each position in the alignment to 30x coverage.
+
 ### Required parameters
 
-There are three required options to run `rasusa`.
+There are three required options to run `rasusa reads`.
 
 #### Input
 
-##### `-i`, `--input`
+This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. The
+file(s) must be valid fasta or fastq format for the `reads` command and can be compressed (with a tool such as
+`gzip`). For the `aln` command, the file must be a valid **indexed** SAM/BAM file.  
+If two files are passed to `reads`, `rasusa` will assume they are paired-end reads.
 
-This option specifies the file(s) containing the reads you would like to subsample. The
-file(s) must be valid fasta or fastq format and can be compressed (with a tool such as
-`gzip`).  
-Illumina paired files can be passed in two ways.
-1. Using `--input` twice `-i r1.fq -i r2.fq`
-2. Using `--input` once, but passing both files immediately after `-i r1.fq r2.fq`
-
-> Bash wizard tip 🧙: Let globs do the work for you `-i r*.fq`
+> Bash wizard tip 🧙: Let globs do the work for you `r*.fq`
 
 #### Coverage
 
 ##### `-c`, `--coverage`
 
-> Not required if [`--bases`](#target-number-of-bases) is present
+> Not required if [`--bases`](#target-number-of-bases) is present for `reads`
 
-This option is used to determine the minimum coverage to subsample the reads to. It can
+This option is used to determine the minimum coverage to subsample the reads to. For the `reads` command, it can
 be specified as an integer (100), a decimal/float (100.7), or either of the previous
-suffixed with an 'x' (100x).
+suffixed with an 'x' (100x). For the `aln` command, it is an integer only.
 
-_**Note**: Due to the method for determining how many bases are required to achieve the
-desired coverage, the actual coverage, in the end, could be slightly higher than
+Due to the method for determining how many bases are required to achieve the
+desired coverage in the `reads` command, the actual coverage, in the end, could be slightly higher than
 requested. For example, if the last included read is very long. The log messages should
-inform you of the actual coverage in the end._
+inform you of the actual coverage in the end.
+
+For the `aln` command, the coverage is the minimum number of reads that should be present at each position in the
+alignment. If a position has fewer than the requested number of reads, all reads at that position will be included. In
+addition, there will be (small) regions with more than the requested number of reads - usually localised to where the
+alignment of a read ends. This is
+because when the alignment of a selected read ends, the next read is selected based on it spanning the end of the
+previous alignment.
+When selecting this next alignment, we preference alignments whose start is closest to the end of the previous
+alignment, ensuring minimal overlap with the previous alignment. See the below screenshot from IGV for a visual example.
+
+![IGV screenshot](img/igv_panel.png)
 
 #### Genome size
 
 ##### `-g`, `--genome-size`
 
-> Not required if [`--bases`](#target-number-of-bases) is present
+> Not valid for `aln`
+
+> Not required if [`--bases`](#target-number-of-bases) is present for `reads`
 
 The genome size of the input is also required. It is used to determine how many bases
 are necessary to achieve the desired coverage. This can, of course, be as precise or
@@ -264,13 +287,15 @@ set to the sum of all reference sequences in it.
 
 ##### `-o`, `--output`
 
-NOTE: This parameter is required if passing paired Illumina data.
+**`reads`**
+
+NOTE: This parameter is required if passing paired Illumina data to `reads`.
 
 By default, `rasusa` will output the subsampled file to `stdout` (if one file is given).
 If you would prefer to specify an output file path, then use this option.
 
-Output for Illumina paired files can be specified in the same manner as
-[`--input`](#input)
+Output for Illumina paired files can be specified in the two ways
+
 1. Using `--output` twice `-o out.r1.fq -o out.r2.fq`
 2. Using `--output` once, but passing both files immediately after `-o out.r1.fq
    out.r2.fq`
@@ -279,41 +304,70 @@ The ordering of the output files is assumed to be the same as the input.
 _Note: The output will always be in the same format as the input. You cannot pass fastq
 as input and ask for fasta as output._
 
-`rasusa` will also attempt to automatically infer whether comression of the output
+`rasusa reads` will also attempt to automatically infer whether compression of the output
 file(s) is required. It does this by detecting any of the supported extensions:
+
 - `.gz`: will compress the output with [`gzip`][gzip]
 - `.bz` or `.bz2`: will compress the output with [`bzip2`][bzip]
 - `.lzma`: will compress the output with the [`xz`][xz] LZMA algorithm
 
+**`aln`**
+
+For the `aln` command, the output file format will be the same as the input if writing to stdout, otherwise it will be
+inferred from the file extension. 
+
+**Note:** the output alignment will most likely **not be sorted**. You can use `samtools sort` to sort the output. e.g.,
+
+```
+rasusa aln -c 5 in.bam | samtools sort -o out.bam
+```
+
 [gzip]: http://www.gzip.org/
+
 [bzip]: https://sourceware.org/bzip2/
+
 [xz]: https://tukaani.org/xz/
 
-#### Output compression format
+#### Output compression/format
 
 ##### `-O`, `--output-type`
+
+**`reads`**
 
 Use this option to manually set the compression algoritm to use for the output file(s).
 It will override any format automatically detected from the output path.
 
 Valid options are:
+
 - `g`: [`gzip`][gzip]
 - `b`: [`bzip2`][bzip]
 - `l` or `x`: [`xz`][xz] LZMA algorithm
 - `z`: [`zstd`][zstd]
 - `u`: no compression
 
-*Note: these options are case insensitive.*
+**`aln`**
+
+Use this option to manually set the output file format. By default, the same format as the input will be used, or the
+format will be guessed from the `--output` path extension if given. Valid options are:
+
+- `b` or `bam`: BAM
+- `c` or `cram`: CRAM
+- `s` or `sam`: SAM
+
+*Note: all values to this option are case insensitive.*
 
 #### Compresion level
 
 ##### `-l`, `--compress-level`
 
-Compression level to use if compressing the output. By default this is set to the default for the compression type being output.
+Compression level to use if compressing the output. By default this is set to the default for the compression type being
+output.
 
 #### Target number of bases
 
 ##### `-b`, `--bases`
+
+> `reads` only
 
 Explicitly set the number of bases required in the subsample. This option takes the
 number in the same format as [genome size](#genome-size).
@@ -325,11 +379,13 @@ they are provided.*
 
 ##### `-n`, `--num`
 
-Explicitly set the number of reads in the subsample. This option takes the number in 
+> `reads` only
+
+Explicitly set the number of reads in the subsample. This option takes the number in
 the same format as [genome size](#genome-size).
 
-When providing paired reads as input, this option will sample this many total read 
-pairs. For example, when passing `-n 20 -i r1.fq r2.fq`, the two output files will have 
+When providing paired reads as input, this option will sample this many total read
+pairs. For example, when passing `-n 20 -i r1.fq r2.fq`, the two output files will have
 20 reads each, and the read ids will be the same in both.
 
 *Note: if this option is given, genome size and coverage are not required.*
@@ -338,8 +394,10 @@ pairs. For example, when passing `-n 20 -i r1.fq r2.fq`, the two output files wi
 
 ##### `-f`, `--frac`
 
-Explicitly set the fraction of total reads in the subsample. The value given to this 
-option can be a float or a percentage - i.e., `-f 0.5` and `-f 50` will both take half 
+> `reads` only
+
+Explicitly set the fraction of total reads in the subsample. The value given to this
+option can be a float or a percentage - i.e., `-f 0.5` and `-f 50` will both take half
 of the reads.
 
 *Note: if this option is given, genome size and coverage are not required.*
@@ -367,20 +425,40 @@ verbosity is switched on, you will additionally get "debug" level logging messag
 
 ```text
 $ rasusa --help
-Randomly subsample reads to a specified coverage
+Randomly subsample reads or alignments
 
-Usage: rasusa [OPTIONS] --input <INPUT>...
+Usage: rasusa [OPTIONS] <COMMAND>
+
+Commands:
+  reads  Randomly subsample reads
+  aln    Randomly subsample alignments to a specified depth of coverage
+  help   Print this message or the help of the given subcommand(s)
 
 Options:
-  -i, --input <INPUT>...
+  -v             Switch on verbosity
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
+#### `reads` command
+
+```text
+$ rasusa reads --help
+Randomly subsample reads
+
+Usage: rasusa reads [OPTIONS] <FILE(S)>...
+
+Arguments:
+  <FILE(S)>...
           The fast{a,q} file(s) to subsample.
 
-          For paired Illumina you may either pass this flag twice `-i r1.fq -i r2.fq` or give two files consecutively `-i r1.fq r2.fq`.
+          For paired Illumina, the order matters. i.e., R1 then R2.
 
+Options:
   -o, --output <OUTPUT>...
           Output filepath(s); stdout if not present.
 
-          For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the same as that given for --input. This option is required for paired input.
+          For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2. This option is required for paired input.
 
   -g, --genome-size <size|faidx>
           Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
@@ -390,7 +468,7 @@ Options:
           If --bases is not provided, this option and --coverage are required
 
   -c, --coverage <FLOAT>
-          The desired coverage to sub-sample the reads to
+          The desired depth of coverage to subsample the reads to
 
           If --bases is not provided, this option and --genome-size are required
 
@@ -430,6 +508,47 @@ Options:
           Print version
 ```
 
+#### `aln` command
+
+```text
+$ rasusa aln --help
+Randomly subsample alignments to a specified depth of coverage
+
+Usage: rasusa aln [OPTIONS] --coverage <INT> <FILE>
+
+Arguments:
+  <FILE>
+          Path to the indexed alignment file (SAM/BAM/CRAM) to subsample
+
+Options:
+  -o, --output <FILE>
+          Path to the output subsampled alignment file. Defaults to stdout (same format as input)
+
+          The output is not guaranteed to be sorted. We recommend piping the output to `samtools sort`
+
+  -O, --output-type <FMT>
+          Output format. Rasusa will attempt to infer the format from the output file extension if not provided
+
+  -c, --coverage <INT>
+          The desired depth of coverage to subsample the alignment to
+
+  -s, --seed <INT>
+          Random seed to use
+
+      --step-size <INT>
+          When a region has less than the desired coverage, the step size to move along the chromosome to find more reads.
+
+          The lowest of the step and the minimum end coordinate of the reads in the region will be used. This parameter can have a significant impact on the runtime of the subsampling process.
+
+          [default: 100]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+```
+
 ## Benchmark
 
 > “Time flies like an arrow; fruit flies like a banana.”  
@@ -446,6 +565,8 @@ The data I used comes from
 > extensively drug-resistant Mycobacterium tuberculosis Beijing lineage strain
 > identifies novel variation in repetitive PE/PPE gene regions." Microbial genomics 4.7
 > (2018).][1]
+
+_Note, these benchmarks are for `reads` only as there is no other tool that replicates the functionality of `aln`._
 
 ### Single long read input
 
@@ -489,8 +610,8 @@ wget "$URL" -O - | gzip -d -c - | fastaq deinterleave - r1.fq r2.fq
 ```
 
 Each file's size is 179M and has 283,590 reads.  
-For this benchmark, we will use [`seqtk`][seqtk]. We will also test `seqtk`'s 2-pass 
-mode as this is analogous to `rasusa`.  
+For this benchmark, we will use [`seqtk`][seqtk]. We will also test `seqtk`'s 2-pass
+mode as this is analogous to `rasusa`.
 
 ```shell
 NUM_READS=140000
@@ -536,7 +657,8 @@ cite it.
 
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
 
-> Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
+> Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source
+> Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
 
 ### Bibtex
 
@@ -557,28 +679,52 @@ cite it.
 ```
 
 [1]: https://doi.org/10.1099/mgen.0.000188
+
 [brew-tap]: https://github.com/brewsci/homebrew-bio
+
 [channels]: https://bioconda.github.io/user/install.html#set-up-channels
+
 [conda]: https://docs.conda.io/projects/conda/en/latest/user-guide/install/
+
 [docker]: https://docs.docker.com/v17.12/install/
+
 [dockerhub]: https://hub.docker.com/r/mbhall88/rasusa
+
 [dpryan79]: https://github.com/dpryan79
+
 [filtlong]: https://github.com/rrwick/Filtlong
+
 [homebrew]: https://docs.brew.sh/Installation
+
 [hyperfine]: https://github.com/sharkdp/hyperfine
+
 [kcov]: https://github.com/SimonKagstrom/kcov
+
 [log-lvl]: https://docs.rs/log/0.4.6/log/enum.Level.html#variants
+
 [mgen-ref]: https://doi.org/10.1099/mgen.0.000294
+
 [pr-help]: https://github.com/bioconda/bioconda-recipes/pull/18690
+
 [pyfastaq]: https://github.com/sanger-pathogens/Fastaq
+
 [quay.io]: https://quay.io/repository/mbhall88/rasusa
+
 [rust]: https://www.rust-lang.org/tools/install
+
 [score]: https://github.com/rrwick/Filtlong#read-scoring
+
 [seed]: https://en.wikipedia.org/wiki/Random_seed
+
 [seqtk]: https://github.com/lh3/seqtk
+
 [singularity]: https://sylabs.io/guides/3.4/user-guide/quick_start.html#quick-installation-steps
+
 [snakemake]: https://snakemake.readthedocs.io/en/stable/
+
 [triples]: https://clang.llvm.org/docs/CrossCompilation.html#target-triple
+
 [wrapper]: https://snakemake-wrappers.readthedocs.io/en/stable/wrappers/rasusa.html
+
 [zstd]: https://github.com/facebook/zstd
 

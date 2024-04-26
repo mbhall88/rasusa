@@ -1,13 +1,13 @@
 [package]
 name = "rasusa"
-description = "Randomly subsample reads to a specified coverage"
+description = "Randomly subsample reads or alignments"
 version = "0.8.0"
 authors = ["Michael Hall <michael@mbh.sh>"]
 edition = "2018"
 repository = "https://github.com/mbhall88/rasusa"
 homepage = "https://github.com/mbhall88/rasusa"
 readme = "README.md"
-keywords = ["bioinformatics", "subsampling", "fastq", "fasta", "coverage"]
+keywords = ["bioinformatics", "subsampling", "fastq", "alignment", "coverage"]
 categories = ["science", "command-line-utilities"]
 license-file = "LICENSE"
 
@@ -16,7 +16,7 @@ license-file = "LICENSE"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-clap = { version = "4.5.4", features = ["derive"]}
+clap = { version = "4.5.4", features = ["derive"] }
 regex = "1.10.4"
 thiserror = "1.0"
 anyhow = "1.0"
@@ -26,8 +26,17 @@ rand_pcg = "0.3.1"
 log = "0.4"
 niffler = "2.5"
 env_logger = "0.11.3"
+rust-htslib = { version = "0.46.0", default-features = false, features = ["bzip2", "lzma"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.14"
 predicates = "3.1.0"
 tempfile = "3.10.1"
+
+[profile.release]
+strip = true   # https://github.com/johnthagen/min-sized-rust?tab=readme-ov-file#strip-symbols-from-binary
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false
