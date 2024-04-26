@@ -24,11 +24,11 @@
     - [Release binaries](#release-binaries)
     - [Build locally](#build-locally)
 - [Usage](#usage)
-    - [Basic usage](#basic-usage)
+    - [Basic usage - reads](#basic-usage---reads)
+    - [Basic usage - alignments](#basic-usage---alignments)
     - [Required parameters](#required-parameters)
     - [Optional parameters](#optional-parameters)
     - [Full usage](#full-usage)
-    - [Snakemake](#snakemake)
 - [Benchmark](#benchmark)
     - [Single long read input](#single-long-read-input)
     - [Paired-end input](#paired-end-input)
@@ -432,6 +432,7 @@ Usage: rasusa [OPTIONS] <COMMAND>
 Commands:
   reads  Randomly subsample reads
   aln    Randomly subsample alignments to a specified depth of coverage
+  cite   Get a bibtex formatted citation for this package
   help   Print this message or the help of the given subcommand(s)
 
 Options:
@@ -586,17 +587,17 @@ TB_GENOME_SIZE=4411532
 COVG=50
 TARGET_BASES=$(( TB_GENOME_SIZE * COVG ))
 FILTLONG_CMD="filtlong --target_bases $TARGET_BASES tb.fq"
-RASUSA_CMD="rasusa -i tb.fq -c $COVG -g $TB_GENOME_SIZE -s 1"
+RASUSA_CMD="rasusa reads tb.fq -c $COVG -g $TB_GENOME_SIZE -s 1"
 hyperfine --warmup 3 --runs 10 --export-markdown results-single.md \
      "$FILTLONG_CMD" "$RASUSA_CMD" 
 ```
 
 #### Results
 
-| Command                                   |       Mean [s] | Min [s] | Max [s] |     Relative |
-|:------------------------------------------|---------------:|--------:|--------:|-------------:|
-| `filtlong --target_bases 220576600 tb.fq` | 21.685 ± 0.055 |  21.622 |  21.787 | 21.77 ± 0.29 |
-| `rasusa -i tb.fq -c 50 -g 4411532 -s 1`   | 0.996 ±  0.013 |   0.983 |   1.023 |         1.00 |
+| Command                                      |       Mean [s] | Min [s] | Max [s] |     Relative |
+|:---------------------------------------------|---------------:|--------:|--------:|-------------:|
+| `filtlong --target_bases 220576600 tb.fq`    | 21.685 ± 0.055 |  21.622 |  21.787 | 21.77 ± 0.29 |
+| `rasusa reads tb.fq -c 50 -g 4411532 -s 1` | 0.996 ±  0.013 |   0.983 |   1.023 |         1.00 |
 
 **Summary**: `rasusa` ran 21.77 ± 0.29 times faster than `filtlong`.
 
@@ -611,7 +612,7 @@ wget "$URL" -O - | gzip -d -c - | fastaq deinterleave - r1.fq r2.fq
 
 Each file's size is 179M and has 283,590 reads.  
 For this benchmark, we will use [`seqtk`][seqtk]. We will also test `seqtk`'s 2-pass
-mode as this is analogous to `rasusa`.
+mode as this is analogous to `rasusa reads`.
 
 ```shell
 NUM_READS=140000
@@ -628,12 +629,12 @@ hyperfine --warmup 10 --runs 100 --export-markdown results-paired.md \
 |:--------------------------------------------------------------------------------------------------|--------------:|---------:|---------:|------------:|
 | `seqtk sample -s 1 r1.fq 140000 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 140000 > /tmp/r2.fq;`       |  907.7 ± 23.6 |    875.4 |    997.8 | 1.84 ± 0.62 |
 | `seqtk sample -2 -s 1 r1.fq 140000 > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq 140000 > /tmp/r2.fq;` |  870.8 ± 54.9 |    818.2 |   1219.8 | 1.77 ± 0.61 |
-| `rasusa -i r1.fq r2.fq -n 140000 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq`                                | 492.2 ± 165.4 |    327.4 |    887.4 |        1.00 |
+| `rasusa reads r1.fq r2.fq -n 140000 -s 1 -o /tmp/r1.fq -o /tmp/r2.fq`                           | 492.2 ± 165.4 |    327.4 |    887.4 |        1.00 |
 
-**Summary**: `rasusa` ran 1.84 times faster than `seqtk` (1-pass) and 1.77 times faster
+**Summary**: `rasusa reads` ran 1.84 times faster than `seqtk` (1-pass) and 1.77 times faster
 than `seqtk` (2-pass)
 
-So, `rasusa` is faster than `seqtk` but doesn't require a fixed number of reads -
+So, `rasusa reads` is faster than `seqtk` but doesn't require a fixed number of reads -
 allowing you to avoid doing maths to determine how many reads you need to downsample to
 a specific coverage. 🤓
 
@@ -661,6 +662,8 @@ cite it.
 > Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
 
 ### Bibtex
+
+You can get the following citation by running `rasusa cite`
 
 ```Bibtex
 @article{Hall2022,
