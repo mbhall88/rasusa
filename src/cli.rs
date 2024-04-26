@@ -10,13 +10,13 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 
-/// Randomly subsample reads to a specified coverage.
+/// Randomly subsample reads or alignments
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 #[command(propagate_version = true)]
 pub struct Cli {
     /// Switch on verbosity.
-    #[clap(short)]
+    #[arg(short)]
     pub verbose: bool,
 
     #[command(subcommand)]
@@ -25,9 +25,9 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Randomly subsample reads to a specified depth of coverage.
+    /// Randomly subsample reads
     Reads(Reads),
-    /// Randomly subsample alignment to a specified depth of coverage.
+    /// Randomly subsample alignments to a specified depth of coverage
     #[command(name = "aln")]
     Alignment(Alignment),
 }
