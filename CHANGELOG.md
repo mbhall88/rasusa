@@ -10,13 +10,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### ⚠ BREAKING CHANGES
 
-* move fastq functionality to reads subcommand
+* move fastq functionality to `reads` subcommand
 
 ### Features
 
-* add cite command to get citation ([db17612](https://github.com/mbhall88/rasusa/commit/db17612e35d39c2d2b26bebb0b0632de4ade7206))
-* add subcommand 'aln' to subsample alignments ([b92979a](https://github.com/mbhall88/rasusa/commit/b92979a3165c73c1b40d3661d6dd8ea21099b3e7))
-* move fastq functionality to reads subcommand ([f48d47b](https://github.com/mbhall88/rasusa/commit/f48d47b5ad26aff767ca52a572f8e442690e5e1c))
+* add `cite` command to get citation ([db17612](https://github.com/mbhall88/rasusa/commit/db17612e35d39c2d2b26bebb0b0632de4ade7206))
+* add subcommand `aln` to subsample alignments ([b92979a](https://github.com/mbhall88/rasusa/commit/b92979a3165c73c1b40d3661d6dd8ea21099b3e7))
+* move fastq functionality to `reads` subcommand ([f48d47b](https://github.com/mbhall88/rasusa/commit/f48d47b5ad26aff767ca52a572f8e442690e5e1c))
 
 
 ### Bug Fixes
