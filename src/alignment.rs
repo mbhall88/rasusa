@@ -124,14 +124,18 @@ impl Runner for Alignment {
 
             // get the 0-based position of the first record in the chromosome
             reader.fetch(tid).context(format!(
-                "Failed to all records for chromosome {}",
+                "Failed to get all records for chromosome {}",
                 chrom_name
             ))?;
-            let first_record = reader.records().next().context(format!(
-                "Failed to get first record on chromosome {}",
-                chrom_name
-            ))?;
-            let mut next_pos = first_record.context("Failed to get first record")?.pos();
+
+            let first_record = if let Some(first_record) = reader.records().next() {
+                first_record.context("Failed to get first record")?
+            } else {
+                warn!("Chromosome {} has no records", chrom_name);
+                continue;
+            };
+
+            let mut next_pos = first_record.pos();
             let first_pos = next_pos;
             let mut regions_below_coverage = false;
 
@@ -389,5 +393,14 @@ mod tests {
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
 
         cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn bam_with_no_start_or_end_regions_and_missing_chromosomes() {
+        let infile = "tests/cases/no_start_end.bam";
+        let passed_args = vec![SUB, infile, "-c", "1"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().success();
     }
 }
