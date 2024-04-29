@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0](https://github.com/mbhall88/rasusa/compare/0.8.0...1.0.0) (2024-04-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* move fastq functionality to reads subcommand
+
+### Features
+
+* add cite command to get citation ([db17612](https://github.com/mbhall88/rasusa/commit/db17612e35d39c2d2b26bebb0b0632de4ade7206))
+* add subcommand 'aln' to subsample alignments ([b92979a](https://github.com/mbhall88/rasusa/commit/b92979a3165c73c1b40d3661d6dd8ea21099b3e7))
+* move fastq functionality to reads subcommand ([f48d47b](https://github.com/mbhall88/rasusa/commit/f48d47b5ad26aff767ca52a572f8e442690e5e1c))
+
+
+### Bug Fixes
+
+* deal with chromosomes with no alignments ([14aa15e](https://github.com/mbhall88/rasusa/commit/14aa15efeed3691adc4cfd20ac0fc4bfb8ec6f87))
+
 ## [0.8.0](https://github.com/mbhall88/rasusa/compare/0.7.1...0.8.0) (2024-01-03)
 
 
