@@ -295,11 +295,7 @@ NOTE: This parameter is required if passing paired Illumina data to `reads`.
 By default, `rasusa` will output the subsampled file to `stdout` (if one file is given).
 If you would prefer to specify an output file path, then use this option.
 
-Output for Illumina paired files can be specified in the two ways
-
-1. Using `--output` twice `-o out.r1.fq -o out.r2.fq`
-2. Using `--output` once, but passing both files immediately after `-o out.r1.fq
-   out.r2.fq`
+Output for Illumina paired files must be specified using `--output` twice - `-o out.r1.fq -o out.r2.fq`
 
 The ordering of the output files is assumed to be the same as the input.  
 _Note: The output will always be in the same format as the input. You cannot pass fastq
@@ -386,7 +382,7 @@ Explicitly set the number of reads in the subsample. This option takes the numbe
 the same format as [genome size](#genome-size).
 
 When providing paired reads as input, this option will sample this many total read
-pairs. For example, when passing `-n 20 -i r1.fq r2.fq`, the two output files will have
+pairs. For example, when passing `-n 20 r1.fq r2.fq`, the two output files will have
 20 reads each, and the read ids will be the same in both.
 
 *Note: if this option is given, genome size and coverage are not required.*
@@ -457,11 +453,13 @@ Arguments:
           For paired Illumina, the order matters. i.e., R1 then R2.
 
 Options:
-  -o, --output <OUTPUT>...
+  -o, --output <OUTPUT>
           Output filepath(s); stdout if not present.
 
-          For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2. This option is required for paired input.
+          For paired Illumina pass this flag twice `-o o1.fq -o o2.fq`
 
+          NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2. This option is required for paired input.
+          
   -g, --genome-size <size|faidx>
           Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
@@ -619,7 +617,7 @@ mode as this is analogous to `rasusa reads`.
 NUM_READS=140000
 SEQTK_CMD_1="seqtk sample -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
 SEQTK_CMD_2="seqtk sample -2 -s 1 r1.fq $NUM_READS > /tmp/r1.fq; seqtk sample -2 -s 1 r2.fq $NUM_READS > /tmp/r2.fq;"
-RASUSA_CMD="rasusa -i r1.fq r2.fq -n $NUM_READS -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
+RASUSA_CMD="rasusa reads r1.fq r2.fq -n $NUM_READS -s 1 -o /tmp/r1.fq -o /tmp/r2.fq"
 hyperfine --warmup 10 --runs 100 --export-markdown results-paired.md \
      "$SEQTK_CMD_1" "$SEQTK_CMD_2" "$RASUSA_CMD"
 ```

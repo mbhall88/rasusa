@@ -26,10 +26,12 @@ pub struct Reads {
 
     /// Output filepath(s); stdout if not present.
     ///
-    /// For paired Illumina you may either pass this flag twice `-o o1.fq -o o2.fq` or give two
-    /// files consecutively `-o o1.fq o2.fq`. NOTE: The order of the pairs is assumed to be the
-    /// same as the input - e.g., R1 then R2. This option is required for paired input.
-    #[clap(short = 'o', long = "output", num_args = 1..=2)]
+    /// For paired Illumina pass this flag twice `-o o1.fq -o o2.fq`  
+    ///
+    /// NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2.  
+    ///
+    /// This option is required for paired input.
+    #[arg(short = 'o', long = "output", action = clap::ArgAction::Append)]
     pub output: Vec<PathBuf>,
 
     /// Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
@@ -472,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn all_valid_args_with_two_inputs_parsed_as_expected() {
+    fn two_outputs_passed_with_one_option_flag() {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             SUB,
@@ -490,7 +492,7 @@ mod tests {
         ];
 
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
-        cmd.args(passed_args).assert().success();
+        cmd.args(passed_args).assert().failure();
     }
 
     #[test]
@@ -576,6 +578,17 @@ mod tests {
         let infile = "tests/cases/r1.fq.gz";
         let passed_args = vec![
             SUB, infile, infile, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o", "out.fq",
+        ];
+
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn two_input_two_outputs_is_ok_when_positional_args_at_end() {
+        let infile = "tests/cases/r1.fq.gz";
+        let passed_args = vec![
+            SUB, "-c", "5", "-g", "8mb", "-s", "88", "-o", "out.fq", "-o", "out.fq", infile, infile,
         ];
 
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();

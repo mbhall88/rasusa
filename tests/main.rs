@@ -152,6 +152,7 @@ fn two_valid_illumina_inputs_suceeds() -> Result<(), Box<dyn std::error::Error>>
         "2",
         "-o",
         "/tmp/out.fq",
+        "-o",
         "/tmp/out2.fq",
     ]);
 
