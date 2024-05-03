@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/mbhall88/rasusa/compare/1.0.0...2.0.0) (2024-05-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* paired reads require --output once for each file
+
+### Bug Fixes
+
+* paired reads require --output once for each file ([1427a0b](https://github.com/mbhall88/rasusa/commit/1427a0bd85c1a1b731d23c4b830bbcf7eb49e125))
+
 ## [1.0.0](https://github.com/mbhall88/rasusa/compare/0.8.0...1.0.0) (2024-04-29)
 
 
