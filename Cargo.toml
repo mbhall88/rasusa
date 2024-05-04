@@ -10,6 +10,7 @@ readme = "README.md"
 keywords = ["bioinformatics", "subsampling", "fastq", "alignment", "coverage"]
 categories = ["science", "command-line-utilities"]
 license-file = "LICENSE"
+exclude = ["tests/cases/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [badges]
