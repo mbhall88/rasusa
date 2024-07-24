@@ -72,6 +72,8 @@ you need. And if this is the case, `rasusa` has you covered.
 
 ## Install
 
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/mbhall88/rasusa/total)
+
 **tl;dr**: precompiled binary
 
 ```shell
@@ -115,6 +117,7 @@ Options
 ### `cargo`
 
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
+![Crates.io Total Downloads](https://img.shields.io/crates/d/rasusa)
 
 Prerequisite: [`rust` toolchain][rust] (min. v1.74.1)
 
