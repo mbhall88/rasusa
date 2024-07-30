@@ -204,7 +204,7 @@ The above command will output the subsampled file to `stdout`.
 Or, if you have paired Illumina
 
 ```
-rasusa --coverage 30 --genome-size 4g -o out.r1.fq -o out.r2.fq r1.fq r2.fq
+rasusa reads --coverage 30 --genome-size 4g -o out.r1.fq -o out.r2.fq r1.fq r2.fq
 ```
 
 For more details on the above options, and additional options, see below.
