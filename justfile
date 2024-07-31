@@ -10,4 +10,4 @@ test:
 
 # get coverage with tarpaulin
 coverage:
-    cargo tarpaulin -t 300 -- --test-threads 1 --out xml
+    cargo tarpaulin -t 300 --out Xml -- --test-threads 1
