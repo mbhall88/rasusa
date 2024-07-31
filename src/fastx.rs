@@ -148,8 +148,8 @@ impl Fastx {
     /// -   If the file (of `self`) cannot be opened.
     /// -   If writing to `write_to` fails.
     /// -   If, after iterating through all reads in the file, there is still elements left in
-    /// `reads_to_keep`. *Note: in this case, this function still writes all reads where indices
-    /// were found in the file.*
+    ///     `reads_to_keep`. *Note: in this case, this function still writes all reads where indices
+    ///     were found in the file.*
     ///
     /// # Example
     ///
