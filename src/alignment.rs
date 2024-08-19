@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
@@ -10,10 +11,13 @@ use rand::prelude::SliceRandom;
 use rand::{random, Rng, SeedableRng};
 use rust_htslib::bam;
 use rust_htslib::bam::ext::BamRecordExtensions;
-use rust_htslib::bam::{Format, Read};
+use rust_htslib::bam::header::HeaderRecord;
+use rust_htslib::bam::{Format, Header, Read};
 
 use crate::cli::check_path_exists;
 use crate::Runner;
+
+const RASUSA: &str = "rasusa";
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -64,7 +68,11 @@ impl Runner for Alignment {
 
         let mut reader =
             bam::IndexedReader::from_path(&self.aln).context("Failed to read alignment file")?;
-        let header = bam::Header::from_template(reader.header());
+        let mut header = bam::Header::from_template(reader.header());
+
+        // add rasusa program command line to header
+        let program_record = self.program_entry(&header);
+        header.push_record(&program_record);
 
         let input_fmt = match infer_format_from_path(&self.aln) {
             Some(fmt) => fmt,
@@ -241,6 +249,55 @@ impl Runner for Alignment {
     }
 }
 
+impl Alignment {
+    /// Generates a rasusa program entry from a SAM header
+    fn program_entry(&self, header: &Header) -> HeaderRecord {
+        let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
+
+        let mut record = HeaderRecord::new(b"PG");
+        record.push_tag(b"ID", program_id);
+        record.push_tag(b"PN", RASUSA);
+        if let Some(pp) = previous_pgid {
+            record.push_tag(b"PP", pp);
+        }
+        record.push_tag(b"VN", env!("CARGO_PKG_VERSION"));
+        let cl = std::env::args().collect::<Vec<String>>().join(" ");
+        record.push_tag(b"CL", cl);
+
+        record
+    }
+}
+
+/// Makes a program ID unique by looking for existing program records with the same ID and adding
+/// a suffix to the ID if necessary. Also returns the program ID of the last program in the header
+fn make_program_id_unique<'a>(
+    header: &Header,
+    program_id: &'a str,
+) -> (Cow<'a, str>, Option<String>) {
+    let header_map = header.to_hashmap();
+    let mut last_pg_id = None;
+    let mut occurrences_of_id = 0;
+    for (key, value) in header_map.iter() {
+        if key == "PG" {
+            for record in value {
+                if let Some(id) = record.get("ID") {
+                    last_pg_id = Some(id.to_string());
+                    let id_before_last_dot = id.rfind('.').map(|i| &id[..i]).unwrap_or(id);
+                    if id_before_last_dot == program_id {
+                        occurrences_of_id += 1;
+                    }
+                }
+            }
+        }
+    }
+    if occurrences_of_id == 0 {
+        (Cow::Borrowed(program_id), last_pg_id)
+    } else {
+        let new_id = format!("{}.{}", program_id, occurrences_of_id);
+        (Cow::Owned(new_id), last_pg_id)
+    }
+}
+
 /// Sorts the vector with a custom order where equal keys are randomly ordered.
 fn random_sort<T, K: Ord + Copy>(vec: &mut [T], key_extractor: fn(&T) -> K, mut rng: impl Rng) {
     vec.sort_by(|a, b| random_compare(key_extractor(a), key_extractor(b), &mut rng));
@@ -284,6 +341,8 @@ mod tests {
     use super::*;
     use assert_cmd::Command;
     use rand::prelude::StdRng;
+    use rust_htslib::bam::HeaderView;
+
     const SUB: &str = "aln";
 
     #[test]
@@ -406,5 +465,87 @@ mod tests {
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
 
         cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn test_make_program_id_unique_no_program() {
+        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+@SQ\tSN:chromosome\tLN:5399960
+@PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
+@PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
+@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
+        let header = Header::from_template(&template);
+        let program_id = "rasusa";
+        let actual = make_program_id_unique(&header, program_id);
+        let expected = (
+            Cow::<str>::Borrowed(program_id),
+            Some("samtools.1".to_string()),
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_make_program_id_unique_one_program_occurrence() {
+        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+@SQ\tSN:chromosome\tLN:5399960
+@PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
+@PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
+@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
+        let header = Header::from_template(&template);
+        let program_id = "minimap2";
+        let actual = make_program_id_unique(&header, program_id);
+        let expected = (
+            Cow::<str>::Owned("minimap2.1".to_string()),
+            Some("samtools.1".to_string()),
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_make_program_id_unique_two_program_occurrences() {
+        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+@SQ\tSN:chromosome\tLN:5399960
+@PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
+@PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
+@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
+        let header = Header::from_template(&template);
+        let program_id = "samtools";
+        let actual = make_program_id_unique(&header, program_id);
+        let expected = (
+            Cow::<str>::Owned("samtools.2".to_string()),
+            Some("samtools.1".to_string()),
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_make_program_id_unique_no_programs() {
+        let template = HeaderView::from_bytes(
+            b"@HD\tVN:1.6\tSO:coordinate
+@SQ\tSN:chromosome\tLN:5399960",
+        );
+        let header = Header::from_template(&template);
+        let program_id = "samtools";
+        let actual = make_program_id_unique(&header, program_id);
+        let expected = (Cow::Borrowed("samtools"), None);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_make_program_id_unique_program_id_startswith_same_substring() {
+        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+@SQ\tSN:chromosome\tLN:5399960
+@PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
+@PG\tID:samtoolsfoo\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
+@PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
+@PG\tID:samtoolsfoo.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
+        let header = Header::from_template(&template);
+        let program_id = "samtools";
+        let actual = make_program_id_unique(&header, program_id);
+        let expected = (
+            Cow::<str>::Owned("samtools.1".to_string()),
+            Some("samtoolsfoo.1".to_string()),
+        );
+        assert_eq!(actual, expected);
     }
 }
