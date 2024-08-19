@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/mbhall88/rasusa/compare/2.0.0...2.1.0) (2024-08-19)
+
+
+### Features
+
+* [aln] add program (`@PG`) entry to header ([0123e54](https://github.com/mbhall88/rasusa/commit/0123e548a70c90fd47200ac5f842f7d844f4bfe3))
+* log seed used when --seed not passed ([6e1f37d](https://github.com/mbhall88/rasusa/commit/6e1f37dfe9c2fad606670a15c2de3c2eb667d105))
+
 ## [2.0.0](https://github.com/mbhall88/rasusa/compare/1.0.0...2.0.0) (2024-05-03)
 
 
