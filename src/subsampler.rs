@@ -1,3 +1,4 @@
+use log::info;
 use rand::prelude::*;
 
 /// A `Struct` for dealing with the randomised part of sub-sampling.
@@ -39,9 +40,14 @@ impl SubSampler {
     /// ```
     fn shuffled_indices<T>(&self, v: &[T]) -> Vec<u32> {
         let mut indices: Vec<u32> = (0..v.len() as u32).collect();
+
         let mut rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
-            None => rand_pcg::Pcg64::seed_from_u64(random()),
+            None => {
+                let seed = random();
+                info!("Using seed: {}", seed);
+                rand_pcg::Pcg64::seed_from_u64(seed)
+            }
         };
 
         indices.shuffle(&mut rng);

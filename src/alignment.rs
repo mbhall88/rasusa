@@ -55,7 +55,11 @@ impl Runner for Alignment {
 
         let mut rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
-            None => rand_pcg::Pcg64::seed_from_u64(random()),
+            None => {
+                let seed = random();
+                info!("Using seed: {}", seed);
+                rand_pcg::Pcg64::seed_from_u64(seed)
+            }
         };
 
         let mut reader =
