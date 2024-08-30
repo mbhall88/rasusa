@@ -106,7 +106,7 @@ Options
                 Override the architecture identified by the installer [default: x86_64]
 
         -B, --base-url
-                Override the base URL used for downloading releases [default: https://github.com/mbhall88/ssubmit/releases]
+                Override the base URL used for downloading releases [default: https://github.com/mbhall88/rasusa/releases]
 
         -h, --help
                 Display this help message
