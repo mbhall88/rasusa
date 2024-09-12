@@ -138,7 +138,11 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
-      - uses: taiki-e/install-action@cargo-shear
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-shear
+        run: cargo binstall --no-confirm cargo-shear
 
       - name: Run cargo shear
         run: just lint
