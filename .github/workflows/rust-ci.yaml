@@ -145,7 +145,7 @@ jobs:
         run: cargo binstall --no-confirm cargo-shear
 
       - name: Run cargo shear
-        run: just lint
+        run: cargo shear
 
   coverage:
     name: Coverage
