@@ -122,6 +122,27 @@ jobs:
       - name: Run cargo clippy
         run: just lint
 
+  shear:
+    name: Check for unused dependencies
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - uses: taiki-e/install-action@cargo-shear
+
+      - name: Run cargo shear
+        run: just lint
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
