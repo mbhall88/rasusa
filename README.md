@@ -14,26 +14,52 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
 - [Motivation](#motivation)
 - [Install](#install)
-    - [`cargo`](#cargo)
-    - [`conda`](#conda)
-    - [Container](#container)
-    - [`homebrew`](#homebrew)
-    - [Release binaries](#release-binaries)
-    - [Build locally](#build-locally)
+  - [`cargo`](#cargo)
+  - [`conda`](#conda)
+  - [Container](#container)
+    - [`singularity`](#singularity)
+    - [`docker`](#docker)
+  - [Build locally](#build-locally)
 - [Usage](#usage)
-    - [Basic usage - reads](#basic-usage---reads)
-    - [Basic usage - alignments](#basic-usage---alignments)
-    - [Required parameters](#required-parameters)
-    - [Optional parameters](#optional-parameters)
-    - [Full usage](#full-usage)
+  - [Basic usage - reads](#basic-usage---reads)
+  - [Basic usage - alignments](#basic-usage---alignments)
+  - [Required parameters](#required-parameters)
+    - [Input](#input)
+    - [Coverage](#coverage)
+      - [`-c`, `--coverage`](#-c---coverage)
+    - [Genome size](#genome-size)
+      - [`-g`, `--genome-size`](#-g---genome-size)
+  - [Optional parameters](#optional-parameters)
+    - [Output](#output)
+      - [`-o`, `--output`](#-o---output)
+    - [Output compression/format](#output-compressionformat)
+      - [`-O`, `--output-type`](#-o---output-type)
+    - [Compresion level](#compresion-level)
+      - [`-l`, `--compress-level`](#-l---compress-level)
+    - [Target number of bases](#target-number-of-bases)
+      - [`-b`, `--bases`](#-b---bases)
+    - [Number of reads](#number-of-reads)
+      - [`-n`, `--num`](#-n---num)
+    - [Fraction of reads](#fraction-of-reads)
+      - [`-f`, `--frac`](#-f---frac)
+    - [Random seed](#random-seed)
+      - [`-s`, `--seed`](#-s---seed)
+    - [Verbosity](#verbosity)
+      - [`-v`](#-v)
+  - [Full usage](#full-usage)
+    - [`reads` command](#reads-command)
+    - [`aln` command](#aln-command)
 - [Benchmark](#benchmark)
-    - [Single long read input](#single-long-read-input)
-    - [Paired-end input](#paired-end-input)
+  - [Single long read input](#single-long-read-input)
+    - [Results](#results)
+  - [Paired-end input](#paired-end-input)
+    - [Results](#results-1)
 - [Contributing](#contributing)
 - [Citing](#citing)
-    - [Bibtex](#bibtex)
+  - [Bibtex](#bibtex)
 
 ## Motivation
 
@@ -280,6 +306,20 @@ suffixes include:
 
 Alternatively, a [FASTA/Q index file][faidx] can be given and the genome size will be
 set to the sum of all reference sequences in it.
+
+> [!TIP]
+> If you want to use `rasusa` in a scenario where you don't know what the genome size is, 
+> such as in an automated pipeline that can take in any kind of organism, you could estimate 
+> the genome size with something like [`lrge`](https://github.com/mbhall88/lrge) (#shamelessplug).
+> 
+> ```
+> $ gsize=$(lrge reads.fq)
+> $ rasusa reads -g $gsize -c 10 reads.fq
+> ```
+> `lrge` is designed for long reads. If you want to estimate the genome size from short 
+> reads, you could use something like [Mash](https://github.com/marbl/Mash) or 
+> [GenomeScope2](https://github.com/tbenavi1/genomescope2.0). See [the `lrge` docs](https://github.com/tbenavi1/genomescope2.0) 
+> for examples of how Mash/GenomeScope2 can be used for this task.
 
 [faidx]: https://www.htslib.org/doc/faidx.html
 
