@@ -22,6 +22,7 @@
   - [Container](#container)
     - [`singularity`](#singularity)
     - [`docker`](#docker)
+  - [`homebrew`](#homebrew)
   - [Build locally](#build-locally)
 - [Usage](#usage)
   - [Basic usage - reads](#basic-usage---reads)
@@ -199,6 +200,17 @@ docker run quay.io/mbhall88/rasusa --help
 
 You can find all the available tags on the [quay.io repository][quay.io]. Note: versions
 prior to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
+
+### `homebrew`
+
+![Homebrew](https://img.shields.io/homebrew/v/rasusa)
+![Homebrew Downloads](https://img.shields.io/homebrew/installs/dy/rasusa)
+
+Prerequisite: [`homebrew`][homebrew]
+
+```sh
+brew install rasusa
+```
 
 ### Build locally
 
