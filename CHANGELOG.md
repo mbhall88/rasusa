@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1](https://github.com/mbhall88/rasusa/compare/2.1.0...2.1.1) (2025-07-25)
+
+
+### Bug Fixes
+
+* improper shuffling of records with same position in aln subcommand ([d0264ae](https://github.com/mbhall88/rasusa/commit/d0264ae456d65a68bfbc919205bbdee0928cec4b)), closes [#76](https://github.com/mbhall88/rasusa/issues/76)
+
 ## [2.1.0](https://github.com/mbhall88/rasusa/compare/2.0.0...2.1.0) (2024-08-19)
 
 
