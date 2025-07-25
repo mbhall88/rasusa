@@ -1,0 +1,60 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-edit
+        run: cargo install cargo-edit
+      
+      - name: Update dependencies
+        run: |
+          cargo update
+          cargo upgrade --workspace
+      
+      - name: Check if dependencies updated
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run tests with updated dependencies
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          cargo test
+          cargo clippy --all-features --all-targets -- -D warnings
+      
+      - name: Create Pull Request
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update dependencies"
+          title: "chore: update dependencies"
+          body: |
+            This PR updates dependencies to their latest versions.
+            
+            **Changes:**
+            - Updated Cargo.lock with latest dependency versions
+            - All tests pass with updated dependencies
+            
+            Please review the changes and merge if everything looks good.
+          branch: automated/dependency-updates
+          delete-branch: true
