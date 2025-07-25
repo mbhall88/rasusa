@@ -360,7 +360,7 @@ mod tests {
         };
 
         let (actual, nb_select) = sampler.indices(&v);
-        println!("{:?}", actual);
+        println!("{actual:?}");
 
         assert_eq!(nb_select, 1);
         assert!(!actual[0]);

@@ -111,8 +111,8 @@ impl Reads {
     /// A [`CliError::BadInputOutputCombination`](#clierror) is returned for the following:
     /// - Either `--input` or `--output` are passed more than twice
     /// - An unequal number of `--input` and `--output` are passed. The only exception to
-    ///     this is if one `--input` and zero `--output` are passed, in which case, the output
-    ///     will be sent to STDOUT.
+    ///   this is if one `--input` and zero `--output` are passed, in which case, the output
+    ///   will be sent to STDOUT.
     pub fn validate_input_output_combination(&self) -> std::result::Result<(), CliError> {
         let out_len = self.output.len();
         let in_len = self.input.len();
@@ -128,8 +128,7 @@ impl Reads {
         match in_len as isize - out_len as isize {
             diff if diff == 1 && in_len == 1 => Ok(()),
             diff if diff != 0 => Err(CliError::BadInputOutputCombination(format!(
-                "Got {} --input but {} --output",
-                in_len, out_len
+                "Got {in_len} --input but {out_len} --output"
             ))),
             _ => Ok(()),
         }
