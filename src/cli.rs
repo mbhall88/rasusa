@@ -86,7 +86,7 @@ pub struct Cite {}
 
 impl Runner for Cite {
     fn run(&mut self) -> anyhow::Result<()> {
-        println!("{}", CITATION);
+        println!("{CITATION}");
         Ok(())
     }
 }
@@ -377,7 +377,7 @@ pub(crate) fn check_path_exists<S: AsRef<OsStr> + ?Sized>(s: &S) -> Result<PathB
     if path.exists() {
         Ok(path)
     } else {
-        Err(format!("{:?} does not exist", path))
+        Err(format!("{path:?} does not exist"))
     }
 }
 
@@ -406,7 +406,7 @@ pub(crate) fn parse_level(s: &str) -> Result<niffler::Level, String> {
         Ok(19) => niffler::Level::Nineteen,
         Ok(20) => niffler::Level::Twenty,
         Ok(21) => niffler::Level::TwentyOne,
-        _ => return Err(format!("Compression level {} not in the range 1-21", s)),
+        _ => return Err(format!("Compression level {s} not in the range 1-21")),
     };
     Ok(lvl)
 }

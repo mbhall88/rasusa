@@ -240,10 +240,7 @@ mod tests {
             .err()
             .unwrap();
         let expected = FastxError::CreateError {
-            source: std::io::Error::new(
-                std::io::ErrorKind::Other,
-                String::from("No such file or directory (os error 2)"),
-            ),
+            source: std::io::Error::other(String::from("No such file or directory (os error 2)")),
         };
 
         assert_eq!(actual.type_id(), expected.type_id())
