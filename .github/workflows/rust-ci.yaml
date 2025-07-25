@@ -1,11 +1,16 @@
 # Based on https://github.com/actions-rs/meta/blob/master/recipes/msrv.md
 
-on: [ push, pull_request ]
+on: 
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 name: Rust CI
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   cog_check_job:
