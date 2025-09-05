@@ -244,7 +244,7 @@ impl Runner for Alignment {
 
 impl Alignment {
     /// Generates a rasusa program entry from a SAM header
-    fn program_entry(&self, header: &Header) -> HeaderRecord {
+    fn program_entry(&self, header: &Header) -> HeaderRecord<'_> {
         let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
 
         let mut record = HeaderRecord::new(b"PG");
