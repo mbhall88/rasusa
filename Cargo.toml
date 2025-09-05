@@ -30,7 +30,7 @@ env_logger = "0.11.3"
 rust-htslib = { version = "0.46.0", default-features = false, features = ["bzip2", "lzma"] }
 
 [dev-dependencies]
-assert_cmd = "2.0.14"
+assert_cmd = "2.0.17"
 predicates = "3.1.0"
 tempfile = "3.10.1"
 
