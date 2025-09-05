@@ -1,11 +1,23 @@
 # Based on https://github.com/actions-rs/meta/blob/master/recipes/msrv.md
 
-on: [ push, pull_request ]
+on: 
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 name: Rust CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
+  # Disable incremental compilation for CI builds
+  CARGO_INCREMENTAL: 0
+  # Enable more verbose backtraces for easier debugging
+  RUST_BACKTRACE: 1
 
 jobs:
   cog_check_job:
@@ -42,10 +54,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Run cargo check
         run: cargo check
@@ -72,10 +87,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Run cargo test
         run: just test
@@ -162,10 +180,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - uses: taiki-e/install-action@v2
         with:
