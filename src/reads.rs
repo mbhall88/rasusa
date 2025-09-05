@@ -82,6 +82,10 @@ pub struct Reads {
     #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
     pub frac: Option<f32>,
 
+    /// Exit with an error if the requested coverage/bases/reads is not possible
+    #[clap(short = 'e', long)]
+    pub strict: bool,
+
     /// Random seed to use.
     #[clap(short = 's', long = "seed", value_name = "INT")]
     pub seed: Option<u64>,
@@ -214,6 +218,29 @@ impl Runner for Reads {
             let number_of_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
             let depth_of_covg = (number_of_bases as f64) / f64::from(self.genome_size.unwrap());
             info!("Input coverage is {:.2}x", depth_of_covg);
+
+            if self.strict
+                && target_total_bases.is_some()
+                && Coverage(depth_of_covg as f32) < self.coverage.unwrap()
+            {
+                return Err(anyhow::anyhow!(
+                    "Requested coverage ({:.2}x) is not possible as the actual coverage is {:.2}x",
+                    self.coverage.unwrap().0,
+                    depth_of_covg
+                ));
+            }
+        }
+
+        if let Some(req_bases) = self.bases {
+            let total_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
+            let req_bases = u64::from(req_bases);
+            if self.strict && req_bases > total_bases {
+                return Err(anyhow::anyhow!(
+                    "Requested number of bases ({}) is more than the input ({})",
+                    req_bases,
+                    total_bases
+                ));
+            }
         }
 
         let num_reads = match (self.num, self.frac) {
@@ -221,16 +248,35 @@ impl Runner for Reads {
             (None, Some(f)) => {
                 let n = ((f as f64) * (read_lengths.len() as f64)).round() as u64;
                 if n == 0 {
-                    warn!(
-                        "Requested fraction of reads ({} * {}) was rounded to 0",
-                        f,
-                        read_lengths.len()
-                    );
+                    if !self.strict {
+                        warn!(
+                            "Requested fraction of reads ({} * {}) was rounded to 0",
+                            f,
+                            read_lengths.len()
+                        );
+                    } else {
+                        return Err(anyhow::anyhow!(
+                            "Requested fraction of reads ({} * {}) was rounded to 0",
+                            f,
+                            read_lengths.len()
+                        ));
+                    }
                 }
                 Some(n)
             }
             _ => None,
         };
+
+        if let Some(n) = num_reads {
+            if self.strict && n as usize > read_lengths.len() {
+                return Err(anyhow::anyhow!(
+                    "Requested number of reads ({}) is more than the input ({})",
+                    n,
+                    read_lengths.len()
+                ));
+            }
+            info!("Target number of reads to subsample to is: {}", n);
+        }
 
         let subsampler = SubSampler {
             target_total_bases,
