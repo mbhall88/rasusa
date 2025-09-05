@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Enable version updates for Cargo dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "mbhall88"
+    assignees:
+      - "mbhall88"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "mbhall88"
+    assignees:
+      - "mbhall88"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
