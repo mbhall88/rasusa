@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0](https://github.com/mbhall88/rasusa/compare/2.1.1...v2.2.0) (2025-09-05)
+
+
+### Features
+
+* add `--strict` to error if target coverage is not possible ([b69142f](https://github.com/mbhall88/rasusa/commit/b69142f2d0a9c164539b083e481ca915c954f8ad)), closes [#81](https://github.com/mbhall88/rasusa/issues/81)
+
 ## [2.1.1](https://github.com/mbhall88/rasusa/compare/2.1.0...2.1.1) (2025-07-25)
 
 
