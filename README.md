@@ -468,7 +468,7 @@ future.
 
 > `reads` only
 
-If the requested coverage, total bases. number of reads, or fraction of reads cannot be met, an error will be thrown. 
+If the requested coverage, total bases, number of reads, or fraction of reads cannot be met, an error will be thrown. 
 By default, a warning is displayed, and the maximum possible coverage, total bases, number of reads, or fraction of reads is used.
 
 #### Verbosity
