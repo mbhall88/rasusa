@@ -1,0 +1,10 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "rust",
+      "package-name": "rasusa",
+      "include-v-in-tag": false,
+      "include-component-in-tag": false
+    }
+  }
+}

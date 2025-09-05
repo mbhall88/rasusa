@@ -13,9 +13,7 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
         with:
           release-type: rust
-          package-name: rasusa
-          include-v-in-tag: false
           token: ${{ secrets.PAT }}
