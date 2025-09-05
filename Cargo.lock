@@ -100,7 +100,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b48ee4c818e9d19bbdf75b56e1b2eb9682bb4fbd7ff8e7e7f2cc9956e1aefac7"
 dependencies = [
  "flate2",
- "thiserror 1.0.56",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -133,7 +133,7 @@ dependencies = [
  "lazy_static",
  "regex",
  "strum_macros",
- "thiserror 1.0.56",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -656,7 +656,7 @@ dependencies = [
  "bzip2",
  "cfg-if",
  "flate2",
- "thiserror 1.0.56",
+ "thiserror 1.0.69",
  "xz2",
  "zstd",
 ]
@@ -841,7 +841,7 @@ dependencies = [
  "regex",
  "rust-htslib",
  "tempfile",
- "thiserror 1.0.56",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -1029,11 +1029,11 @@ checksum = "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
 
 [[package]]
 name = "thiserror"
-version = "1.0.56"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d54378c645627613241d077a3a79db965db602882668f9136ac42af9ecb730ad"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl 1.0.56",
+ "thiserror-impl 1.0.69",
 ]
 
 [[package]]
@@ -1047,9 +1047,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.56"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa0faa943b50f3db30a20aa7e265dbc66076993efed8463e8de414e5d06d3471"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
