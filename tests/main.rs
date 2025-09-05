@@ -53,6 +53,80 @@ fn valid_inputs_raises_no_errors() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn valid_inputs_but_strict_raises_error_coverage() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/file1.fq.gz",
+        "-g",
+        "5mb",
+        "-c",
+        "20",
+        "--strict",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "is not possible as the actual coverage",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn valid_inputs_but_strict_raises_error_bases() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/file1.fq.gz",
+        "-b",
+        "5mb",
+        "--strict",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("is more than the input"));
+
+    Ok(())
+}
+
+#[test]
+fn valid_inputs_but_strict_raises_error_num_reads() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/file1.fq.gz",
+        "-n",
+        "500",
+        "--strict",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("is more than the input"));
+
+    Ok(())
+}
+
+#[test]
+fn valid_inputs_but_strict_raises_error_frac() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/file1.fq.gz",
+        "-f",
+        "0.05",
+        "--strict",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("was rounded to 0"));
+
+    Ok(())
+}
+
+#[test]
 fn input_and_output_filetypes_different_raises_no_errors() -> Result<(), Box<dyn std::error::Error>>
 {
     let mut cmd = Command::cargo_bin(BIN)?;
