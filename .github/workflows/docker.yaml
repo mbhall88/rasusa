@@ -39,9 +39,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=schedule
-            type=match,pattern=lrge-(\d+\.\d+\.\d+),group=1
-            type=match,pattern=lrge-(\d+\.\d+)\.\d+,group=1
-            type=match,pattern=lrge-(\d+)\.\d+\.\d+,group=1
+            type=match,pattern=(\d+\.\d+\.\d+),group=1
+            type=match,pattern=(\d+\.\d+)\.\d+,group=1
+            type=match,pattern=(\d+)\.\d+\.\d+,group=1
             type=ref,event=branch
             type=ref,event=pr
             # minimal (short sha)
