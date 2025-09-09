@@ -20,7 +20,7 @@
   - [`cargo`](#cargo)
   - [`conda`](#conda)
   - [Container](#container)
-    - [`singularity`](#singularity)
+    - [`apptainer`](#apptainer)
     - [`docker`](#docker)
   - [`homebrew`](#homebrew)
   - [Build locally](#build-locally)
@@ -167,39 +167,37 @@ recipe][pr-help].
 
 ### Container
 
-Docker images are hosted at [quay.io]. For versions 0.3.0 and earlier, the images were
-hosted on [Dockerhub][dockerhub].
+Docker images are hosted on [GitHub Container Registry][ghcr].
 
-#### `singularity`
+#### `apptainer`
 
-Prerequisite: [`singularity`][singularity]
+Prerequisite: [`apptainer`][apptainer]
 
 ```sh
-URI="docker://quay.io/mbhall88/rasusa"
-singularity exec "$URI" rasusa --help
+URI="docker://ghcr.io/mbhall88/rasusa"
+apptainer exec "$URI" rasusa --help
 ```
 
 The above will use the latest version. If you want to specify a version then use a
-[tag][quay.io] (or commit) like so.
+[tag][ghcr] (or commit) like so.
 
 ```sh
-VERSION="0.8.0"
-URI="docker://quay.io/mbhall88/rasusa:${VERSION}"
+VERSION="2.2.2"
+URI="docker://ghcr.io/mbhall88/rasusa:${VERSION}"
 ```
 
 #### `docker`
 
-[![Docker Repository on Quay](https://quay.io/repository/mbhall88/rasusa/status "Docker Repository on Quay")](https://quay.io/repository/mbhall88/rasusa)
-
 Prerequisite: [`docker`][docker]
 
 ```sh
-docker pull quay.io/mbhall88/rasusa
-docker run quay.io/mbhall88/rasusa --help
+docker pull ghcr.io/mbhall88/rasusa
+docker run ghcr.io/mbhall88/rasusa --help
 ```
 
-You can find all the available tags on the [quay.io repository][quay.io]. Note: versions
+You can find all the available tags on the [container registry][ghcr]. Note: versions
 prior to 0.4.0 were housed on [Docker Hub](https://hub.docker.com/r/mbhall88/rasusa).
+And versions from 0.4.0 to 2.2.0 were on [quay.io][quay.io].
 
 ### `homebrew`
 
@@ -784,7 +782,7 @@ You can get the following citation by running `rasusa cite`
 
 [seqtk]: https://github.com/lh3/seqtk
 
-[singularity]: https://sylabs.io/guides/3.4/user-guide/quick_start.html#quick-installation-steps
+[apptainer]: https://github.com/apptainer/apptainer
 
 [snakemake]: https://snakemake.readthedocs.io/en/stable/
 
@@ -794,3 +792,4 @@ You can get the following citation by running `rasusa cite`
 
 [zstd]: https://github.com/facebook/zstd
 
+[ghcr]: https://github.com/mbhall88/rasusa/pkgs/container/rasusa
