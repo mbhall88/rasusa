@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1](https://github.com/mbhall88/rasusa/compare/2.2.0...v2.2.1) (2025-09-09)
+
+
+### Reverts
+
+* **deps:** rollback rust-htslib to 0.46.0 ([81023d6](https://github.com/mbhall88/rasusa/commit/81023d6fe0550fc9ae607a0fc7bfe16f1f012916))
+
 ## [2.2.0](https://github.com/mbhall88/rasusa/compare/2.1.1...v2.2.0) (2025-09-05)
 
 
