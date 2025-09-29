@@ -32,7 +32,7 @@ rust-htslib = { version = "0.46.0", default-features = false, features = ["bzip2
 [dev-dependencies]
 assert_cmd = "2.0.17"
 predicates = "3.1.3"
-tempfile = "3.22.0"
+tempfile = "3.23.0"
 
 [profile.release]
 strip = true   # https://github.com/johnthagen/min-sized-rust?tab=readme-ov-file#strip-symbols-from-binary
