@@ -18,7 +18,7 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
-regex = "1.11.2"
+regex = "1.11.3"
 thiserror = "2.0"
 anyhow = "1.0"
 needletail = { version = "0.5.1", features = ["compression"] }
