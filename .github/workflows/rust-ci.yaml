@@ -51,7 +51,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index/
@@ -84,7 +84,7 @@ jobs:
 
       - uses: taiki-e/install-action@just
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index/
@@ -177,7 +177,7 @@ jobs:
         with:
           components: clippy
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index/
