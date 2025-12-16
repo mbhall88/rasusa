@@ -177,11 +177,8 @@ impl Runner for Reads {
             _ => None,
         };
 
-        if target_total_bases.is_some() {
-            info!(
-                "Target number of bases to subsample to is: {}",
-                target_total_bases.unwrap()
-            );
+        if let Some(bases) = target_total_bases {
+            info!("Target number of bases to subsample to is: {bases}",);
         }
 
         info!("Gathering read lengths...");
