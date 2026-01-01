@@ -1,10 +1,8 @@
 use std::borrow::Cow;
-use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use log::{info, warn};
 use rand::prelude::SliceRandom;
@@ -18,6 +16,49 @@ use crate::cli::check_path_exists;
 use crate::Runner;
 
 const RASUSA: &str = "rasusa";
+
+// we implementes traits manually to avoid comparring the full record
+// primary comparison is based using the random 'score'
+// if there is tie (two read have the same score), then we use 'qname' to ensure the deterministic sorting
+#[derive(Debug)]
+struct ScoredRead {
+    /// Read record from the alignment file
+    record: rust_htslib::bam::Record,
+    /// random score of the record
+    score: u64,
+}
+
+impl ScoredRead {
+    fn new(record: rust_htslib::bam::Record, score: u64) -> Self {
+        Self { record, score }
+    }
+}
+
+impl PartialEq for ScoredRead {
+    fn eq(&self, other: &Self) -> bool {
+        self.score == other.score && self.record.qname() == other.record.qname()
+    }
+}
+
+impl Eq for ScoredRead {}
+
+impl PartialOrd for ScoredRead {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// if the random score is equal (very rare),
+// then compare it based the qname record (which i think will be unique)
+impl Ord for ScoredRead {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.score.cmp(&other.score) {
+            std::cmp::Ordering::Equal => self.record.qname().cmp(other.record.qname()),
+            std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+            std::cmp::Ordering::Less => std::cmp::Ordering::Less,
+        }
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -57,6 +98,7 @@ impl Runner for Alignment {
     fn run(&mut self) -> Result<()> {
         info!("Subsampling alignment file: {:?}", self.aln);
 
+        // set up random number generator
         let mut rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
             None => {
@@ -66,14 +108,18 @@ impl Runner for Alignment {
             }
         };
 
+        // set up reader
+        // because we use linear scan, i change IndexedReader to standard reader
         let mut reader =
-            bam::IndexedReader::from_path(&self.aln).context("Failed to read alignment file")?;
+            bam::Reader::from_path(&self.aln).context("Failed to read alignment file")?;
+
         let mut header = bam::Header::from_template(reader.header());
 
         // add rasusa program command line to header
         let program_record = self.program_entry(&header);
         header.push_record(&program_record);
 
+        // set up header and writer
         let input_fmt = match infer_format_from_path(&self.aln) {
             Some(fmt) => fmt,
             None => {
@@ -115,127 +161,149 @@ impl Runner for Alignment {
             }
         };
 
-        let header = reader.header().clone();
-        let chroms = header.target_names();
+        // the sweep line algorithm starts here
 
-        for chrom in chroms {
-            let chrom_name = String::from_utf8_lossy(chrom);
+        // the active set to store reads that currently in the scan
+        // using max heap, it keeps the read with the highest score (worst priority) at the top.
+        let target_depth = self.coverage as usize;
+        let mut active_reads: BinaryHeap<ScoredRead> = BinaryHeap::with_capacity(target_depth);
 
-            info!("Subsampling chromosome: {chrom_name}");
+        // we also pre alocated a vector here, and will be reused
+        let mut survivors: Vec<ScoredRead> = Vec::with_capacity(target_depth);
 
-            let tid = header
-                .tid(chrom)
-                .context(format!("Failed to get tid for chromosome {chrom_name}"))?;
-            let chrom_len = header.target_len(tid).context(format!(
-                "Failed to get chromosome length for chromosome {chrom_name}"
-            ))?;
-            let mut n_reads_needed = self.coverage;
-            let mut current_reads = HashSet::new();
-            let mut heap = BinaryHeap::new();
+        let mut current_tid = -1;
+        let mut max_observed_depth: usize = 0;
+        // track the last position so that we know whether the input is already sorted or no
+        let mut last_pos: i64 = -1;
 
-            // get the 0-based position of the first record in the chromosome
-            reader.fetch(tid).context(format!(
-                "Failed to get all records for chromosome {chrom_name}"
-            ))?;
+        // to get chromosome name for warning feature
+        // only ask names if they actually exist
+        let header_view = reader.header().clone();
+        let chrom_names: Vec<String> = if header_view.target_count() > 0 {
+            header_view
+                .target_names()
+                .iter()
+                .map(|name_bytes| String::from_utf8_lossy(name_bytes).to_string())
+                .collect()
+        } else {
+            Vec::new() // just give it an empty vector
+        };
 
-            let first_record = if let Some(first_record) = reader.records().next() {
-                first_record.context("Failed to get first record")?
-            } else {
-                warn!("Chromosome {chrom_name} has no records");
+        // iterate through every read in the file
+        for result in reader.records() {
+            let record = result.context("Failed to parse BAM record")?;
+
+            // skip unmapped reads (they do not have start and/or end coordinates)
+            if record.is_unmapped() {
                 continue;
-            };
+            }
 
-            let mut next_pos = first_record.pos();
-            let first_pos = next_pos;
-            let mut regions_below_coverage = false;
+            // warning logic
+            // tid ID maps to chromosome names, 0 means chrom 1
+            let tid = record.tid();
+            let pos = record.pos();
 
-            loop {
-                reader
-                    .fetch((tid, next_pos, next_pos + 1))
-                    .context(format!(
-                        "Failed to fetch records in region {chrom_name}:{next_pos}-{}",
-                        next_pos + 1
-                    ))?;
-                let records = reader.records();
+            // check if the input is not sorted yet
+            if tid == current_tid && pos < last_pos {
+                return Err(anyhow::anyhow!(
+                    "Input is not sorted! Found read at pos {} after pos {} on chromosome {}",
+                    pos,
+                    last_pos,
+                    tid
+                ));
+            }
 
-                let mut records: Vec<_> = records.filter_map(Result::ok).collect();
+            if tid != current_tid {
+                // we just finished a chromosome. Did it ever reach target coverage?
+                if current_tid != -1 && max_observed_depth < target_depth {
+                    // Use .get() to safely check if the name exists.
+                    // If chrom_names is empty (no_index.bam), this just skips the warning.
+                    // but actually if no chromosome, means it is unmapped and will not go here?
+                    if let Some(name) = chrom_names.get(current_tid as usize) {
+                        warn!(
+                            "Chromosome {} never reached the requested depth (Max observed: {}X)",
+                            name, max_observed_depth
+                        );
+                    }
+                } else if let Some(name) = chrom_names.get(current_tid as usize) {
+                    info!("Subsampling completed successfully for: {name}");
+                }
+                // Reset for new chromosome
+                current_tid = tid;
+                max_observed_depth = 0;
+                active_reads.clear();
+            }
 
-                if next_pos == first_pos {
-                    // we just shuffle all the reads in the first position
-                    records.shuffle(&mut rng);
+            let start = record.pos();
+
+            // assign deterministic random priority
+            let score: u64 = rng.gen();
+
+            // clear and move everything from the heap to the preallocated vector
+            // to check whether the reads in the heap already expire
+            // the end pos of any read in the heap is lesser or equal than the current start pos.
+            // i use drain method: https://doc.rust-lang.org/std/collections/struct.BinaryHeap.html#method.drain
+            survivors.extend(active_reads.drain());
+
+            for scored_read in survivors.drain(..) {
+                if scored_read.record.reference_end() <= start {
+                    // the reads survived!
+                    // and we write it into the result
+                    writer
+                        .write(&scored_read.record)
+                        .context("Failed to write record")?;
                 } else {
-                    // need to sort records by their alignment start positions. those with the same start
-                    // position should be shuffled so that the order is random
-                    shuffle_records_by_position(&mut records, &mut rng);
-                }
-
-                let mut num_output = 0;
-                let mut record_iter = records.into_iter().rev();
-
-                while num_output < n_reads_needed {
-                    let record = match record_iter.next() {
-                        Some(r) => r,
-                        None => break,
-                    };
-                    let qname = record.qname().to_owned();
-
-                    if current_reads.contains(&qname) {
-                        continue;
-                    }
-                    current_reads.insert(qname.to_owned());
-                    heap.push(Reverse((record.reference_end(), qname.to_owned())));
-                    // write the record
-                    writer.write(&record).context("Failed to write record")?;
-                    num_output += 1;
-                }
-
-                n_reads_needed -= num_output;
-
-                if n_reads_needed > 0 {
-                    // increment next_pos by step_size or the minimum end position of the reads in
-                    // the region, whichever is smaller
-                    let min_end = heap.peek().map(|Reverse((end, _))| *end);
-                    match min_end {
-                        Some(min_end) => {
-                            next_pos += self.step_size.min(min_end - next_pos);
-                        }
-                        None => {
-                            next_pos += self.step_size;
-                        }
-                    }
-                    regions_below_coverage = true;
-                }
-
-                // remove smallest end position from heap and update next_pos and n_reads_needed
-                // allowing for the fact that there may be multiple reads with the same end position
-                while let Some(Reverse((end, qname))) = heap.pop() {
-                    next_pos = end;
-
-                    if current_reads.contains(&qname) {
-                        current_reads.remove(&qname);
-                        n_reads_needed += 1;
-                    } else {
-                        return Err(anyhow!("A read in the heap was not found in the current reads set. This should not happen, please raise an issue."));
-                    }
-                    if heap.is_empty() {
-                        break;
-                    }
-                    if let Some(Reverse((next_end, _))) = heap.peek() {
-                        if *next_end != end {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                if next_pos as u64 >= chrom_len {
-                    break;
+                    // still active,
+                    // put it back in heap
+                    active_reads.push(scored_read);
                 }
             }
-            if regions_below_coverage {
-                warn!("Chromosome {chrom_name} has regions with less than the requested coverage");
+
+            // note: survivors.drain(..) automatically clears the vector items but keeps the capacity.
+            // with target depth usually 50 - 100 maybe, i think this operation is not very expensive.
+
+            // when a new read begins:
+            let new_read = ScoredRead::new(record, score);
+
+            if active_reads.len() < target_depth {
+                // if the heap has records fewer than N reads, just accept it.
+                active_reads.push(new_read);
+            } else {
+                // if the heap is full, only accept it if its score is smaller than the current worst (highest score) in the heap
+                let worse_score = active_reads.peek().unwrap().score;
+                if new_read.score < worse_score {
+                    active_reads.pop();
+                    active_reads.push(new_read);
+                }
             }
+
+            // update the last position
+            last_pos = pos;
+
+            // track stats for Warning
+            max_observed_depth = max_observed_depth.max(active_reads.len());
+        }
+
+        // warning logic: the last chromosome
+        if current_tid != -1 && max_observed_depth < target_depth {
+            // Use .get() to safely check if the name exists.
+            // If chrom_names is empty (no_index.bam), this just skips the warning.
+            if let Some(name) = chrom_names.get(current_tid as usize) {
+                warn!(
+                    "Chromosome {} never reached the requested depth (Max observed: {}X)",
+                    name, max_observed_depth
+                );
+            }
+        } else if let Some(name) = chrom_names.get(current_tid as usize) {
+            info!("Subsampling completed successfully for: {name}");
+        }
+
+        // any remaining read in the heap survive
+        // write into the subsampled result.
+        for scored_read in active_reads {
+            writer
+                .write(&scored_read.record)
+                .context("Failed to write record")?;
         }
 
         Ok(())
@@ -292,6 +360,8 @@ fn make_program_id_unique<'a>(
 }
 
 /// Sorts records by position and shuffles those with the same position
+/// This function is from the original subsampling implementation, and kept for reference/testing
+#[allow(dead_code)]
 fn shuffle_records_by_position(records: &mut [bam::Record], rng: &mut impl Rng) {
     // First sort by position
     records.sort_by_key(|record| record.pos());
@@ -341,6 +411,7 @@ mod tests {
     use assert_cmd::Command;
     use rand::prelude::StdRng;
     use rust_htslib::bam::HeaderView;
+    use tempfile::NamedTempFile;
 
     const SUB: &str = "aln";
 
@@ -565,13 +636,23 @@ mod tests {
         cmd.args(passed_args).assert().success();
     }
 
+    // #[test]
+    // fn bam_no_index_fails() {
+    //     let infile = "tests/cases/no_index.bam";
+    //     let passed_args = vec![SUB, infile, "-c", "1"];
+    //     let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+    //     cmd.args(passed_args).assert().failure();
+    // }
+
+    // because it doesn't require index anymore
     #[test]
-    fn bam_no_index_fails() {
+    fn bam_no_index_is_ok() {
         let infile = "tests/cases/no_index.bam";
         let passed_args = vec![SUB, infile, "-c", "1"];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
 
-        cmd.args(passed_args).assert().failure();
+        cmd.args(passed_args).assert().success();
     }
 
     #[test]
@@ -915,5 +996,172 @@ mod tests {
             Some("samtoolsfoo.1".to_string()),
         );
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_scored_read_ordering() {
+        let r1 = bam::Record::new();
+        let small = ScoredRead {
+            record: r1.clone(),
+            score: 10,
+        };
+
+        let r2 = bam::Record::new();
+        let big = ScoredRead {
+            record: r2.clone(),
+            score: 99,
+        };
+
+        assert!(big > small, "Higher score should be 'Greater' in ordering");
+        assert!(small < big, "Lower score should be 'Less' in ordering");
+    }
+
+    #[test]
+    fn test_scored_read_ordering_tie() {
+        let mut r1 = bam::Record::new();
+        r1.set_qname(b"readA");
+        let record1 = ScoredRead {
+            record: r1.clone(),
+            score: 21,
+        };
+
+        let mut r2 = bam::Record::new();
+        r2.set_qname(b"readB");
+        let record2 = ScoredRead {
+            record: r2.clone(),
+            score: 21,
+        };
+
+        assert!(record2 > record1);
+    }
+
+    #[test]
+    fn test_output_never_exceeds_target_depth() {
+        use rust_htslib::bam::Read;
+
+        let input_path = PathBuf::from("tests/cases/test.bam");
+        let target_depth = 5;
+
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_path_buf();
+
+        let mut align = Alignment {
+            aln: input_path,
+            output: Some(output_path.clone()),
+            output_type: Some(bam::Format::Bam),
+            coverage: target_depth,
+            seed: Some(2109),
+            step_size: 100, // we do not need this
+        };
+
+        // run the sweep line algorithm
+        align.run().expect("Algorithm failed");
+
+        // verify the resulted depth
+        let mut reader = bam::Reader::from_path(&output_path).unwrap();
+
+        let mut records: Vec<bam::Record> = reader.records().map(|r| r.unwrap()).collect();
+
+        // sort by chromosome and then by position
+        records.sort_by(|a, b| {
+            let tid_cmp = a.tid().cmp(&b.tid());
+            if tid_cmp == std::cmp::Ordering::Equal {
+                a.pos().cmp(&b.pos())
+            } else {
+                tid_cmp
+            }
+        });
+
+        let mut active_ends: Vec<i64> = Vec::new();
+        let mut max_obs_depth = 0;
+        let mut current_tid = -1;
+
+        for record in records {
+            let tid = record.tid();
+            let start = record.pos();
+            let end = record.reference_end();
+
+            // new chromosome check
+            if tid != current_tid {
+                active_ends.clear();
+                current_tid = tid;
+            }
+
+            // remove reads that ended before this one started, they are not contribute to the depth anymore
+            active_ends.retain(|&e| e > start);
+
+            // add current read
+            active_ends.push(end);
+
+            // check
+            let current_depth = active_ends.len() as u32;
+            if current_depth > max_obs_depth {
+                max_obs_depth = current_depth;
+            }
+        }
+
+        assert!(
+            max_obs_depth <= target_depth,
+            "The resulted depth exceeds the target depth"
+        );
+    }
+
+    #[test]
+    fn bam_is_not_sorted_fails() {
+        let infile = "tests/cases/test_not_sorted.bam";
+        let passed_args = vec![SUB, infile, "-c", "1"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().failure();
+    }
+
+    // helper function to run subsamping aln and get the resulted read names
+    fn run_aln_get_reads_result(input: &Path, seed: Option<u64>) -> Vec<String> {
+        let target_depth = 5;
+        let out = NamedTempFile::new().unwrap();
+
+        let mut aln1 = Alignment {
+            aln: input.to_path_buf(),
+            output: Some(out.path().to_path_buf()),
+            output_type: Some(bam::Format::Bam),
+            coverage: target_depth,
+            seed,
+            step_size: 100, // we do not need this anymore
+        };
+
+        aln1.run().expect("Subsampling failed");
+
+        bam::Reader::from_path(out.path()).unwrap().records()
+            .map(|r| {
+                let record = r.unwrap();
+                String::from_utf8_lossy(record.qname()).to_string()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_reproducibility_same_seed() {
+        let input_path = Path::new("tests/cases/test.bam");
+        let seed = Some(2109);
+
+       let names1 = run_aln_get_reads_result(&input_path, seed);
+       let names2 = run_aln_get_reads_result(&input_path, seed);
+
+        // comapre the length and the read names
+        assert_eq!(names1.len(), names2.len(), "Different read count");
+        assert_eq!(names1, names2, "Different reads selected")
+    }
+
+    #[test]
+    fn test_reproducibility_diff_seed() {
+        let input_path = Path::new("tests/cases/test.bam");
+        let seed1 = Some(21);
+        let seed2 = Some(09);
+
+       let names1 = run_aln_get_reads_result(&input_path, seed1);
+       let names2 = run_aln_get_reads_result(&input_path, seed2);
+
+        // comapre the length and the read names
+        assert_ne!(names1, names2, "Same reads selected")
     }
 }
