@@ -189,7 +189,30 @@ impl Runner for Alignment {
             Vec::new() // just give it an empty vector
         };
 
-        // iterate through every read in the file
+        // a helper closure for giving a warning or report after finished scanning a chromosome
+        let depth_report = |tid: i32, max_depth: usize| {
+            // only report if we processed a valid chromosome
+            if tid == -1 {
+                return;
+            }
+            // get the name for the chromsome, if it doesnt exist, give them unknown with askterisk (*)
+            let name = chrom_names
+                .get(tid as usize)
+                .map(|n| n.as_str())
+                .unwrap_or("*");
+
+            // Did it ever reach target depth?
+            if max_depth < target_depth {
+                warn!(
+                    "Chromosome {} never reached the requested depth (Max observed: {}X)",
+                    name, max_depth
+                );
+            } else {
+                info!("Subsampling complete for: {}", name);
+            }
+        };
+
+        // iterate thriugh every read in the file
         for result in reader.records() {
             let record = result.context("Failed to parse BAM record")?;
 
@@ -215,19 +238,7 @@ impl Runner for Alignment {
 
             if tid != current_tid {
                 // we just finished a chromosome. Did it ever reach target coverage?
-                if current_tid != -1 && max_observed_depth < target_depth {
-                    // Use .get() to safely check if the name exists.
-                    // If chrom_names is empty (no_index.bam), this just skips the warning.
-                    // but actually if no chromosome, means it is unmapped and will not go here?
-                    if let Some(name) = chrom_names.get(current_tid as usize) {
-                        warn!(
-                            "Chromosome {} never reached the requested depth (Max observed: {}X)",
-                            name, max_observed_depth
-                        );
-                    }
-                } else if let Some(name) = chrom_names.get(current_tid as usize) {
-                    info!("Subsampling completed successfully for: {name}");
-                }
+                depth_report(current_tid, max_observed_depth);
                 // Reset for new chromosome
                 current_tid = tid;
                 max_observed_depth = 0;
@@ -284,19 +295,8 @@ impl Runner for Alignment {
             max_observed_depth = max_observed_depth.max(active_reads.len());
         }
 
-        // warning logic: the last chromosome
-        if current_tid != -1 && max_observed_depth < target_depth {
-            // Use .get() to safely check if the name exists.
-            // If chrom_names is empty (no_index.bam), this just skips the warning.
-            if let Some(name) = chrom_names.get(current_tid as usize) {
-                warn!(
-                    "Chromosome {} never reached the requested depth (Max observed: {}X)",
-                    name, max_observed_depth
-                );
-            }
-        } else if let Some(name) = chrom_names.get(current_tid as usize) {
-            info!("Subsampling completed successfully for: {name}");
-        }
+        // report a warning or info forn the last chromosome
+        depth_report(current_tid, max_observed_depth);
 
         // any remaining read in the heap survive
         // write into the subsampled result.
@@ -1131,7 +1131,9 @@ mod tests {
 
         aln1.run().expect("Subsampling failed");
 
-        bam::Reader::from_path(out.path()).unwrap().records()
+        bam::Reader::from_path(out.path())
+            .unwrap()
+            .records()
             .map(|r| {
                 let record = r.unwrap();
                 String::from_utf8_lossy(record.qname()).to_string()
@@ -1144,8 +1146,8 @@ mod tests {
         let input_path = Path::new("tests/cases/test.bam");
         let seed = Some(2109);
 
-       let names1 = run_aln_get_reads_result(&input_path, seed);
-       let names2 = run_aln_get_reads_result(&input_path, seed);
+        let names1 = run_aln_get_reads_result(input_path, seed);
+        let names2 = run_aln_get_reads_result(input_path, seed);
 
         // comapre the length and the read names
         assert_eq!(names1.len(), names2.len(), "Different read count");
@@ -1156,10 +1158,10 @@ mod tests {
     fn test_reproducibility_diff_seed() {
         let input_path = Path::new("tests/cases/test.bam");
         let seed1 = Some(21);
-        let seed2 = Some(09);
+        let seed2 = Some(9);
 
-       let names1 = run_aln_get_reads_result(&input_path, seed1);
-       let names2 = run_aln_get_reads_result(&input_path, seed2);
+        let names1 = run_aln_get_reads_result(input_path, seed1);
+        let names2 = run_aln_get_reads_result(input_path, seed2);
 
         // comapre the length and the read names
         assert_ne!(names1, names2, "Same reads selected")
