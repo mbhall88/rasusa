@@ -710,7 +710,7 @@ For changes to be accepted, they must pass the CI and coverage checks. These inc
 - There are no compiler errors/warnings. You can check this by running `cargo clippy
   --all-features --all-targets -- -D warnings`
 - Code coverage has not reduced. If you want to check coverage before pushing changes, I
-  use [`kcov`][kcov].
+  use [`tarpaulin`][tarpaulin].
 
 ## Citing
 
@@ -762,7 +762,7 @@ You can get the following citation by running `rasusa cite`
 
 [hyperfine]: https://github.com/sharkdp/hyperfine
 
-[kcov]: https://github.com/SimonKagstrom/kcov
+[tarpaulin]: https://github.com/xd009642/tarpaulin
 
 [log-lvl]: https://docs.rs/log/0.4.6/log/enum.Level.html#variants
 
