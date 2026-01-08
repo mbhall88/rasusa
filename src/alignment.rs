@@ -17,14 +17,15 @@ use crate::Runner;
 
 const RASUSA: &str = "rasusa";
 
-// we implementes traits manually to avoid comparring the full record
+// we implementes traits manually to avoid comparing the full record
 // primary comparison is based using the random 'score'
-// if there is tie (two read have the same score), then we use 'qname' to ensure the deterministic sorting
+// if there is tie (two read have the same score), then we use 'qname' to ensure the deterministic sorting still
 #[derive(Debug)]
 struct ScoredRead {
-    /// Read record from the alignment file
+    /// alignment record (SAM/BAM/CRAM)
     record: rust_htslib::bam::Record,
-    /// random score of the record
+
+    /// The deterministic score assigned to this record
     score: u64,
 }
 
@@ -1165,5 +1166,55 @@ mod tests {
 
         // comapre the length and the read names
         assert_ne!(names1, names2, "Same reads selected")
+    }
+
+    #[test]
+    fn unknown_input_extension_fails() {
+        let input = Path::new("tests/cases/test");
+
+        let mut aln = Alignment {
+            aln: input.to_path_buf(),
+            output: None,
+            output_type: Some(bam::Format::Bam),
+            coverage: 2,
+            seed: Some(2109),
+            step_size: 100, // we do not need this anymore
+        };
+        assert!(aln.run().is_err());
+    }
+
+    #[test]
+    fn unknown_output_extension_fails() {
+        let input = Path::new("tests/cases/test.bam");
+        let output = Path::new("tests/cases/result");
+
+        let mut aln = Alignment {
+            aln: input.to_path_buf(),
+            output: Some(output.to_path_buf()),
+            output_type: None,
+            coverage: 2,
+            seed: Some(2109),
+            step_size: 100, // we do not need this anymore
+        };
+        assert!(aln.run().is_err());
+    }
+
+    #[test]
+    fn test_equality_record() {
+        let mut r1 = bam::Record::new();
+        r1.set_qname(b"readA");
+        let record1 = ScoredRead {
+            record: r1.clone(),
+            score: 21,
+        };
+
+        let mut r2 = bam::Record::new();
+        r2.set_qname(b"readA");
+        let record2 = ScoredRead {
+            record: r2.clone(),
+            score: 21,
+        };
+
+        assert_eq!(record1, record2);
     }
 }
