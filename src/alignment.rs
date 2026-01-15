@@ -85,14 +85,10 @@ pub struct Alignment {
     #[arg(short, long, value_name = "INT")]
     pub seed: Option<u64>,
 
-    /// [DEPRECATED - Ignored in sweepline implementation]
-    /// When a region has less than the desired coverage, the step size to move along the chromosome
-    /// to find more reads.
-    ///
-    /// The lowest of the step and the minimum end coordinate of the reads in the region will be used.
-    /// This parameter can have a significant impact on the runtime of the subsampling process.
-    #[arg(long, default_value_t = 100, value_name = "INT", hide = true)] // hide from help
-    pub step_size: i64,
+    /// The minimum distance (bp) allowed between start position of new read and the worst read
+    /// in the heap to consider them 'swappable'
+    #[arg(long, default_value_t = 5, value_name = "INT", value_parser = clap::value_parser!(i64).range(1..))]
+    pub swap_size: i64,
 }
 
 impl Runner for Alignment {
@@ -282,10 +278,19 @@ impl Runner for Alignment {
                 active_reads.push(new_read);
             } else {
                 // if the heap is full, only accept it if its score is smaller than the current worst (highest score) in the heap
-                let worse_score = active_reads.peek().unwrap().score;
-                if new_read.score < worse_score {
-                    active_reads.pop();
-                    active_reads.push(new_read);
+                if let Some(mut worst) = active_reads.peek_mut() {
+                    // if the new record has better key (lower score)?
+
+                    if new_read.score < worst.score {
+                        // calculate the gap between
+                        let gap = new_read.record.pos().saturating_sub(worst.record.pos());
+
+                        // are we allowed to swap these two reads given a specified swap size?
+                        if gap as i64 <= self.swap_size {
+                            // we swap the records
+                            *worst = new_read;
+                        }
+                    }
                 }
             }
 
@@ -430,7 +435,6 @@ mod tests {
         let fmt = infer_format_from_char("x");
         assert!(fmt.is_err());
     }
-
 
     #[test]
     fn no_coverage_given_raises_error() {
@@ -622,7 +626,7 @@ mod tests {
             output_type: Some(bam::Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
-            step_size: 100, // we do not need this
+            swap_size: 5,
         };
 
         // run the sweep line algorithm
@@ -697,7 +701,7 @@ mod tests {
             output_type: Some(bam::Format::Bam),
             coverage: target_depth,
             seed,
-            step_size: 100, // we do not need this anymore
+            swap_size: 5,
         };
 
         aln1.run().expect("Subsampling failed");
@@ -748,7 +752,7 @@ mod tests {
             output_type: Some(bam::Format::Bam),
             coverage: 2,
             seed: Some(2109),
-            step_size: 100, // we do not need this anymore
+            swap_size: 5,
         };
         assert!(aln.run().is_err());
     }
@@ -764,7 +768,7 @@ mod tests {
             output_type: None,
             coverage: 2,
             seed: Some(2109),
-            step_size: 100, // we do not need this anymore
+            swap_size: 5, // we do not need this anymore
         };
         assert!(aln.run().is_err());
     }
@@ -786,5 +790,73 @@ mod tests {
         };
 
         assert_eq!(record1, record2);
+    }
+
+    #[test]
+    fn test_subsampling_statistics() {
+        let input_path = PathBuf::from("tests/cases/test.bam");
+
+        let target_depth = 2;
+
+        let output_temp = NamedTempFile::new().unwrap();
+
+        let mut align = Alignment {
+            aln: input_path,
+            output: Some(output_temp.path().to_path_buf()),
+            output_type: Some(Format::Bam),
+            coverage: target_depth,
+            seed: Some(2109),
+            swap_size: 5,
+        };
+        align.run().expect("Subsampling failed");
+
+        // check the output depth
+        let mut reader = bam::Reader::from_path(output_temp.path()).unwrap();
+
+        // collect depth for all positions covered by the reads
+        use std::collections::HashMap;
+        let mut depth_map: HashMap<i64, u32> = HashMap::new();
+
+        for r in reader.records() {
+            let record = r.unwrap();
+
+            // Simple pileup: increment counter for every position this read covers
+            for pos in record.pos()..record.reference_end() {
+                *depth_map.entry(pos).or_insert(0) += 1;
+            }
+        }
+
+        // convert to vector, and calculate the rquired stats
+        let mut depths: Vec<u32> = depth_map.values().cloned().collect();
+
+        if depths.is_empty() {
+            panic!("Resulting BAM is empty! Subsampling failed completely.");
+        }
+
+        // sort to find median
+        depths.sort();
+
+        let sum_depth: u64 = depths.iter().map(|&d| d as u64).sum();
+        let count = depths.len() as f64;
+        let mean = sum_depth as f64 / count;
+
+        let mid = depths.len() / 2;
+        let median = depths[mid];
+
+        // check if the median is exactly the target depth or at least close to
+        assert!(
+            median >= target_depth - 1 && median <= target_depth,
+            "Median depth {} is too far from target {}",
+            median,
+            target_depth
+        );
+
+        // check if the mean is exactly the target depth or at least close to
+        assert!(
+            (mean - target_depth as f64).abs() < 1.0,
+            "Mean depth {:.2} deviated too much from target {}",
+            mean,
+            target_depth
+        );
     }
 }
