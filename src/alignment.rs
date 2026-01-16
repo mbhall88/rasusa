@@ -236,6 +236,16 @@ impl Runner for Alignment {
             if tid != current_tid {
                 // we just finished a chromosome. Did it ever reach target coverage?
                 depth_report(current_tid, max_observed_depth);
+
+                // we still have survived reads from the previous chromosome in the heap,
+                // we need to write them
+                if current_tid != -1 {
+                    for scored_read in &active_reads {
+                        writer
+                            .write(&scored_read.record)
+                            .context("Failed to write record")?;
+                    }
+                }
                 // Reset for new chromosome
                 current_tid = tid;
                 max_observed_depth = 0;
@@ -794,6 +804,7 @@ mod tests {
 
     #[test]
     fn test_subsampling_statistics() {
+
         let input_path = PathBuf::from("tests/cases/test.bam");
 
         let target_depth = 2;
@@ -810,38 +821,46 @@ mod tests {
         };
         align.run().expect("Subsampling failed");
 
-        // check the output depth
         let mut reader = bam::Reader::from_path(output_temp.path()).unwrap();
+        // read the header, get the length of chromosome
+        let header = reader.header();
+        let chrom_tid = header.tid(b"plasmid_2").expect("Chromosome not found");
+        let chrom_length = header
+            .target_len(chrom_tid)
+            .expect("No chromosome length found") as usize;
 
-        // collect depth for all positions covered by the reads
-        use std::collections::HashMap;
-        let mut depth_map: HashMap<i64, u32> = HashMap::new();
+        // using preallocated vector to record depth for each position
+        // populate the vector with 0
+        let mut depth = vec![0u32; chrom_length];
 
         for r in reader.records() {
             let record = r.unwrap();
 
-            // Simple pileup: increment counter for every position this read covers
+            // only check plasmid_2 contig. It has:
+            // min 2, median 7, mean 7.5761410788382, max 11.
+            if record.tid() != chrom_tid as i32 {
+                continue;
+            }
+
+            // update the posisition depth that were covered by the record
             for pos in record.pos()..record.reference_end() {
-                *depth_map.entry(pos).or_insert(0) += 1;
+                if (pos as usize) < depth.len() {
+                    depth[pos as usize] += 1; // update the depth
+                } // safety
             }
         }
 
-        // convert to vector, and calculate the rquired stats
-        let mut depths: Vec<u32> = depth_map.values().cloned().collect();
-
-        if depths.is_empty() {
+        if depth.is_empty() {
             panic!("Resulting BAM is empty! Subsampling failed completely.");
         }
 
+        let sum_depth: u64 = depth.iter().map(|&d| d as u64).sum();
+        let mean = sum_depth as f64 / chrom_length as f64;
+
         // sort to find median
-        depths.sort();
-
-        let sum_depth: u64 = depths.iter().map(|&d| d as u64).sum();
-        let count = depths.len() as f64;
-        let mean = sum_depth as f64 / count;
-
-        let mid = depths.len() / 2;
-        let median = depths[mid];
+        depth.sort_unstable();
+        let mid = chrom_length / 2;
+        let median = depth[mid];
 
         // check if the median is exactly the target depth or at least close to
         assert!(
