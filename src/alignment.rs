@@ -1,10 +1,13 @@
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-use clap::Parser;
+use anyhow::{anyhow, Context, Result};
+use clap::{Parser, ValueEnum};
 use log::{info, warn};
+use rand::prelude::SliceRandom;
 use rand::{random, Rng, SeedableRng};
 use rust_htslib::bam;
 use rust_htslib::bam::ext::BamRecordExtensions;
@@ -60,10 +63,21 @@ impl Ord for ScoredRead {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
+pub enum SubsamplingStrategy {
+    /// Fast linear scan (Sweep line). Efficient for high depth. Requires sorted alignment input.
+    Stream,
+
+    /// Slower random access (Fetching). Minimises read overlap. Requires indexed input (.bai).
+    Fetch,
+}
+
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 pub struct Alignment {
-    /// Path to the indexed alignment file (SAM/BAM/CRAM) to subsample
+    /// Path to the input alignment file (SAM/BAM/CRAM) to subsample
+    ///
+    /// Note: An index (.bai) is required when using '--strategy fetch'.
     #[arg(value_parser = check_path_exists, name = "FILE")]
     pub aln: PathBuf,
 
@@ -85,18 +99,42 @@ pub struct Alignment {
     #[arg(short, long, value_name = "INT")]
     pub seed: Option<u64>,
 
-    /// The minimum distance (bp) allowed between start position of new read and the worst read
-    /// in the heap to consider them 'swappable'
+    // Strategy selection
+    /// Subsampling strategy
+    #[arg(long, value_enum, default_value_t = SubsamplingStrategy::Stream)]
+    pub strategy: SubsamplingStrategy,
+
+    // Algorithm specific arguments
+    /// [Stream] Maximum distance (bp) allowed between start position of new read and the worst read
+    /// in the heap to consider them 'swappable'.
+    ///
+    /// Larger values allow swapping reads over greater distances, but may cause local undersampling.
     #[arg(long, default_value_t = 5, value_name = "INT", value_parser = clap::value_parser!(i64).range(1..))]
     pub swap_size: i64,
+
+    /// [Fetch] When a region has less than the desired coverage, the step size to move along the chromosome
+    /// to find more reads.
+    ///
+    /// The lowest of the step and the minimum end coordinate of the reads in the region will be used.
+    /// This parameter can have a significant impact on the runtime of the subsampling process.
+    #[arg(long, default_value_t = 100, value_name = "INT", value_parser = clap::value_parser!(i64).range(1..))]
+    pub step_size: i64,
 }
 
 impl Runner for Alignment {
     fn run(&mut self) -> Result<()> {
-        info!("Subsampling alignment file: {:?}", self.aln);
+        match self.strategy {
+            SubsamplingStrategy::Stream => self.run_stream(),
+            SubsamplingStrategy::Fetch => self.run_fetch(),
+        }
+    }
+}
 
+impl Alignment {
+    // using generic parameter, because stream (bam::Reader) and fetch (bam::IndexedReader) using different type of readers
+    fn setup_resources<T: Read>(&self, reader: &T) -> Result<(rand_pcg::Pcg64, bam::Writer)> {
         // set up random number generator
-        let mut rng = match self.seed {
+        let rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
             None => {
                 let seed = random();
@@ -104,11 +142,6 @@ impl Runner for Alignment {
                 rand_pcg::Pcg64::seed_from_u64(seed)
             }
         };
-
-        // set up reader
-        // because we use linear scan, i change IndexedReader to standard reader
-        let mut reader =
-            bam::Reader::from_path(&self.aln).context("Failed to read alignment file")?;
 
         let mut header = bam::Header::from_template(reader.header());
 
@@ -141,7 +174,7 @@ impl Runner for Alignment {
             },
         };
 
-        let mut writer = match &self.output {
+        let writer = match &self.output {
             Some(path) => {
                 let path = path.as_path();
 
@@ -157,6 +190,19 @@ impl Runner for Alignment {
                 output
             }
         };
+
+        Ok((rng, writer))
+    }
+
+    fn run_stream(&self) -> Result<()> {
+        info!("Subsampling alignment file (Stream): {:?}", self.aln);
+
+        // set up reader
+        // because we use linear scan, i change IndexedReader to standard reader
+        let mut reader =
+            bam::Reader::from_path(&self.aln).context("Failed to read alignment file")?;
+
+        let (mut rng, mut writer) = self.setup_resources(&reader)?;
 
         // the sweep line algorithm starts here
 
@@ -226,10 +272,13 @@ impl Runner for Alignment {
             // check if the input is not sorted yet
             if tid == current_tid && pos < last_pos {
                 return Err(anyhow::anyhow!(
-                    "Input is not sorted! Found read at pos {} after pos {} on chromosome {}",
+                    "Input is not sorted! Found read at pos {} after pos {} on {}",
                     pos,
                     last_pos,
-                    tid
+                    chrom_names
+                        .get(tid as usize)
+                        .map(|n| n.as_str())
+                        .unwrap_or("Unknown")
                 ));
             }
 
@@ -255,7 +304,7 @@ impl Runner for Alignment {
             let start = record.pos();
 
             // assign deterministic random priority
-            let score: u64 = rng.gen();
+            let key: u64 = rng.gen();
 
             // clear and move everything from the heap to the preallocated vector
             // to check whether the reads in the heap already expire
@@ -281,7 +330,7 @@ impl Runner for Alignment {
             // with target depth usually 50 - 100 maybe, i think this operation is not very expensive.
 
             // when a new read begins:
-            let new_read = ScoredRead::new(record, score);
+            let new_read = ScoredRead::new(record, key);
 
             if active_reads.len() < target_depth {
                 // if the heap has records fewer than N reads, just accept it.
@@ -289,10 +338,9 @@ impl Runner for Alignment {
             } else {
                 // if the heap is full, only accept it if its score is smaller than the current worst (highest score) in the heap
                 if let Some(mut worst) = active_reads.peek_mut() {
-                    // if the new record has better key (lower score)?
-
+                    // does the new record has better key (lower score)?
                     if new_read.score < worst.score {
-                        // calculate the gap between
+                        // calculate the distance between these two reads
                         let gap = new_read.record.pos().saturating_sub(worst.record.pos());
 
                         // are we allowed to swap these two reads given a specified swap size?
@@ -324,9 +372,141 @@ impl Runner for Alignment {
 
         Ok(())
     }
-}
 
-impl Alignment {
+    fn run_fetch(&self) -> Result<()> {
+        info!("Subsampling alignment file (Fetch): {:?}", self.aln);
+
+        let mut reader =
+            bam::IndexedReader::from_path(&self.aln).context("Failed to read alignment file")?;
+
+        let (mut rng, mut writer) = self.setup_resources(&reader)?;
+
+        let header = reader.header().clone();
+        let chroms = header.target_names();
+
+        for chrom in chroms {
+            let chrom_name = String::from_utf8_lossy(chrom);
+
+            info!("Subsampling chromosome: {chrom_name}");
+
+            let tid = header
+                .tid(chrom)
+                .context(format!("Failed to get tid for chromosome {chrom_name}"))?;
+            let chrom_len = header.target_len(tid).context(format!(
+                "Failed to get chromosome length for chromosome {chrom_name}"
+            ))?;
+            let mut n_reads_needed = self.coverage;
+            let mut current_reads = HashSet::new();
+            let mut heap = BinaryHeap::new();
+
+            // get the 0-based position of the first record in the chromosome
+            reader.fetch(tid).context(format!(
+                "Failed to get all records for chromosome {chrom_name}"
+            ))?;
+
+            let first_record = if let Some(first_record) = reader.records().next() {
+                first_record.context("Failed to get first record")?
+            } else {
+                warn!("Chromosome {chrom_name} has no records");
+                continue;
+            };
+
+            let mut next_pos = first_record.pos();
+            let first_pos = next_pos;
+            let mut regions_below_coverage = false;
+
+            loop {
+                reader
+                    .fetch((tid, next_pos, next_pos + 1))
+                    .context(format!(
+                        "Failed to fetch records in region {chrom_name}:{next_pos}-{}",
+                        next_pos + 1
+                    ))?;
+                let records = reader.records();
+
+                let mut records: Vec<_> = records.filter_map(Result::ok).collect();
+
+                if next_pos == first_pos {
+                    // we just shuffle all the reads in the first position
+                    records.shuffle(&mut rng);
+                } else {
+                    // need to sort records by their alignment start positions. those with the same start
+                    // position should be shuffled so that the order is random
+                    shuffle_records_by_position(&mut records, &mut rng);
+                }
+
+                let mut num_output = 0;
+                let mut record_iter = records.into_iter().rev();
+
+                while num_output < n_reads_needed {
+                    let record = match record_iter.next() {
+                        Some(r) => r,
+                        None => break,
+                    };
+                    let qname = record.qname().to_owned();
+
+                    if current_reads.contains(&qname) {
+                        continue;
+                    }
+                    current_reads.insert(qname.to_owned());
+                    heap.push(Reverse((record.reference_end(), qname.to_owned())));
+                    // write the record
+                    writer.write(&record).context("Failed to write record")?;
+                    num_output += 1;
+                }
+
+                n_reads_needed -= num_output;
+
+                if n_reads_needed > 0 {
+                    // increment next_pos by step_size or the minimum end position of the reads in
+                    // the region, whichever is smaller
+                    let min_end = heap.peek().map(|Reverse((end, _))| *end);
+                    match min_end {
+                        Some(min_end) => {
+                            next_pos += self.step_size.min(min_end - next_pos);
+                        }
+                        None => {
+                            next_pos += self.step_size;
+                        }
+                    }
+                    regions_below_coverage = true;
+                }
+
+                // remove smallest end position from heap and update next_pos and n_reads_needed
+                // allowing for the fact that there may be multiple reads with the same end position
+                while let Some(Reverse((end, qname))) = heap.pop() {
+                    next_pos = end;
+
+                    if current_reads.contains(&qname) {
+                        current_reads.remove(&qname);
+                        n_reads_needed += 1;
+                    } else {
+                        return Err(anyhow!("A read in the heap was not found in the current reads set. This should not happen, please raise an issue."));
+                    }
+                    if heap.is_empty() {
+                        break;
+                    }
+                    if let Some(Reverse((next_end, _))) = heap.peek() {
+                        if *next_end != end {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                if next_pos as u64 >= chrom_len {
+                    break;
+                }
+            }
+            if regions_below_coverage {
+                warn!("Chromosome {chrom_name} has regions with less than the requested coverage");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Generates a rasusa program entry from a SAM header
     fn program_entry(&self, header: &Header) -> HeaderRecord<'_> {
         let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
@@ -342,6 +522,31 @@ impl Alignment {
         record.push_tag(b"CL", cl);
 
         record
+    }
+}
+
+/// Sorts records by position and shuffles those with the same position
+fn shuffle_records_by_position(records: &mut [bam::Record], rng: &mut impl Rng) {
+    // First sort by position
+    records.sort_by_key(|record| record.pos());
+
+    // Then shuffle groups with the same position
+    let mut start = 0;
+    while start < records.len() {
+        let pos = records[start].pos();
+        let mut end = start + 1;
+
+        // Find the end of the group with the same position
+        while end < records.len() && records[end].pos() == pos {
+            end += 1;
+        }
+
+        // Shuffle this group if it has more than one element
+        if end - start > 1 {
+            records[start..end].shuffle(rng);
+        }
+
+        start = end;
     }
 }
 
@@ -398,6 +603,7 @@ pub fn infer_format_from_char(c: &str) -> Result<Format, String> {
 mod tests {
     use super::*;
     use assert_cmd::Command;
+    use rand::prelude::StdRng;
     use rust_htslib::bam::HeaderView;
     use tempfile::NamedTempFile;
 
@@ -447,6 +653,148 @@ mod tests {
     }
 
     #[test]
+    fn test_shuffle_records_by_position_empty() {
+        let mut rng = StdRng::seed_from_u64(1234);
+        let mut empty_records: Vec<rust_htslib::bam::Record> = vec![];
+
+        shuffle_records_by_position(&mut empty_records, &mut rng);
+
+        assert_eq!(empty_records.len(), 0);
+    }
+
+    #[test]
+    fn test_shuffle_records_by_position_single_record() {
+        let mut rng = StdRng::seed_from_u64(1234);
+
+        // Create a single BAM record
+        let mut record = rust_htslib::bam::Record::new();
+        record.set_pos(100);
+        let mut records = vec![record];
+
+        shuffle_records_by_position(&mut records, &mut rng);
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].pos(), 100);
+    }
+
+    #[test]
+    fn test_shuffle_records_by_position_maintains_sort_order() {
+        let mut rng = StdRng::seed_from_u64(1234);
+
+        // Create records with different positions
+        let mut record1 = rust_htslib::bam::Record::new();
+        record1.set_pos(300);
+        let mut record2 = rust_htslib::bam::Record::new();
+        record2.set_pos(100);
+        let mut record3 = rust_htslib::bam::Record::new();
+        record3.set_pos(200);
+
+        let mut records = vec![record1, record2, record3];
+
+        shuffle_records_by_position(&mut records, &mut rng);
+
+        // Should be sorted by position
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].pos(), 100);
+        assert_eq!(records[1].pos(), 200);
+        assert_eq!(records[2].pos(), 300);
+    }
+
+    #[test]
+    fn test_shuffle_records_by_position_shuffles_same_position() {
+        let mut rng = StdRng::seed_from_u64(1234);
+
+        // Create multiple records with the same position but different data
+        let mut record1 = rust_htslib::bam::Record::new();
+        record1.set_pos(100);
+        record1.set_qname(b"read1");
+
+        let mut record2 = rust_htslib::bam::Record::new();
+        record2.set_pos(100);
+        record2.set_qname(b"read2");
+
+        let mut record3 = rust_htslib::bam::Record::new();
+        record3.set_pos(100);
+        record3.set_qname(b"read3");
+
+        let records = vec![record1, record2, record3];
+        let original_order: Vec<Vec<u8>> = records.iter().map(|r| r.qname().to_vec()).collect();
+
+        // Run shuffle multiple times to verify randomness
+        let mut different_orders = 0;
+        for _ in 0..10 {
+            let mut test_records = records.clone();
+            shuffle_records_by_position(&mut test_records, &mut rng);
+
+            // All should still be at position 100
+            assert!(test_records.iter().all(|r| r.pos() == 100));
+
+            // Check if order changed
+            let new_order: Vec<Vec<u8>> = test_records.iter().map(|r| r.qname().to_vec()).collect();
+            if new_order != original_order {
+                different_orders += 1;
+            }
+        }
+
+        // Should have at least some different orders due to shuffling
+        assert!(
+            different_orders > 0,
+            "Records with same position should be shuffled"
+        );
+    }
+
+    #[test]
+    fn test_shuffle_records_by_position_mixed_positions() {
+        let mut rng = StdRng::seed_from_u64(1234);
+
+        // Create records with mixed positions - some same, some different
+        let mut record1 = rust_htslib::bam::Record::new();
+        record1.set_pos(100);
+        record1.set_qname(b"read1_pos100");
+
+        let mut record2 = rust_htslib::bam::Record::new();
+        record2.set_pos(200);
+        record2.set_qname(b"read2_pos200");
+
+        let mut record3 = rust_htslib::bam::Record::new();
+        record3.set_pos(100);
+        record3.set_qname(b"read3_pos100");
+
+        let mut record4 = rust_htslib::bam::Record::new();
+        record4.set_pos(150);
+        record4.set_qname(b"read4_pos150");
+
+        let mut record5 = rust_htslib::bam::Record::new();
+        record5.set_pos(100);
+        record5.set_qname(b"read5_pos100");
+
+        let mut records = vec![record1, record2, record3, record4, record5];
+
+        shuffle_records_by_position(&mut records, &mut rng);
+
+        // Should be sorted by position
+        let positions: Vec<i64> = records.iter().map(|r| r.pos()).collect();
+        assert_eq!(positions, vec![100, 100, 100, 150, 200]);
+
+        // Records at position 100 should potentially be in different order
+        let pos100_names: Vec<Vec<u8>> = records
+            .iter()
+            .filter(|r| r.pos() == 100)
+            .map(|r| r.qname().to_vec())
+            .collect();
+        assert_eq!(pos100_names.len(), 3);
+
+        // All names should be present
+        let name_strings: Vec<String> = pos100_names
+            .iter()
+            .map(|name| String::from_utf8_lossy(name).to_string())
+            .collect();
+        assert!(name_strings.contains(&"read1_pos100".to_string()));
+        assert!(name_strings.contains(&"read3_pos100".to_string()));
+        assert!(name_strings.contains(&"read5_pos100".to_string()));
+    }
+
+    #[test]
     fn no_coverage_given_raises_error() {
         let infile = "tests/cases/test.bam";
         let passed_args = vec![SUB, infile];
@@ -456,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_coverage_raises_error() {
+    fn zero_coverage_raises_error_stream() {
         let infile = "tests/cases/test.bam";
         let passed_args = vec![SUB, infile, "-c", "0"];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
@@ -465,7 +813,16 @@ mod tests {
     }
 
     #[test]
-    fn bam_with_regions_of_zero_coverage_doesnt_endless_loop() {
+    fn zero_coverage_raises_error_fetch() {
+        let infile = "tests/cases/test.bam";
+        let passed_args = vec![SUB, infile, "-c", "0", "--strategy", "fetch"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().failure();
+    }
+
+    #[test]
+    fn bam_with_regions_of_zero_coverage_doesnt_endless_loop_stream() {
         let infile = "tests/cases/test.bam";
         let passed_args = vec![SUB, infile, "-c", "1"];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
@@ -474,7 +831,16 @@ mod tests {
     }
 
     #[test]
-    fn excess_coverage_doesnt_endless_loop() {
+    fn bam_with_regions_of_zero_coverage_doesnt_endless_loop_fetch() {
+        let infile = "tests/cases/test.bam";
+        let passed_args = vec![SUB, infile, "-c", "1", "--strategy", "fetch"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn excess_coverage_doesnt_endless_loop_stream() {
         let infile = "tests/cases/test.bam";
         let passed_args = vec![SUB, infile, "-c", "10000"];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
@@ -482,14 +848,32 @@ mod tests {
         cmd.args(passed_args).assert().success();
     }
 
+    #[test]
+    fn excess_coverage_doesnt_endless_loop_fetch() {
+        let infile = "tests/cases/test.bam";
+        let passed_args = vec![SUB, infile, "-c", "10000", "--strategy", "fetch"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().success();
+    }
+
     // because it doesn't require index anymore
     #[test]
-    fn bam_no_index_is_ok() {
+    fn bam_no_index_is_ok_stream() {
         let infile = "tests/cases/no_index.bam";
         let passed_args = vec![SUB, infile, "-c", "1"];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
 
         cmd.args(passed_args).assert().success();
+    }
+
+    #[test]
+    fn bam_no_index_fails_fetch() {
+        let infile = "tests/cases/no_index.bam";
+        let passed_args = vec![SUB, infile, "-c", "1", "--strategy", "fetch"];
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
+
+        cmd.args(passed_args).assert().failure();
     }
 
     #[test]
@@ -566,6 +950,94 @@ mod tests {
     }
 
     #[test]
+    fn test_original_issue_random_compare_insufficient_shuffling() {
+        // This test demonstrates the original issue: random_compare doesn't properly shuffle
+        // groups of records with the same position because it only introduces randomness
+        // at the comparison level, not at the group level.
+        // This relates to issue #76.
+
+        use std::cmp::Ordering;
+
+        // Simulate the old random_compare function
+        fn old_random_compare<T: Ord>(a: T, b: T, rng: &mut impl Rng) -> Ordering {
+            if a == b {
+                // Introduce randomness when elements are equal
+                if rng.gen::<bool>() {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            } else {
+                a.cmp(&b)
+            }
+        }
+
+        // Simulate the old random_sort function
+        fn old_random_sort<T, K: Ord + Copy>(
+            vec: &mut [T],
+            key_extractor: fn(&T) -> K,
+            mut rng: impl Rng,
+        ) {
+            vec.sort_by(|a, b| old_random_compare(key_extractor(a), key_extractor(b), &mut rng));
+        }
+
+        let mut rng = StdRng::seed_from_u64(42);
+
+        // Create records with the same position
+        let mut record1 = rust_htslib::bam::Record::new();
+        record1.set_pos(100);
+        record1.set_qname(b"read1");
+
+        let mut record2 = rust_htslib::bam::Record::new();
+        record2.set_pos(100);
+        record2.set_qname(b"read2");
+
+        let mut record3 = rust_htslib::bam::Record::new();
+        record3.set_pos(100);
+        record3.set_qname(b"read3");
+
+        let records = vec![record1, record2, record3];
+        let original_order: Vec<Vec<u8>> = records.iter().map(|r| r.qname().to_vec()).collect();
+
+        // Test the old approach - it often fails to properly shuffle
+        let mut same_order_count = 0;
+        for _ in 0..20 {
+            let mut test_records = records.clone();
+            old_random_sort(&mut test_records, |record| record.pos(), &mut rng);
+
+            let new_order: Vec<Vec<u8>> = test_records.iter().map(|r| r.qname().to_vec()).collect();
+            if new_order == original_order {
+                same_order_count += 1;
+            }
+        }
+
+        // The old approach often keeps the same order because random_compare
+        // doesn't guarantee proper shuffling of equal elements
+        println!("Old approach: {same_order_count} out of 20 iterations kept the same order");
+
+        // Now test our new approach
+        let mut new_same_order_count = 0;
+        for _ in 0..20 {
+            let mut test_records = records.clone();
+            shuffle_records_by_position(&mut test_records, &mut rng);
+
+            let new_order: Vec<Vec<u8>> = test_records.iter().map(|r| r.qname().to_vec()).collect();
+            if new_order == original_order {
+                new_same_order_count += 1;
+            }
+        }
+
+        println!("New approach: {new_same_order_count} out of 20 iterations kept the same order");
+
+        // The new approach should shuffle much more effectively
+        // (though due to randomness, it might occasionally keep the same order)
+        assert!(
+            new_same_order_count < same_order_count,
+            "New shuffling approach should be more effective than old random_compare approach"
+        );
+    }
+
+    #[test]
     fn test_make_program_id_unique_program_id_startswith_same_substring() {
         let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
 @SQ\tSN:chromosome\tLN:5399960
@@ -636,7 +1108,9 @@ mod tests {
             output_type: Some(bam::Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
+            strategy: SubsamplingStrategy::Stream,
             swap_size: 5,
+            step_size: 100, // it is not used
         };
 
         // run the sweep line algorithm
@@ -701,7 +1175,11 @@ mod tests {
     }
 
     // helper function to run subsamping aln and get the resulted read names
-    fn run_aln_get_reads_result(input: &Path, seed: Option<u64>) -> Vec<String> {
+    fn run_aln_get_reads_result(
+        input: &Path,
+        seed: Option<u64>,
+        strategy: SubsamplingStrategy,
+    ) -> Vec<String> {
         let target_depth = 5;
         let out = NamedTempFile::new().unwrap();
 
@@ -711,7 +1189,9 @@ mod tests {
             output_type: Some(bam::Format::Bam),
             coverage: target_depth,
             seed,
+            strategy,
             swap_size: 5,
+            step_size: 100,
         };
 
         aln1.run().expect("Subsampling failed");
@@ -727,12 +1207,12 @@ mod tests {
     }
 
     #[test]
-    fn test_reproducibility_same_seed() {
+    fn test_reproducibility_stream_same_seed() {
         let input_path = Path::new("tests/cases/test.bam");
         let seed = Some(2109);
 
-        let names1 = run_aln_get_reads_result(input_path, seed);
-        let names2 = run_aln_get_reads_result(input_path, seed);
+        let names1 = run_aln_get_reads_result(input_path, seed, SubsamplingStrategy::Stream);
+        let names2 = run_aln_get_reads_result(input_path, seed, SubsamplingStrategy::Stream);
 
         // comapre the length and the read names
         assert_eq!(names1.len(), names2.len(), "Different read count");
@@ -740,13 +1220,39 @@ mod tests {
     }
 
     #[test]
-    fn test_reproducibility_diff_seed() {
+    fn test_reproducibility_fetch_same_seed() {
+        let input_path = Path::new("tests/cases/test.bam");
+        let seed = Some(2109);
+
+        let names1 = run_aln_get_reads_result(input_path, seed, SubsamplingStrategy::Fetch);
+        let names2 = run_aln_get_reads_result(input_path, seed, SubsamplingStrategy::Fetch);
+
+        // comapre the length and the read names
+        assert_eq!(names1.len(), names2.len(), "Different read count");
+        assert_eq!(names1, names2, "Different reads selected")
+    }
+
+    #[test]
+    fn test_reproducibility_stream_diff_seed() {
         let input_path = Path::new("tests/cases/test.bam");
         let seed1 = Some(21);
         let seed2 = Some(9);
 
-        let names1 = run_aln_get_reads_result(input_path, seed1);
-        let names2 = run_aln_get_reads_result(input_path, seed2);
+        let names1 = run_aln_get_reads_result(input_path, seed1, SubsamplingStrategy::Stream);
+        let names2 = run_aln_get_reads_result(input_path, seed2, SubsamplingStrategy::Stream);
+
+        // comapre the length and the read names
+        assert_ne!(names1, names2, "Same reads selected")
+    }
+
+    #[test]
+    fn test_reproducibility_fetch_diff_seed() {
+        let input_path = Path::new("tests/cases/test.bam");
+        let seed1 = Some(21);
+        let seed2 = Some(9);
+
+        let names1 = run_aln_get_reads_result(input_path, seed1, SubsamplingStrategy::Fetch);
+        let names2 = run_aln_get_reads_result(input_path, seed2, SubsamplingStrategy::Fetch);
 
         // comapre the length and the read names
         assert_ne!(names1, names2, "Same reads selected")
@@ -762,7 +1268,9 @@ mod tests {
             output_type: Some(bam::Format::Bam),
             coverage: 2,
             seed: Some(2109),
+            strategy: SubsamplingStrategy::Stream,
             swap_size: 5,
+            step_size: 100, // not used
         };
         assert!(aln.run().is_err());
     }
@@ -778,7 +1286,9 @@ mod tests {
             output_type: None,
             coverage: 2,
             seed: Some(2109),
-            swap_size: 5, // we do not need this anymore
+            strategy: SubsamplingStrategy::Stream,
+            swap_size: 5,
+            step_size: 100, // not used
         };
         assert!(aln.run().is_err());
     }
@@ -804,7 +1314,6 @@ mod tests {
 
     #[test]
     fn test_subsampling_statistics() {
-
         let input_path = PathBuf::from("tests/cases/test.bam");
 
         let target_depth = 2;
@@ -817,7 +1326,9 @@ mod tests {
             output_type: Some(Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
+            strategy: SubsamplingStrategy::Stream,
             swap_size: 5,
+            step_size: 100, // not used
         };
         align.run().expect("Subsampling failed");
 
