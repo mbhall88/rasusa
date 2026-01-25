@@ -2,17 +2,32 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::result::Result::Ok;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
 use log::{info, warn};
 use rand::prelude::SliceRandom;
 use rand::{random, Rng, SeedableRng};
-use rust_htslib::bam;
-use rust_htslib::bam::ext::BamRecordExtensions;
-use rust_htslib::bam::header::HeaderRecord;
-use rust_htslib::bam::{Format, Header, Read};
+
+use noodles::core::{Position, Region};
+use noodles::sam::alignment::RecordBuf;
+use noodles::sam::header::record::value::{
+    map::{program::tag, Program},
+    Map,
+};
+use noodles::sam::Header;
+use noodles_util::alignment::{
+    self,
+    io::{indexed_reader, Format},
+};
+
+// --- TYPE DEFINITIONS ---
+// A generic writer that can handle File or Stdout
+type UniversalWriter = alignment::io::Writer<Box<dyn Write>>;
 
 use crate::cli::check_path_exists;
 use crate::Runner;
@@ -25,21 +40,21 @@ const RASUSA: &str = "rasusa";
 #[derive(Debug)]
 struct ScoredRead {
     /// alignment record (SAM/BAM/CRAM)
-    record: rust_htslib::bam::Record,
+    record: RecordBuf,
 
     /// The deterministic score assigned to this record
     score: u64,
 }
 
 impl ScoredRead {
-    fn new(record: rust_htslib::bam::Record, score: u64) -> Self {
+    fn new(record: RecordBuf, score: u64) -> Self {
         Self { record, score }
     }
 }
 
 impl PartialEq for ScoredRead {
     fn eq(&self, other: &Self) -> bool {
-        self.score == other.score && self.record.qname() == other.record.qname()
+        self.score == other.score && self.record.name() == other.record.name()
     }
 }
 
@@ -56,7 +71,7 @@ impl PartialOrd for ScoredRead {
 impl Ord for ScoredRead {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match self.score.cmp(&other.score) {
-            std::cmp::Ordering::Equal => self.record.qname().cmp(other.record.qname()),
+            std::cmp::Ordering::Equal => self.record.name().cmp(&other.record.name()),
             std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
             std::cmp::Ordering::Less => std::cmp::Ordering::Less,
         }
@@ -109,7 +124,7 @@ pub struct Alignment {
     /// in the heap to consider them 'swappable'.
     ///
     /// Larger values allow swapping reads over greater distances, but may cause local undersampling.
-    #[arg(long, default_value_t = 5, value_name = "INT", value_parser = clap::value_parser!(i64).range(1..))]
+    #[arg(long, default_value_t = 5, value_name = "INT", value_parser = clap::value_parser!(i64).range(0..))]
     pub swap_size: i64,
 
     /// [Fetch] When a region has less than the desired coverage, the step size to move along the chromosome
@@ -132,7 +147,7 @@ impl Runner for Alignment {
 
 impl Alignment {
     // using generic parameter, because stream (bam::Reader) and fetch (bam::IndexedReader) using different type of readers
-    fn setup_resources<T: Read>(&self, reader: &T) -> Result<(rand_pcg::Pcg64, bam::Writer)> {
+    fn setup_resources(&self, input_header: &Header) -> Result<(rand_pcg::Pcg64, UniversalWriter)> {
         // set up random number generator
         let rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
@@ -143,11 +158,11 @@ impl Alignment {
             }
         };
 
-        let mut header = bam::Header::from_template(reader.header());
+        let mut header = input_header.clone();
 
         // add rasusa program command line to header
-        let program_record = self.program_entry(&header);
-        header.push_record(&program_record);
+        let (pg_id, pg_map) = self.program_entry(&header);
+        header.programs_mut().as_mut().insert(pg_id.into(), pg_map);
 
         // set up header and writer
         let input_fmt = match infer_format_from_path(&self.aln) {
@@ -174,22 +189,29 @@ impl Alignment {
             },
         };
 
-        let writer = match &self.output {
+        // use Box<dyn Write> to make File and Stdout compatible
+        let sink: Box<dyn Write> = match &self.output {
             Some(path) => {
                 let path = path.as_path();
-
-                let output = bam::Writer::from_path(path, &header, output_fmt)
-                    .context("Failed to create output alignment file")?;
                 info!("Writing subsampled alignment to: {:?}", path);
-                output
+                let file = File::create(path).context("Failed to create output alignment file")?;
+
+                let buffered_file = BufWriter::new(file);
+                Box::new(buffered_file)
             }
             None => {
-                let output = bam::Writer::from_stdout(&header, output_fmt)
-                    .context("Failed to create output alignment file")?;
                 info!("Writing subsampled alignment to stdout");
-                output
+                let buffered_stdout = BufWriter::new(io::stdout());
+                Box::new(buffered_stdout)
             }
         };
+
+        // the writer
+        let mut writer = noodles_util::alignment::io::writer::Builder::default()
+            .set_format(output_fmt)
+            .build_from_writer(sink)?;
+
+        writer.write_header(&header)?;
 
         Ok((rng, writer))
     }
@@ -198,11 +220,15 @@ impl Alignment {
         info!("Subsampling alignment file (Stream): {:?}", self.aln);
 
         // set up reader
-        // because we use linear scan, i change IndexedReader to standard reader
-        let mut reader =
-            bam::Reader::from_path(&self.aln).context("Failed to read alignment file")?;
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(&self.aln)
+            .context("Failed to read alignment file")?;
 
-        let (mut rng, mut writer) = self.setup_resources(&reader)?;
+        // read header explecitely
+        let header = reader.read_header()?;
+
+        // setup resources
+        let (mut rng, mut writer) = self.setup_resources(&header)?;
 
         // the sweep line algorithm starts here
 
@@ -214,71 +240,61 @@ impl Alignment {
         // we also pre alocated a vector here, and will be reused
         let mut survivors: Vec<ScoredRead> = Vec::with_capacity(target_depth);
 
-        let mut current_tid = -1;
+        let mut current_tid: Option<usize> = None;
         let mut max_observed_depth: usize = 0;
         // track the last position so that we know whether the input is already sorted or no
         let mut last_pos: i64 = -1;
 
         // to get chromosome name for warning feature
-        // only ask names if they actually exist
-        let header_view = reader.header().clone();
-        let chrom_names: Vec<String> = if header_view.target_count() > 0 {
-            header_view
-                .target_names()
-                .iter()
-                .map(|name_bytes| String::from_utf8_lossy(name_bytes).to_string())
-                .collect()
-        } else {
-            Vec::new() // just give it an empty vector
-        };
+        let chrom_names: Vec<String> = header
+            .reference_sequences()
+            .keys()
+            .map(|k| k.to_string())
+            .collect();
 
         // a helper closure for giving a warning or report after finished scanning a chromosome
-        let depth_report = |tid: i32, max_depth: usize| {
-            // only report if we processed a valid chromosome
-            if tid == -1 {
-                return;
-            }
-            // get the name for the chromsome, if it doesnt exist, give them unknown with askterisk (*)
-            let name = chrom_names
-                .get(tid as usize)
-                .map(|n| n.as_str())
-                .unwrap_or("*");
-
-            // Did it ever reach target depth?
-            if max_depth < target_depth {
-                warn!(
-                    "Chromosome {} never reached the requested depth (Max observed: {}X)",
-                    name, max_depth
-                );
-            } else {
-                info!("Subsampling complete for: {}", name);
+        let depth_report = |tid: Option<usize>, max_depth: usize| {
+            if let Some(id) = tid {
+                let name = chrom_names.get(id).map(|s| s.as_str()).unwrap_or("*");
+                if max_depth < target_depth {
+                    warn!(
+                        "Chromosome {} never reached target depth (Max: {}X)",
+                        name, max_depth
+                    );
+                } else {
+                    info!("Subsampling complete for: {}", name);
+                }
             }
         };
 
         // iterate thriugh every read in the file
-        for result in reader.records() {
+        for result in reader.records(&header) {
             let record = result.context("Failed to parse BAM record")?;
+            let recordbuf = RecordBuf::try_from_alignment_record(&header, record.as_ref())?;
 
             // skip unmapped reads (they do not have start and/or end coordinates)
-            if record.is_unmapped() {
+            if recordbuf.flags().is_unmapped() {
                 continue;
             }
 
-            // warning logic
-            // tid ID maps to chromosome names, 0 means chrom 1
-            let tid = record.tid();
-            let pos = record.pos();
+            let tid = recordbuf.reference_sequence_id();
+
+            // noodles use 1-base coordinate.. inclusive start
+            // we know it is Some(p) because we checked is_none() above
+            let pos = usize::from(recordbuf.alignment_start().unwrap()) as i64 - 1;
 
             // check if the input is not sorted yet
+            let chrom_name = if let Some(id) = tid {
+                chrom_names.get(id).map(|n| n.as_str()).unwrap_or("Unknown")
+            } else {
+                "Unknown"
+            };
             if tid == current_tid && pos < last_pos {
                 return Err(anyhow::anyhow!(
-                    "Input is not sorted! Found read at pos {} after pos {} on {}",
+                    "Input is not sorted! Found read at pos {} after pos {} on {:?}",
                     pos,
                     last_pos,
-                    chrom_names
-                        .get(tid as usize)
-                        .map(|n| n.as_str())
-                        .unwrap_or("Unknown")
+                    chrom_name
                 ));
             }
 
@@ -288,10 +304,10 @@ impl Alignment {
 
                 // we still have survived reads from the previous chromosome in the heap,
                 // we need to write them
-                if current_tid != -1 {
+                if current_tid.is_some() {
                     for scored_read in &active_reads {
                         writer
-                            .write(&scored_read.record)
+                            .write_record(&header, &scored_read.record)
                             .context("Failed to write record")?;
                     }
                 }
@@ -301,7 +317,7 @@ impl Alignment {
                 active_reads.clear();
             }
 
-            let start = record.pos();
+            let start = pos;
 
             // assign deterministic random priority
             let key: u64 = rng.gen();
@@ -313,11 +329,18 @@ impl Alignment {
             survivors.extend(active_reads.drain());
 
             for scored_read in survivors.drain(..) {
-                if scored_read.record.reference_end() <= start {
+                // inclusive end
+                let end = scored_read
+                    .record
+                    .alignment_end()
+                    .map(|p| usize::from(p) as i64)
+                    .unwrap_or(start);
+
+                if end <= start {
                     // the reads survived!
                     // and we write it into the result
                     writer
-                        .write(&scored_read.record)
+                        .write_record(&header, &scored_read.record)
                         .context("Failed to write record")?;
                 } else {
                     // still active,
@@ -330,7 +353,7 @@ impl Alignment {
             // with target depth usually 50 - 100 maybe, i think this operation is not very expensive.
 
             // when a new read begins:
-            let new_read = ScoredRead::new(record, key);
+            let new_read = ScoredRead::new(recordbuf, key);
 
             if active_reads.len() < target_depth {
                 // if the heap has records fewer than N reads, just accept it.
@@ -341,7 +364,10 @@ impl Alignment {
                     // does the new record has better key (lower score)?
                     if new_read.score < worst.score {
                         // calculate the distance between these two reads
-                        let gap = new_read.record.pos().saturating_sub(worst.record.pos());
+                        let worst_start = worst.record.alignment_start();
+                        let worst_pos = worst_start.map(|p| usize::from(p) as i64 - 1).unwrap_or(0);
+
+                        let gap = pos.saturating_sub(worst_pos);
 
                         // are we allowed to swap these two reads given a specified swap size?
                         if gap as i64 <= self.swap_size {
@@ -366,7 +392,7 @@ impl Alignment {
         // write into the subsampled result.
         for scored_read in active_reads {
             writer
-                .write(&scored_read.record)
+                .write_record(&header, &scored_read.record)
                 .context("Failed to write record")?;
         }
 
@@ -376,62 +402,72 @@ impl Alignment {
     fn run_fetch(&self) -> Result<()> {
         info!("Subsampling alignment file (Fetch): {:?}", self.aln);
 
-        let mut reader =
-            bam::IndexedReader::from_path(&self.aln).context("Failed to read alignment file")?;
+        let mut reader = indexed_reader::Builder::default()
+            .build_from_path(&self.aln)
+            .context("Failed to read alignment file")?;
 
-        let (mut rng, mut writer) = self.setup_resources(&reader)?;
+        // read header explecitely
+        let header = reader.read_header()?;
 
-        let header = reader.header().clone();
-        let chroms = header.target_names();
+        let (mut rng, mut writer) = self.setup_resources(&header)?;
 
-        for chrom in chroms {
-            let chrom_name = String::from_utf8_lossy(chrom);
+        // iterate through directly over reference sequences
 
+        for (tid, (chrom_name, _)) in header.reference_sequences().iter().enumerate() {
+            let chrom_name_str = String::from_utf8_lossy(chrom_name.as_ref());
             info!("Subsampling chromosome: {chrom_name}");
 
-            let tid = header
-                .tid(chrom)
-                .context(format!("Failed to get tid for chromosome {chrom_name}"))?;
-            let chrom_len = header.target_len(tid).context(format!(
-                "Failed to get chromosome length for chromosome {chrom_name}"
-            ))?;
+            // get chromosome length
+            let chrom_len = header
+                .reference_sequences()
+                .get_index(tid)
+                .map(|(_, rs)| rs.length().get() as u64)
+                .context(format!(
+                    "Failed to get chromosome length for chromosome {chrom_name}"
+                ))?;
+
             let mut n_reads_needed = self.coverage;
             let mut current_reads = HashSet::new();
-            let mut heap = BinaryHeap::new();
+            let mut heap: BinaryHeap<Reverse<(usize, Vec<u8>)>> = BinaryHeap::new();
 
-            // get the 0-based position of the first record in the chromosome
-            reader.fetch(tid).context(format!(
-                "Failed to get all records for chromosome {chrom_name}"
-            ))?;
-
-            let first_record = if let Some(first_record) = reader.records().next() {
-                first_record.context("Failed to get first record")?
-            } else {
-                warn!("Chromosome {chrom_name} has no records");
-                continue;
+            // get first record position
+            let first_pos = {
+                let full_region = Region::new(chrom_name.clone(), ..);
+                let mut query = reader.query(&header, &full_region)?;
+                // Peek the first record to find start position
+                match query.next() {
+                    Some(Ok(r)) => r
+                        .alignment_start()
+                        .transpose()?
+                        .map(|p| usize::from(p))
+                        .unwrap_or(1),
+                    _ => {
+                        warn!("Chromosome {} has no records", chrom_name_str);
+                        continue;
+                    }
+                }
             };
 
-            let mut next_pos = first_record.pos();
-            let first_pos = next_pos;
+            let mut next_pos = first_pos;
+            let start_pos = next_pos;
             let mut regions_below_coverage = false;
 
             loop {
-                reader
-                    .fetch((tid, next_pos, next_pos + 1))
-                    .context(format!(
-                        "Failed to fetch records in region {chrom_name}:{next_pos}-{}",
-                        next_pos + 1
-                    ))?;
-                let records = reader.records();
+                // noodles Position::new takes 1-based index
+                let start = Position::new(next_pos).unwrap();
+                let end = Position::new(next_pos).unwrap();
+                let region = Region::new(chrom_name.clone(), start..=end);
 
-                let mut records: Vec<_> = records.filter_map(Result::ok).collect();
+                let query = reader.query(&header, &region)?;
 
-                if next_pos == first_pos {
-                    // we just shuffle all the reads in the first position
+                let mut records: Vec<RecordBuf> = query
+                    .filter_map(Result::ok)
+                    .map(|r| RecordBuf::try_from_alignment_record(&header, &r).unwrap())
+                    .collect();
+
+                if next_pos == start_pos {
                     records.shuffle(&mut rng);
                 } else {
-                    // need to sort records by their alignment start positions. those with the same start
-                    // position should be shuffled so that the order is random
                     shuffle_records_by_position(&mut records, &mut rng);
                 }
 
@@ -443,39 +479,53 @@ impl Alignment {
                         Some(r) => r,
                         None => break,
                     };
-                    let qname = record.qname().to_owned();
+
+                    let qname: Vec<u8> = record
+                        .name()
+                        .map(|name| {
+                            let b: &[u8] = name.as_ref();
+                            b.to_vec()
+                        })
+                        .unwrap_or_default();
 
                     if current_reads.contains(&qname) {
                         continue;
                     }
-                    current_reads.insert(qname.to_owned());
-                    heap.push(Reverse((record.reference_end(), qname.to_owned())));
+
+                    let end = record
+                        .alignment_end()
+                        .map(|p| usize::from(p))
+                        .unwrap_or(next_pos);
+
+                    current_reads.insert(qname.clone());
+                    heap.push(Reverse((end, qname)));
+
                     // write the record
-                    writer.write(&record).context("Failed to write record")?;
+                    writer
+                        .write_record(&header, &record)
+                        .context("Failed to write record")?;
                     num_output += 1;
                 }
 
-                n_reads_needed -= num_output;
+                n_reads_needed = n_reads_needed.saturating_sub(num_output);
 
                 if n_reads_needed > 0 {
                     // increment next_pos by step_size or the minimum end position of the reads in
                     // the region, whichever is smaller
                     let min_end = heap.peek().map(|Reverse((end, _))| *end);
-                    match min_end {
-                        Some(min_end) => {
-                            next_pos += self.step_size.min(min_end - next_pos);
-                        }
-                        None => {
-                            next_pos += self.step_size;
-                        }
-                    }
+                    let jump = match min_end {
+                        Some(min) => (self.step_size as usize).min(min.saturating_sub(next_pos)),
+                        None => self.step_size as usize,
+                    };
+                    next_pos += jump;
                     regions_below_coverage = true;
                 }
 
                 // remove smallest end position from heap and update next_pos and n_reads_needed
                 // allowing for the fact that there may be multiple reads with the same end position
                 while let Some(Reverse((end, qname))) = heap.pop() {
-                    next_pos = end;
+                    // because noodles using 1-based index inclusive
+                    next_pos = end + 1;
 
                     if current_reads.contains(&qname) {
                         current_reads.remove(&qname);
@@ -483,6 +533,7 @@ impl Alignment {
                     } else {
                         return Err(anyhow!("A read in the heap was not found in the current reads set. This should not happen, please raise an issue."));
                     }
+
                     if heap.is_empty() {
                         break;
                     }
@@ -494,50 +545,56 @@ impl Alignment {
                         break;
                     }
                 }
-
-                if next_pos as u64 >= chrom_len {
+                if next_pos >= chrom_len as usize {
                     break;
                 }
             }
             if regions_below_coverage {
-                warn!("Chromosome {chrom_name} has regions with less than the requested coverage");
+                warn!(
+                    "Chromosome {chrom_name} has regions with less than the requested coverage"
+                );
             }
         }
-
         Ok(())
     }
 
     /// Generates a rasusa program entry from a SAM header
-    fn program_entry(&self, header: &Header) -> HeaderRecord<'_> {
+    fn program_entry(&self, header: &Header) -> (String, Map<Program>) {
         let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
 
-        let mut record = HeaderRecord::new(b"PG");
-        record.push_tag(b"ID", program_id);
-        record.push_tag(b"PN", RASUSA);
-        if let Some(pp) = previous_pgid {
-            record.push_tag(b"PP", pp);
-        }
-        record.push_tag(b"VN", env!("CARGO_PKG_VERSION"));
-        let cl = std::env::args().collect::<Vec<String>>().join(" ");
-        record.push_tag(b"CL", cl);
+        // Creates a SAM header record map value
+        let mut record = Map::<Program>::builder();
 
-        record
+        record = record.insert(tag::NAME, RASUSA);
+        record = record.insert(tag::VERSION, env!("CARGO_PKG_VERSION"));
+
+        let cl = std::env::args().collect::<Vec<String>>().join(" ");
+        record = record.insert(tag::COMMAND_LINE, cl);
+
+        // Link to previous program
+        if let Some(pp) = previous_pgid {
+            record = record.insert(tag::PREVIOUS_PROGRAM_ID, pp);
+        };
+
+        let program = record.build().expect("Failed to build prgram record");
+
+        (program_id.into_owned(), program)
     }
 }
 
 /// Sorts records by position and shuffles those with the same position
-fn shuffle_records_by_position(records: &mut [bam::Record], rng: &mut impl Rng) {
+fn shuffle_records_by_position(records: &mut [RecordBuf], rng: &mut impl Rng) {
     // First sort by position
-    records.sort_by_key(|record| record.pos());
+    records.sort_by_key(|record| record.alignment_start());
 
     // Then shuffle groups with the same position
     let mut start = 0;
     while start < records.len() {
-        let pos = records[start].pos();
+        let pos = records[start].alignment_start();
         let mut end = start + 1;
 
         // Find the end of the group with the same position
-        while end < records.len() && records[end].pos() == pos {
+        while end < records.len() && records[end].alignment_start() == pos {
             end += 1;
         }
 
@@ -556,22 +613,24 @@ fn make_program_id_unique<'a>(
     header: &Header,
     program_id: &'a str,
 ) -> (Cow<'a, str>, Option<String>) {
-    let header_map = header.to_hashmap();
-    let mut last_pg_id = None;
-    let mut occurrences_of_id = 0;
-    for (key, value) in header_map.iter() {
-        if key == "PG" {
-            for record in value {
-                if let Some(id) = record.get("ID") {
-                    last_pg_id = Some(id.to_string());
-                    let id_before_last_dot = id.rfind('.').map(|i| &id[..i]).unwrap_or(id);
-                    if id_before_last_dot == program_id {
-                        occurrences_of_id += 1;
-                    }
-                }
-            }
-        }
-    }
+    let programs = header.programs().as_ref();
+
+    // noodles uses an IndexMap, so .last() will guaranteed to be the most recent entry
+    let last_pg_id = programs.keys().last().map(|pp| pp.to_string());
+
+    // count occurance
+    let occurrences_of_id = programs
+        .keys()
+        .filter(|pp| {
+            let id = pp.to_string();
+
+            // split "rasusa.1" ->"rasusa"
+            let id_before_last_dot = id.rfind('.').map(|i| &id[..i]).unwrap_or(&id);
+
+            id_before_last_dot == program_id
+        })
+        .count();
+
     if occurrences_of_id == 0 {
         (Cow::Borrowed(program_id), last_pg_id)
     } else {
@@ -603,8 +662,9 @@ pub fn infer_format_from_char(c: &str) -> Result<Format, String> {
 mod tests {
     use super::*;
     use assert_cmd::Command;
+    use noodles::core::Position;
+    use noodles::sam::alignment::{Record, RecordBuf};
     use rand::prelude::StdRng;
-    use rust_htslib::bam::HeaderView;
     use tempfile::NamedTempFile;
 
     const SUB: &str = "aln";
@@ -655,7 +715,7 @@ mod tests {
     #[test]
     fn test_shuffle_records_by_position_empty() {
         let mut rng = StdRng::seed_from_u64(1234);
-        let mut empty_records: Vec<rust_htslib::bam::Record> = vec![];
+        let mut empty_records: Vec<RecordBuf> = vec![];
 
         shuffle_records_by_position(&mut empty_records, &mut rng);
 
@@ -667,14 +727,14 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1234);
 
         // Create a single BAM record
-        let mut record = rust_htslib::bam::Record::new();
-        record.set_pos(100);
+        let mut record = RecordBuf::default();
+        *record.alignment_start_mut() = Position::new(100);
         let mut records = vec![record];
 
         shuffle_records_by_position(&mut records, &mut rng);
 
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0].pos(), 100);
+        assert_eq!(records[0].alignment_start(), Position::new(100));
     }
 
     #[test]
@@ -682,12 +742,12 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1234);
 
         // Create records with different positions
-        let mut record1 = rust_htslib::bam::Record::new();
-        record1.set_pos(300);
-        let mut record2 = rust_htslib::bam::Record::new();
-        record2.set_pos(100);
-        let mut record3 = rust_htslib::bam::Record::new();
-        record3.set_pos(200);
+        let mut record1 = RecordBuf::default();
+        *record1.alignment_start_mut() = Position::new(300);
+        let mut record2 = RecordBuf::default();
+        *record2.alignment_start_mut() = Position::new(100);
+        let mut record3 = RecordBuf::default();
+        *record3.alignment_start_mut() = Position::new(200);
 
         let mut records = vec![record1, record2, record3];
 
@@ -695,9 +755,9 @@ mod tests {
 
         // Should be sorted by position
         assert_eq!(records.len(), 3);
-        assert_eq!(records[0].pos(), 100);
-        assert_eq!(records[1].pos(), 200);
-        assert_eq!(records[2].pos(), 300);
+        assert_eq!(records[0].alignment_start(), Position::new(100));
+        assert_eq!(records[1].alignment_start(), Position::new(200));
+        assert_eq!(records[2].alignment_start(), Position::new(300));
     }
 
     #[test]
@@ -705,20 +765,23 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1234);
 
         // Create multiple records with the same position but different data
-        let mut record1 = rust_htslib::bam::Record::new();
-        record1.set_pos(100);
-        record1.set_qname(b"read1");
+        let mut record1 = RecordBuf::default();
+        *record1.alignment_start_mut() = Position::new(100);
+        *record1.name_mut() = Some("read1".parse().unwrap());
 
-        let mut record2 = rust_htslib::bam::Record::new();
-        record2.set_pos(100);
-        record2.set_qname(b"read2");
+        let mut record2 = RecordBuf::default();
+        *record2.alignment_start_mut() = Position::new(100);
+        *record2.name_mut() = Some("read2".parse().unwrap());
 
-        let mut record3 = rust_htslib::bam::Record::new();
-        record3.set_pos(100);
-        record3.set_qname(b"read3");
+        let mut record3 = RecordBuf::default();
+        *record3.alignment_start_mut() = Position::new(100);
+        *record3.name_mut() = Some("read3".parse().unwrap());
 
         let records = vec![record1, record2, record3];
-        let original_order: Vec<Vec<u8>> = records.iter().map(|r| r.qname().to_vec()).collect();
+        let original_order: Vec<String> = records
+            .iter()
+            .map(|r| r.name().unwrap().to_string())
+            .collect();
 
         // Run shuffle multiple times to verify randomness
         let mut different_orders = 0;
@@ -727,10 +790,15 @@ mod tests {
             shuffle_records_by_position(&mut test_records, &mut rng);
 
             // All should still be at position 100
-            assert!(test_records.iter().all(|r| r.pos() == 100));
+            assert!(test_records
+                .iter()
+                .all(|r| r.alignment_start() == Position::new(100)));
 
             // Check if order changed
-            let new_order: Vec<Vec<u8>> = test_records.iter().map(|r| r.qname().to_vec()).collect();
+            let new_order: Vec<String> = test_records
+                .iter()
+                .map(|r| r.name().unwrap().to_string())
+                .collect();
             if new_order != original_order {
                 different_orders += 1;
             }
@@ -748,39 +816,51 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1234);
 
         // Create records with mixed positions - some same, some different
-        let mut record1 = rust_htslib::bam::Record::new();
-        record1.set_pos(100);
-        record1.set_qname(b"read1_pos100");
+        let mut record1 = RecordBuf::default();
+        *record1.alignment_start_mut() = Position::new(100);
+        *record1.name_mut() = Some("read1_pos100".parse().unwrap());
 
-        let mut record2 = rust_htslib::bam::Record::new();
-        record2.set_pos(200);
-        record2.set_qname(b"read2_pos200");
+        let mut record2 = RecordBuf::default();
+        *record2.alignment_start_mut() = Position::new(200);
+        *record2.name_mut() = Some("read2_pos200".parse().unwrap());
 
-        let mut record3 = rust_htslib::bam::Record::new();
-        record3.set_pos(100);
-        record3.set_qname(b"read3_pos100");
+        let mut record3 = RecordBuf::default();
+        *record3.alignment_start_mut() = Position::new(100);
+        *record3.name_mut() = Some("read3_pos100".parse().unwrap());
 
-        let mut record4 = rust_htslib::bam::Record::new();
-        record4.set_pos(150);
-        record4.set_qname(b"read4_pos150");
+        let mut record4 = RecordBuf::default();
+        *record4.alignment_start_mut() = Position::new(150);
+        *record4.name_mut() = Some("read4_pos150".parse().unwrap());
 
-        let mut record5 = rust_htslib::bam::Record::new();
-        record5.set_pos(100);
-        record5.set_qname(b"read5_pos100");
+        let mut record5 = RecordBuf::default();
+        *record5.alignment_start_mut() = Position::new(100);
+        *record5.name_mut() = Some("read5_pos100".parse().unwrap());
 
         let mut records = vec![record1, record2, record3, record4, record5];
 
         shuffle_records_by_position(&mut records, &mut rng);
 
         // Should be sorted by position
-        let positions: Vec<i64> = records.iter().map(|r| r.pos()).collect();
-        assert_eq!(positions, vec![100, 100, 100, 150, 200]);
+        let positions: Vec<Position> = records
+            .iter()
+            .map(|r| r.alignment_start().unwrap())
+            .collect();
+        assert_eq!(
+            positions,
+            vec![
+                Position::new(100).unwrap(),
+                Position::new(100).unwrap(),
+                Position::new(100).unwrap(),
+                Position::new(150).unwrap(),
+                Position::new(200).unwrap()
+            ]
+        );
 
         // Records at position 100 should potentially be in different order
         let pos100_names: Vec<Vec<u8>> = records
             .iter()
-            .filter(|r| r.pos() == 100)
-            .map(|r| r.qname().to_vec())
+            .filter(|r| r.alignment_start() == Position::new(100))
+            .map(|r| r.name().unwrap().to_vec())
             .collect();
         assert_eq!(pos100_names.len(), 3);
 
@@ -815,7 +895,7 @@ mod tests {
     #[test]
     fn zero_coverage_raises_error_fetch() {
         let infile = "tests/cases/test.bam";
-        let passed_args = vec![SUB, infile, "-c", "0", "--strategy", "fetch"];
+        let passed_args = vec![SUB, infile, "-c", "0", "--strategy", "fetch", "--step-size", "5000"];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
 
         cmd.args(passed_args).assert().failure();
@@ -887,12 +967,12 @@ mod tests {
 
     #[test]
     fn test_make_program_id_unique_no_program() {
-        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+        let raw_header = "@HD\tVN:1.6\tSO:coordinate
 @SQ\tSN:chromosome\tLN:5399960
 @PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
 @PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
-@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
-        let header = Header::from_template(&template);
+@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam";
+        let header = raw_header.parse().unwrap();
         let program_id = "rasusa";
         let actual = make_program_id_unique(&header, program_id);
         let expected = (
@@ -904,12 +984,12 @@ mod tests {
 
     #[test]
     fn test_make_program_id_unique_one_program_occurrence() {
-        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+        let raw_header = "@HD\tVN:1.6\tSO:coordinate
 @SQ\tSN:chromosome\tLN:5399960
 @PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
 @PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
-@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
-        let header = Header::from_template(&template);
+@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam";
+        let header = raw_header.parse().unwrap();
         let program_id = "minimap2";
         let actual = make_program_id_unique(&header, program_id);
         let expected = (
@@ -921,12 +1001,13 @@ mod tests {
 
     #[test]
     fn test_make_program_id_unique_two_program_occurrences() {
-        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+        let raw_header = "@HD\tVN:1.6\tSO:coordinate
 @SQ\tSN:chromosome\tLN:5399960
 @PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
 @PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
-@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
-        let header = Header::from_template(&template);
+@PG\tID:samtools.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam";
+
+        let header = raw_header.parse().unwrap();
         let program_id = "samtools";
         let actual = make_program_id_unique(&header, program_id);
         let expected = (
@@ -938,11 +1019,9 @@ mod tests {
 
     #[test]
     fn test_make_program_id_unique_no_programs() {
-        let template = HeaderView::from_bytes(
-            b"@HD\tVN:1.6\tSO:coordinate
-@SQ\tSN:chromosome\tLN:5399960",
-        );
-        let header = Header::from_template(&template);
+        let raw_header = "@HD\tVN:1.6\tSO:coordinate
+@SQ\tSN:chromosome\tLN:5399960";
+        let header = raw_header.parse().unwrap();
         let program_id = "samtools";
         let actual = make_program_id_unique(&header, program_id);
         let expected = (Cow::Borrowed("samtools"), None);
@@ -984,28 +1063,36 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         // Create records with the same position
-        let mut record1 = rust_htslib::bam::Record::new();
-        record1.set_pos(100);
-        record1.set_qname(b"read1");
+        let mut record1 = RecordBuf::default();
+        *record1.alignment_start_mut() = Position::new(100);
+        *record1.name_mut() = Some("read1".parse().unwrap());
 
-        let mut record2 = rust_htslib::bam::Record::new();
-        record2.set_pos(100);
-        record2.set_qname(b"read2");
+        let mut record2 = RecordBuf::default();
+        *record2.alignment_start_mut() = Position::new(100);
+        *record2.name_mut() = Some("read2".parse().unwrap());
 
-        let mut record3 = rust_htslib::bam::Record::new();
-        record3.set_pos(100);
-        record3.set_qname(b"read3");
+        let mut record3 = RecordBuf::default();
+        *record3.alignment_start_mut() = Position::new(100);
+        *record3.name_mut() = Some("read3".parse().unwrap());
 
         let records = vec![record1, record2, record3];
-        let original_order: Vec<Vec<u8>> = records.iter().map(|r| r.qname().to_vec()).collect();
+        let original_order: Vec<Vec<u8>> =
+            records.iter().map(|r| r.name().unwrap().to_vec()).collect();
 
         // Test the old approach - it often fails to properly shuffle
         let mut same_order_count = 0;
         for _ in 0..20 {
             let mut test_records = records.clone();
-            old_random_sort(&mut test_records, |record| record.pos(), &mut rng);
+            old_random_sort(
+                &mut test_records,
+                |record| record.alignment_start(),
+                &mut rng,
+            );
 
-            let new_order: Vec<Vec<u8>> = test_records.iter().map(|r| r.qname().to_vec()).collect();
+            let new_order: Vec<Vec<u8>> = test_records
+                .iter()
+                .map(|r| r.name().unwrap().to_vec())
+                .collect();
             if new_order == original_order {
                 same_order_count += 1;
             }
@@ -1021,7 +1108,10 @@ mod tests {
             let mut test_records = records.clone();
             shuffle_records_by_position(&mut test_records, &mut rng);
 
-            let new_order: Vec<Vec<u8>> = test_records.iter().map(|r| r.qname().to_vec()).collect();
+            let new_order: Vec<Vec<u8>> = test_records
+                .iter()
+                .map(|r| r.name().unwrap().to_vec())
+                .collect();
             if new_order == original_order {
                 new_same_order_count += 1;
             }
@@ -1039,13 +1129,13 @@ mod tests {
 
     #[test]
     fn test_make_program_id_unique_program_id_startswith_same_substring() {
-        let template = HeaderView::from_bytes(b"@HD\tVN:1.6\tSO:coordinate
+        let raw_header = "@HD\tVN:1.6\tSO:coordinate
 @SQ\tSN:chromosome\tLN:5399960
 @PG\tID:minimap2\tPN:minimap2\tVN:2.26-r1175\tCL:minimap2 -aL --cs --MD -t 4 -x map-ont KPC2__202310.5x.fq.gz
 @PG\tID:samtoolsfoo\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
 @PG\tID:samtools\tPN:samtools\tPP:minimap2\tVN:1.19.2\tCL:samtools sort -@ 4 -o KPC2__202310.5x.bam
-@PG\tID:samtoolsfoo.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam");
-        let header = Header::from_template(&template);
+@PG\tID:samtoolsfoo.1\tPN:samtools\tPP:samtools\tVN:1.19\tCL:samtools view -s 0.5 -o test.bam KPC2__202310.5x.bam";
+        let header = raw_header.parse().unwrap();
         let program_id = "samtools";
         let actual = make_program_id_unique(&header, program_id);
         let expected = (
@@ -1057,15 +1147,15 @@ mod tests {
 
     #[test]
     fn test_scored_read_ordering() {
-        let r1 = bam::Record::new();
+        let r1 = RecordBuf::default();
         let small = ScoredRead {
-            record: r1.clone(),
+            record: r1,
             score: 10,
         };
 
-        let r2 = bam::Record::new();
+        let r2 = RecordBuf::default();
         let big = ScoredRead {
-            record: r2.clone(),
+            record: r2,
             score: 99,
         };
 
@@ -1075,17 +1165,17 @@ mod tests {
 
     #[test]
     fn test_scored_read_ordering_tie() {
-        let mut r1 = bam::Record::new();
-        r1.set_qname(b"readA");
+        let mut r1 = RecordBuf::default();
+        *r1.name_mut() = Some("readA".parse().unwrap());
         let record1 = ScoredRead {
-            record: r1.clone(),
+            record: r1,
             score: 21,
         };
 
-        let mut r2 = bam::Record::new();
-        r2.set_qname(b"readB");
+        let mut r2 = RecordBuf::default();
+        *r2.name_mut() = Some("readB".parse().unwrap());
         let record2 = ScoredRead {
-            record: r2.clone(),
+            record: r2,
             score: 21,
         };
 
@@ -1094,8 +1184,6 @@ mod tests {
 
     #[test]
     fn test_output_never_exceeds_target_depth() {
-        use rust_htslib::bam::Read;
-
         let input_path = PathBuf::from("tests/cases/test.bam");
         let target_depth = 5;
 
@@ -1105,7 +1193,7 @@ mod tests {
         let mut align = Alignment {
             aln: input_path,
             output: Some(output_path.clone()),
-            output_type: Some(bam::Format::Bam),
+            output_type: Some(Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1117,51 +1205,62 @@ mod tests {
         align.run().expect("Algorithm failed");
 
         // verify the resulted depth
-        let mut reader = bam::Reader::from_path(&output_path).unwrap();
+        let mut reader = noodles::bam::io::reader::Builder::default()
+            .build_from_path(&output_path)
+            .unwrap();
 
-        let mut records: Vec<bam::Record> = reader.records().map(|r| r.unwrap()).collect();
+        let header = reader.read_header().unwrap();
+
+        let mut records: Vec<RecordBuf> = reader
+            .records()
+            .map(|r| RecordBuf::try_from_alignment_record(&header, &r.unwrap()).unwrap())
+            .collect();
 
         // sort by chromosome and then by position
         records.sort_by(|a, b| {
-            let tid_cmp = a.tid().cmp(&b.tid());
-            if tid_cmp == std::cmp::Ordering::Equal {
-                a.pos().cmp(&b.pos())
-            } else {
-                tid_cmp
+            let tid_a = a.reference_sequence_id().unwrap_or(usize::MAX);
+            let tid_b = b.reference_sequence_id().unwrap_or(usize::MAX);
+            let pos_a = a.alignment_start().map(usize::from).unwrap_or(0);
+            let pos_b = b.alignment_start().map(usize::from).unwrap_or(0);
+
+            match tid_a.cmp(&tid_b) {
+                std::cmp::Ordering::Equal => pos_a.cmp(&pos_b),
+                other => other,
             }
         });
 
-        let mut active_ends: Vec<i64> = Vec::new();
+        let mut active_ends: Vec<usize> = Vec::new();
         let mut max_obs_depth = 0;
-        let mut current_tid = -1;
+        let mut current_tid = None;
 
         for record in records {
-            let tid = record.tid();
-            let start = record.pos();
-            let end = record.reference_end();
+            let tid = record.reference_sequence_id();
+            // Convert to 0-based inclusive start for comparison logic
+            let start = usize::from(record.alignment_start().unwrap()) - 1;
+            // Convert to 0-based exclusive end (which equals 1-based inclusive end value)
+            let end = usize::from(record.alignment_end().unwrap());
 
-            // new chromosome check
             if tid != current_tid {
                 active_ends.clear();
                 current_tid = tid;
             }
 
-            // remove reads that ended before this one started, they are not contribute to the depth anymore
+            // retain reads that end AFTER the current start position
             active_ends.retain(|&e| e > start);
 
-            // add current read
             active_ends.push(end);
 
-            // check
-            let current_depth = active_ends.len() as u32;
+            let current_depth = active_ends.len();
             if current_depth > max_obs_depth {
                 max_obs_depth = current_depth;
             }
         }
 
         assert!(
-            max_obs_depth <= target_depth,
-            "The resulted depth exceeds the target depth"
+            max_obs_depth <= target_depth as usize,
+            "The resulted depth {} exceeds the target depth {}",
+            max_obs_depth,
+            target_depth
         );
     }
 
@@ -1186,7 +1285,7 @@ mod tests {
         let mut aln1 = Alignment {
             aln: input.to_path_buf(),
             output: Some(out.path().to_path_buf()),
-            output_type: Some(bam::Format::Bam),
+            output_type: Some(Format::Bam),
             coverage: target_depth,
             seed,
             strategy,
@@ -1196,12 +1295,16 @@ mod tests {
 
         aln1.run().expect("Subsampling failed");
 
-        bam::Reader::from_path(out.path())
-            .unwrap()
+        let mut reader = noodles::bam::io::reader::Builder::default()
+            .build_from_path(out.path())
+            .unwrap();
+        let _header = reader.read_header();
+        reader
             .records()
             .map(|r| {
-                let record = r.unwrap();
-                String::from_utf8_lossy(record.qname()).to_string()
+                let rec = r.unwrap();
+                // Get name as String from the record
+                String::from_utf8_lossy(rec.name().unwrap()).to_string()
             })
             .collect()
     }
@@ -1265,7 +1368,7 @@ mod tests {
         let mut aln = Alignment {
             aln: input.to_path_buf(),
             output: None,
-            output_type: Some(bam::Format::Bam),
+            output_type: Some(Format::Bam),
             coverage: 2,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1295,15 +1398,15 @@ mod tests {
 
     #[test]
     fn test_equality_record() {
-        let mut r1 = bam::Record::new();
-        r1.set_qname(b"readA");
+        let mut r1 = RecordBuf::default();
+        *r1.name_mut() = Some("readA".parse().unwrap());
         let record1 = ScoredRead {
             record: r1.clone(),
             score: 21,
         };
 
-        let mut r2 = bam::Record::new();
-        r2.set_qname(b"readA");
+        let mut r2 = RecordBuf::default();
+        *r2.name_mut() = Some("readA".parse().unwrap());
         let record2 = ScoredRead {
             record: r2.clone(),
             score: 21,
@@ -1332,13 +1435,23 @@ mod tests {
         };
         align.run().expect("Subsampling failed");
 
-        let mut reader = bam::Reader::from_path(output_temp.path()).unwrap();
+        let mut reader = noodles::bam::io::reader::Builder::default()
+            .build_from_path(output_temp.path())
+            .unwrap();
         // read the header, get the length of chromosome
-        let header = reader.header();
-        let chrom_tid = header.tid(b"plasmid_2").expect("Chromosome not found");
+        let header = reader.read_header().unwrap();
+
+        let chrom_tid = header
+            .reference_sequences()
+            .get_index_of(b"plasmid_2".as_slice())
+            .expect("Chromosome not found");
         let chrom_length = header
-            .target_len(chrom_tid)
-            .expect("No chromosome length found") as usize;
+            .reference_sequences()
+            .get_index(chrom_tid)
+            .unwrap()
+            .1
+            .length()
+            .get() as usize;
 
         // using preallocated vector to record depth for each position
         // populate the vector with 0
@@ -1346,15 +1459,19 @@ mod tests {
 
         for r in reader.records() {
             let record = r.unwrap();
+            let r_tid = record.reference_sequence_id().unwrap();
 
             // only check plasmid_2 contig. It has:
             // min 2, median 7, mean 7.5761410788382, max 11.
-            if record.tid() != chrom_tid as i32 {
+            if r_tid.unwrap() != chrom_tid {
                 continue;
             }
 
+            // convert to 0 based for vector indexing
+            let start = usize::from(record.alignment_start().unwrap().unwrap()) - (1 as usize);
+            let end = usize::from(record.alignment_end().unwrap().unwrap());
             // update the posisition depth that were covered by the record
-            for pos in record.pos()..record.reference_end() {
+            for pos in start..end {
                 if (pos as usize) < depth.len() {
                     depth[pos as usize] += 1; // update the depth
                 } // safety
