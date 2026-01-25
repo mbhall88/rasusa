@@ -552,6 +552,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a82ae493e598baaea5209805c49bbf2ea7de956d50d7da0da1164f9c6d28543"
 
 [[package]]
+name = "libdeflate-sys"
+version = "1.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23bd6304ebf75390d8a99b88bdf2a266f62647838140cb64af8e6702f6e3fddc"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "libdeflater"
+version = "1.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5d4880e6d634d3d029d65fa016038e788cc728a17b782684726fb34ee140caf"
+dependencies = [
+ "libdeflate-sys",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -674,6 +692,7 @@ dependencies = [
  "bytes",
  "crossbeam-channel",
  "flate2",
+ "libdeflater",
 ]
 
 [[package]]
@@ -915,6 +934,7 @@ dependencies = [
  "needletail",
  "niffler",
  "noodles",
+ "noodles-bgzf",
  "noodles-util",
  "predicates",
  "rand",

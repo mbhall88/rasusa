@@ -39,16 +39,19 @@ const RASUSA: &str = "rasusa";
 // if there is tie (two read have the same score), then we use 'qname' to ensure the deterministic sorting still
 #[derive(Debug)]
 struct ScoredRead {
-    /// alignment record (SAM/BAM/CRAM)
+    /// Alignment record (SAM/BAM/CRAM)
     record: RecordBuf,
 
     /// The deterministic score assigned to this record
     score: u64,
+
+    /// Alignment end for the record (1-based inclusive)
+    end: i64,
 }
 
 impl ScoredRead {
-    fn new(record: RecordBuf, score: u64) -> Self {
-        Self { record, score }
+    fn new(record: RecordBuf, score: u64, end: i64) -> Self {
+        Self { record, score, end }
     }
 }
 
@@ -270,18 +273,22 @@ impl Alignment {
         // iterate thriugh every read in the file
         for result in reader.records(&header) {
             let record = result.context("Failed to parse BAM record")?;
-            let recordbuf = RecordBuf::try_from_alignment_record(&header, record.as_ref())?;
 
-            // skip unmapped reads (they do not have start and/or end coordinates)
-            if recordbuf.flags().is_unmapped() {
+            // if the read is unmapped, we skip it
+            if record.flags()?.is_unmapped() {
                 continue;
             }
 
-            let tid = recordbuf.reference_sequence_id();
+            // skip unmapped reads (they do not have start and/or end coordinates)
+            let Some(alignment_start) = record.alignment_start().transpose()? else {
+                continue;
+            };
+
+            let tid = record.reference_sequence_id(&header).transpose()?;
 
             // noodles use 1-base coordinate.. inclusive start
-            // we know it is Some(p) because we checked is_none() above
-            let pos = usize::from(recordbuf.alignment_start().unwrap()) as i64 - 1;
+            // we know it is Some(p) because we checked is_unmapped() above
+            let pos = usize::from(alignment_start) as i64 - 1;
 
             // check if the input is not sorted yet
             let chrom_name = if let Some(id) = tid {
@@ -330,13 +337,7 @@ impl Alignment {
 
             for scored_read in survivors.drain(..) {
                 // inclusive end
-                let end = scored_read
-                    .record
-                    .alignment_end()
-                    .map(|p| usize::from(p) as i64)
-                    .unwrap_or(start);
-
-                if end <= start {
+                if scored_read.end <= start {
                     // the reads survived!
                     // and we write it into the result
                     writer
@@ -353,16 +354,26 @@ impl Alignment {
             // with target depth usually 50 - 100 maybe, i think this operation is not very expensive.
 
             // when a new read begins:
-            let new_read = ScoredRead::new(recordbuf, key);
 
             if active_reads.len() < target_depth {
+                // calculate the end position only once here:
+                let end = record
+                    .alignment_end()
+                    .transpose()?
+                    .map(|e| usize::from(e) as i64)
+                    .unwrap_or(pos);
+
+                // we convert to owned record (Recordbuf) here before we want to push it to the heap
+                let recordbuf = RecordBuf::try_from_alignment_record(&header, &record)?;
+                let new_read = ScoredRead::new(recordbuf, key, end);
+
                 // if the heap has records fewer than N reads, just accept it.
                 active_reads.push(new_read);
             } else {
                 // if the heap is full, only accept it if its score is smaller than the current worst (highest score) in the heap
                 if let Some(mut worst) = active_reads.peek_mut() {
                     // does the new record has better key (lower score)?
-                    if new_read.score < worst.score {
+                    if key < worst.score {
                         // calculate the distance between these two reads
                         let worst_start = worst.record.alignment_start();
                         let worst_pos = worst_start.map(|p| usize::from(p) as i64 - 1).unwrap_or(0);
@@ -372,6 +383,17 @@ impl Alignment {
                         // are we allowed to swap these two reads given a specified swap size?
                         if gap as i64 <= self.swap_size {
                             // we swap the records
+
+                            // calculate the end position only once here:
+                            let end = record
+                                .alignment_end()
+                                .transpose()?
+                                .map(|e| usize::from(e) as i64)
+                                .unwrap_or(pos);
+
+                            // we convert to owned record (Recordbuf) here before we want to swap it to the heap
+                            let recordbuf = RecordBuf::try_from_alignment_record(&header, &record)?;
+                            let new_read = ScoredRead::new(recordbuf, key, end);
                             *worst = new_read;
                         }
                     }
@@ -550,9 +572,7 @@ impl Alignment {
                 }
             }
             if regions_below_coverage {
-                warn!(
-                    "Chromosome {chrom_name} has regions with less than the requested coverage"
-                );
+                warn!("Chromosome {chrom_name} has regions with less than the requested coverage");
             }
         }
         Ok(())
@@ -895,7 +915,16 @@ mod tests {
     #[test]
     fn zero_coverage_raises_error_fetch() {
         let infile = "tests/cases/test.bam";
-        let passed_args = vec![SUB, infile, "-c", "0", "--strategy", "fetch", "--step-size", "5000"];
+        let passed_args = vec![
+            SUB,
+            infile,
+            "-c",
+            "0",
+            "--strategy",
+            "fetch",
+            "--step-size",
+            "5000",
+        ];
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).unwrap();
 
         cmd.args(passed_args).assert().failure();
@@ -1151,12 +1180,14 @@ mod tests {
         let small = ScoredRead {
             record: r1,
             score: 10,
+            end: 1000,
         };
 
         let r2 = RecordBuf::default();
         let big = ScoredRead {
             record: r2,
             score: 99,
+            end: 1000,
         };
 
         assert!(big > small, "Higher score should be 'Greater' in ordering");
@@ -1170,6 +1201,7 @@ mod tests {
         let record1 = ScoredRead {
             record: r1,
             score: 21,
+            end: 1000,
         };
 
         let mut r2 = RecordBuf::default();
@@ -1177,6 +1209,7 @@ mod tests {
         let record2 = ScoredRead {
             record: r2,
             score: 21,
+            end: 1001,
         };
 
         assert!(record2 > record1);
@@ -1403,6 +1436,7 @@ mod tests {
         let record1 = ScoredRead {
             record: r1.clone(),
             score: 21,
+            end: 1000,
         };
 
         let mut r2 = RecordBuf::default();
@@ -1410,6 +1444,7 @@ mod tests {
         let record2 = ScoredRead {
             record: r2.clone(),
             score: 21,
+            end: 1000,
         };
 
         assert_eq!(record1, record2);
