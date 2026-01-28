@@ -3,7 +3,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::result::Result::Ok;
 
@@ -19,15 +19,15 @@ use noodles::sam::header::record::value::{
     map::{program::tag, Program},
     Map,
 };
+
 use noodles::sam::Header;
 use noodles_util::alignment::{
     self,
     io::{indexed_reader, Format},
 };
 
-// --- TYPE DEFINITIONS ---
-// A generic writer that can handle File or Stdout
-type UniversalWriter = alignment::io::Writer<Box<dyn Write>>;
+// a generic writer that can handle File or Stdout
+type AlignmentWriter = alignment::io::Writer<Box<dyn Write>>;
 
 use crate::cli::check_path_exists;
 use crate::Runner;
@@ -83,7 +83,7 @@ impl Ord for ScoredRead {
 
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum SubsamplingStrategy {
-    /// Fast linear scan (Sweep line). Efficient for high depth. Requires sorted alignment input.
+    /// Fast linear scan (Sweep Line algorithm). Efficient for high depth. Requires sorted alignment input.
     Stream,
 
     /// Slower random access (Fetching). Minimises read overlap. Requires indexed input (.bai).
@@ -123,12 +123,12 @@ pub struct Alignment {
     pub strategy: SubsamplingStrategy,
 
     // Algorithm specific arguments
-    /// [Stream] Maximum distance (bp) allowed between start position of new read and the worst read
+    /// [Stream] A maximum distance (bp) allowed between start position of new read and the worst read
     /// in the heap to consider them 'swappable'.
     ///
     /// Larger values allow swapping reads over greater distances, but may cause local undersampling.
     #[arg(long, default_value_t = 5, value_name = "INT", value_parser = clap::value_parser!(i64).range(0..))]
-    pub swap_size: i64,
+    pub swap_distance: i64,
 
     /// [Fetch] When a region has less than the desired coverage, the step size to move along the chromosome
     /// to find more reads.
@@ -137,6 +137,12 @@ pub struct Alignment {
     /// This parameter can have a significant impact on the runtime of the subsampling process.
     #[arg(long, default_value_t = 100, value_name = "INT", value_parser = clap::value_parser!(i64).range(1..))]
     pub step_size: i64,
+
+    /// [Fetch] The size of the genomic window (bp) to cache into memory at once.
+    ///
+    /// Larger values reduce disk seeking (faster), but at the cost of high memory usage.
+    #[arg(long, default_value_t = 50_000, value_name = "INT", value_parser = clap::value_parser!(u64).range(10000..))]
+    pub batch_size: u64,
 }
 
 impl Runner for Alignment {
@@ -150,7 +156,7 @@ impl Runner for Alignment {
 
 impl Alignment {
     // using generic parameter, because stream (bam::Reader) and fetch (bam::IndexedReader) using different type of readers
-    fn setup_resources(&self, input_header: &Header) -> Result<(rand_pcg::Pcg64, UniversalWriter)> {
+    fn setup_resources(&self, input_header: &Header) -> Result<(rand_pcg::Pcg64, AlignmentWriter)> {
         // set up random number generator
         let rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
@@ -165,9 +171,10 @@ impl Alignment {
 
         // add rasusa program command line to header
         let (pg_id, pg_map) = self.program_entry(&header);
+
+        // set up the header and writer
         header.programs_mut().as_mut().insert(pg_id.into(), pg_map);
 
-        // set up header and writer
         let input_fmt = match infer_format_from_path(&self.aln) {
             Some(fmt) => fmt,
             None => {
@@ -198,19 +205,15 @@ impl Alignment {
                 let path = path.as_path();
                 info!("Writing subsampled alignment to: {:?}", path);
                 let file = File::create(path).context("Failed to create output alignment file")?;
-
-                let buffered_file = BufWriter::new(file);
-                Box::new(buffered_file)
+                Box::new(file)
             }
             None => {
                 info!("Writing subsampled alignment to stdout");
-                let buffered_stdout = BufWriter::new(io::stdout());
-                Box::new(buffered_stdout)
+                Box::new(io::stdout().lock())
             }
         };
 
-        // the writer
-        let mut writer = noodles_util::alignment::io::writer::Builder::default()
+        let mut writer = alignment::io::writer::Builder::default()
             .set_format(output_fmt)
             .build_from_writer(sink)?;
 
@@ -227,7 +230,6 @@ impl Alignment {
             .build_from_path(&self.aln)
             .context("Failed to read alignment file")?;
 
-        // read header explecitely
         let header = reader.read_header()?;
 
         // setup resources
@@ -279,7 +281,6 @@ impl Alignment {
                 continue;
             }
 
-            // skip unmapped reads (they do not have start and/or end coordinates)
             let Some(alignment_start) = record.alignment_start().transpose()? else {
                 continue;
             };
@@ -287,7 +288,6 @@ impl Alignment {
             let tid = record.reference_sequence_id(&header).transpose()?;
 
             // noodles use 1-base coordinate.. inclusive start
-            // we know it is Some(p) because we checked is_unmapped() above
             let pos = usize::from(alignment_start) as i64 - 1;
 
             // check if the input is not sorted yet
@@ -353,8 +353,6 @@ impl Alignment {
             // note: survivors.drain(..) automatically clears the vector items but keeps the capacity.
             // with target depth usually 50 - 100 maybe, i think this operation is not very expensive.
 
-            // when a new read begins:
-
             if active_reads.len() < target_depth {
                 // calculate the end position only once here:
                 let end = record
@@ -363,9 +361,9 @@ impl Alignment {
                     .map(|e| usize::from(e) as i64)
                     .unwrap_or(pos);
 
-                // we convert to owned record (Recordbuf) here before we want to push it to the heap
-                let recordbuf = RecordBuf::try_from_alignment_record(&header, &record)?;
-                let new_read = ScoredRead::new(recordbuf, key, end);
+                // we convert to Recordbuf here before we want to push it to the heap
+                let record = RecordBuf::try_from_alignment_record(&header, &record)?;
+                let new_read = ScoredRead::new(record, key, end);
 
                 // if the heap has records fewer than N reads, just accept it.
                 active_reads.push(new_read);
@@ -378,12 +376,11 @@ impl Alignment {
                         let worst_start = worst.record.alignment_start();
                         let worst_pos = worst_start.map(|p| usize::from(p) as i64 - 1).unwrap_or(0);
 
-                        let gap = pos.saturating_sub(worst_pos);
+                        let distance = pos.saturating_sub(worst_pos);
 
-                        // are we allowed to swap these two reads given a specified swap size?
-                        if gap as i64 <= self.swap_size {
+                        // are we allowed to swap these two reads given a specified swap distance?
+                        if distance <= self.swap_distance {
                             // we swap the records
-
                             // calculate the end position only once here:
                             let end = record
                                 .alignment_end()
@@ -391,9 +388,10 @@ impl Alignment {
                                 .map(|e| usize::from(e) as i64)
                                 .unwrap_or(pos);
 
-                            // we convert to owned record (Recordbuf) here before we want to swap it to the heap
-                            let recordbuf = RecordBuf::try_from_alignment_record(&header, &record)?;
-                            let new_read = ScoredRead::new(recordbuf, key, end);
+                            // we convert to Recordbuf here before we want to swap it to the heap
+                            let record = RecordBuf::try_from_alignment_record(&header, &record)?;
+                            let new_read = ScoredRead::new(record, key, end);
+                            // we swap the records
                             *worst = new_read;
                         }
                     }
@@ -428,13 +426,17 @@ impl Alignment {
             .build_from_path(&self.aln)
             .context("Failed to read alignment file")?;
 
-        // read header explecitely
         let header = reader.read_header()?;
 
         let (mut rng, mut writer) = self.setup_resources(&header)?;
 
-        // iterate through directly over reference sequences
+        // to hold batch of reads inside batch size query
+        let mut batch_cache: Vec<RecordBuf> = Vec::new();
 
+        // how big of a chunk to grab at once
+        let batch_size = self.batch_size as usize;
+
+        // iterate through directly over reference sequences
         for (tid, (chrom_name, _)) in header.reference_sequences().iter().enumerate() {
             let chrom_name_str = String::from_utf8_lossy(chrom_name.as_ref());
             info!("Subsampling chromosome: {chrom_name}");
@@ -448,10 +450,6 @@ impl Alignment {
                     "Failed to get chromosome length for chromosome {chrom_name}"
                 ))?;
 
-            let mut n_reads_needed = self.coverage;
-            let mut current_reads = HashSet::new();
-            let mut heap: BinaryHeap<Reverse<(usize, Vec<u8>)>> = BinaryHeap::new();
-
             // get first record position
             let first_pos = {
                 let full_region = Region::new(chrom_name.clone(), ..);
@@ -461,7 +459,7 @@ impl Alignment {
                     Some(Ok(r)) => r
                         .alignment_start()
                         .transpose()?
-                        .map(|p| usize::from(p))
+                        .map(usize::from)
                         .unwrap_or(1),
                     _ => {
                         warn!("Chromosome {} has no records", chrom_name_str);
@@ -472,33 +470,81 @@ impl Alignment {
 
             let mut next_pos = first_pos;
             let start_pos = next_pos;
+
+            let mut n_reads_needed = self.coverage;
+            let mut current_reads = HashSet::new();
+            let mut heap: BinaryHeap<Reverse<(usize, Vec<u8>)>> = BinaryHeap::new();
             let mut regions_below_coverage = false;
+
+            // clear the cache for new chromosome
+            batch_cache.clear();
+
+            // the region that is currently covered
+            let mut cache_start = 0;
+            let mut cache_end = 0;
 
             loop {
                 // noodles Position::new takes 1-based index
-                let start = Position::new(next_pos).unwrap();
-                let end = Position::new(next_pos).unwrap();
-                let region = Region::new(chrom_name.clone(), start..=end);
 
-                let query = reader.query(&header, &region)?;
+                // check if next_pos is outside the current cache
+                if next_pos < cache_start || next_pos >= cache_end {
+                    // refill the cache
+                    cache_start = next_pos;
+                    cache_end = next_pos + batch_size;
 
-                let mut records: Vec<RecordBuf> = query
-                    .filter_map(Result::ok)
-                    .map(|r| RecordBuf::try_from_alignment_record(&header, &r).unwrap())
-                    .collect();
+                    // get a whole chunk of reads in this region
+                    let start = Position::new(next_pos).unwrap_or(Position::MIN);
+                    // ensure the end of region doesn't exceed the length of chrom
+                    let safe_end = (cache_end).min(chrom_len as usize);
+                    let end = Position::new(safe_end).unwrap_or(start);
+                    let region = Region::new(chrom_name_str.as_ref(), start..=end);
+
+                    // clear it for new batch
+                    batch_cache.clear();
+                    // query reads that intersect the region
+                    let query = reader.query(&header, &region)?;
+
+                    // put them in the cache
+                    for result in query {
+                        let record = result?;
+                        // convert to owned Record, because we want shuffle these reads
+                        let recordbuf = RecordBuf::try_from_alignment_record(&header, &record)?;
+                        batch_cache.push(recordbuf);
+                    }
+                }
+
+                // get reads that overlap with next_pos (shuffle point) from batch (already in the memory owned)
+                // similar as `reader.query(next_pos)`
+
+                // reads that overlaps at a certain position
+                let mut candidates: Vec<&RecordBuf> = Vec::new();
+                // ignore recordbuf that start after next_pos, https://doc.rust-lang.org/std/primitive.slice.html#method.partition_point
+                // i assume the input is sorted, because it requires the index
+                let partition_idx = batch_cache.partition_point(|r| {
+                    usize::from(r.alignment_start().unwrap_or(Position::MIN)) <= next_pos
+                });
+
+                for record in &batch_cache[..partition_idx] {
+                    let end = usize::from(record.alignment_end().unwrap_or(Position::MIN));
+
+                    // just check if next_pos "inside" the reads
+                    if end >= next_pos {
+                        candidates.push(record);
+                    }
+                }
 
                 if next_pos == start_pos {
-                    records.shuffle(&mut rng);
+                    candidates.shuffle(&mut rng);
                 } else {
-                    shuffle_records_by_position(&mut records, &mut rng);
+                    shuffle_records_by_position(&mut candidates, &mut rng);
                 }
 
                 let mut num_output = 0;
-                let mut record_iter = records.into_iter().rev();
+                let mut record_iter = candidates.iter().rev();
 
                 while num_output < n_reads_needed {
                     let record = match record_iter.next() {
-                        Some(r) => r,
+                        Some(r) => *r,
                         None => break,
                     };
 
@@ -514,17 +560,14 @@ impl Alignment {
                         continue;
                     }
 
-                    let end = record
-                        .alignment_end()
-                        .map(|p| usize::from(p))
-                        .unwrap_or(next_pos);
+                    let end = record.alignment_end().map(usize::from).unwrap_or(next_pos);
 
                     current_reads.insert(qname.clone());
                     heap.push(Reverse((end, qname)));
 
                     // write the record
                     writer
-                        .write_record(&header, &record)
+                        .write_record(&header, record)
                         .context("Failed to write record")?;
                     num_output += 1;
                 }
@@ -596,14 +639,14 @@ impl Alignment {
             record = record.insert(tag::PREVIOUS_PROGRAM_ID, pp);
         };
 
-        let program = record.build().expect("Failed to build prgram record");
+        let program = record.build().expect("Failed to build program record");
 
         (program_id.into_owned(), program)
     }
 }
 
 /// Sorts records by position and shuffles those with the same position
-fn shuffle_records_by_position(records: &mut [RecordBuf], rng: &mut impl Rng) {
+fn shuffle_records_by_position(records: &mut [&RecordBuf], rng: &mut impl Rng) {
     // First sort by position
     records.sort_by_key(|record| record.alignment_start());
 
@@ -735,7 +778,7 @@ mod tests {
     #[test]
     fn test_shuffle_records_by_position_empty() {
         let mut rng = StdRng::seed_from_u64(1234);
-        let mut empty_records: Vec<RecordBuf> = vec![];
+        let mut empty_records: Vec<&RecordBuf> = vec![];
 
         shuffle_records_by_position(&mut empty_records, &mut rng);
 
@@ -749,7 +792,7 @@ mod tests {
         // Create a single BAM record
         let mut record = RecordBuf::default();
         *record.alignment_start_mut() = Position::new(100);
-        let mut records = vec![record];
+        let mut records: Vec<&RecordBuf> = vec![&record];
 
         shuffle_records_by_position(&mut records, &mut rng);
 
@@ -769,7 +812,7 @@ mod tests {
         let mut record3 = RecordBuf::default();
         *record3.alignment_start_mut() = Position::new(200);
 
-        let mut records = vec![record1, record2, record3];
+        let mut records = vec![&record1, &record2, &record3];
 
         shuffle_records_by_position(&mut records, &mut rng);
 
@@ -797,7 +840,7 @@ mod tests {
         *record3.alignment_start_mut() = Position::new(100);
         *record3.name_mut() = Some("read3".parse().unwrap());
 
-        let records = vec![record1, record2, record3];
+        let records = vec![&record1, &record2, &record3];
         let original_order: Vec<String> = records
             .iter()
             .map(|r| r.name().unwrap().to_string())
@@ -810,7 +853,7 @@ mod tests {
             shuffle_records_by_position(&mut test_records, &mut rng);
 
             // All should still be at position 100
-            assert!(test_records
+            assert!(records
                 .iter()
                 .all(|r| r.alignment_start() == Position::new(100)));
 
@@ -856,7 +899,7 @@ mod tests {
         *record5.alignment_start_mut() = Position::new(100);
         *record5.name_mut() = Some("read5_pos100".parse().unwrap());
 
-        let mut records = vec![record1, record2, record3, record4, record5];
+        let mut records = vec![&record1, &record2, &record3, &record4, &record5];
 
         shuffle_records_by_position(&mut records, &mut rng);
 
@@ -1104,7 +1147,7 @@ mod tests {
         *record3.alignment_start_mut() = Position::new(100);
         *record3.name_mut() = Some("read3".parse().unwrap());
 
-        let records = vec![record1, record2, record3];
+        let records = vec![&record1, &record2, &record3];
         let original_order: Vec<Vec<u8>> =
             records.iter().map(|r| r.name().unwrap().to_vec()).collect();
 
@@ -1218,7 +1261,7 @@ mod tests {
     #[test]
     fn test_output_never_exceeds_target_depth() {
         let input_path = PathBuf::from("tests/cases/test.bam");
-        let target_depth = 5;
+        let target_depth = 3;
 
         let output_file = NamedTempFile::new().unwrap();
         let output_path = output_file.path().to_path_buf();
@@ -1230,22 +1273,23 @@ mod tests {
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
-            swap_size: 5,
+            swap_distance: 5,
             step_size: 100, // it is not used
+            batch_size: 10_000,
         };
 
         // run the sweep line algorithm
         align.run().expect("Algorithm failed");
 
         // verify the resulted depth
-        let mut reader = noodles::bam::io::reader::Builder::default()
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
             .build_from_path(&output_path)
             .unwrap();
 
         let header = reader.read_header().unwrap();
 
         let mut records: Vec<RecordBuf> = reader
-            .records()
+            .records(&header)
             .map(|r| RecordBuf::try_from_alignment_record(&header, &r.unwrap()).unwrap())
             .collect();
 
@@ -1312,7 +1356,7 @@ mod tests {
         seed: Option<u64>,
         strategy: SubsamplingStrategy,
     ) -> Vec<String> {
-        let target_depth = 5;
+        let target_depth = 3;
         let out = NamedTempFile::new().unwrap();
 
         let mut aln1 = Alignment {
@@ -1322,18 +1366,20 @@ mod tests {
             coverage: target_depth,
             seed,
             strategy,
-            swap_size: 5,
+            swap_distance: 5,
             step_size: 100,
+            batch_size: 10_000,
         };
 
         aln1.run().expect("Subsampling failed");
 
-        let mut reader = noodles::bam::io::reader::Builder::default()
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
             .build_from_path(out.path())
             .unwrap();
-        let _header = reader.read_header();
+        let header = reader.read_header().unwrap();
+
         reader
-            .records()
+            .records(&header)
             .map(|r| {
                 let rec = r.unwrap();
                 // Get name as String from the record
@@ -1405,8 +1451,9 @@ mod tests {
             coverage: 2,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
-            swap_size: 5,
+            swap_distance: 5,
             step_size: 100, // not used
+            batch_size: 10_000,
         };
         assert!(aln.run().is_err());
     }
@@ -1423,8 +1470,9 @@ mod tests {
             coverage: 2,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
-            swap_size: 5,
+            swap_distance: 5,
             step_size: 100, // not used
+            batch_size: 10_000,
         };
         assert!(aln.run().is_err());
     }
@@ -1454,7 +1502,7 @@ mod tests {
     fn test_subsampling_statistics() {
         let input_path = PathBuf::from("tests/cases/test.bam");
 
-        let target_depth = 2;
+        let target_depth = 3;
 
         let output_temp = NamedTempFile::new().unwrap();
 
@@ -1465,12 +1513,13 @@ mod tests {
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
-            swap_size: 5,
+            swap_distance: 5,
             step_size: 100, // not used
+            batch_size: 10_000,
         };
         align.run().expect("Subsampling failed");
 
-        let mut reader = noodles::bam::io::reader::Builder::default()
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
             .build_from_path(output_temp.path())
             .unwrap();
         // read the header, get the length of chromosome
@@ -1486,15 +1535,15 @@ mod tests {
             .unwrap()
             .1
             .length()
-            .get() as usize;
+            .get();
 
         // using preallocated vector to record depth for each position
         // populate the vector with 0
         let mut depth = vec![0u32; chrom_length];
 
-        for r in reader.records() {
+        for r in reader.records(&header) {
             let record = r.unwrap();
-            let r_tid = record.reference_sequence_id().unwrap();
+            let r_tid = record.reference_sequence_id(&header).unwrap();
 
             // only check plasmid_2 contig. It has:
             // min 2, median 7, mean 7.5761410788382, max 11.
@@ -1503,12 +1552,12 @@ mod tests {
             }
 
             // convert to 0 based for vector indexing
-            let start = usize::from(record.alignment_start().unwrap().unwrap()) - (1 as usize);
+            let start = usize::from(record.alignment_start().unwrap().unwrap()) - (1_usize);
             let end = usize::from(record.alignment_end().unwrap().unwrap());
             // update the posisition depth that were covered by the record
             for pos in start..end {
-                if (pos as usize) < depth.len() {
-                    depth[pos as usize] += 1; // update the depth
+                if (pos) < depth.len() {
+                    depth[pos] += 1; // update the depth
                 } // safety
             }
         }
