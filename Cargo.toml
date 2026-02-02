@@ -27,7 +27,7 @@ rand_pcg = "0.3.1"
 log = "0.4"
 niffler = "2.5"
 env_logger = "0.11.8"
-rust-htslib = { version = "0.46.0", default-features = false, features = ["bzip2", "lzma"] }
+rust-htslib = { version = "1.0.0", default-features = false, features = ["bzip2", "lzma"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
