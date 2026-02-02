@@ -17,7 +17,7 @@ exclude = ["tests/cases/*"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-clap = { version = "4.5.54", features = ["derive"] }
+clap = { version = "4.5.56", features = ["derive"] }
 regex = "1.12.2"
 thiserror = "2.0"
 anyhow = "1.0"
