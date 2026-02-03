@@ -16,6 +16,9 @@ exclude = ["tests/cases/*"]
 [badges]
 maintenance = { status = "actively-developed" }
 
+[package.metadata.cargo-shear]
+ignored = ["noodles-bgzf"] # it is used by noodles to handle decompression, but not used in the code
+
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
 regex = "1.12.2"
@@ -37,9 +40,9 @@ predicates = "3.1.3"
 tempfile = "3.23.0"
 
 [profile.release]
-strip = true #true   # https://github.com/johnthagen/min-sized-rust?tab=readme-ov-file#strip-symbols-from-binary
-debug = false # false
-lto = true # true # https://doc.rust-lang.org/cargo/reference/profiles.html
+strip = true   # https://github.com/johnthagen/min-sized-rust?tab=readme-ov-file#strip-symbols-from-binary
+debug = false
+lto = true # https://doc.rust-lang.org/cargo/reference/profiles.html
 
 [profile.profiling]
 inherits = "release"

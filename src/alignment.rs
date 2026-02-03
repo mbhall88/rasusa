@@ -35,29 +35,29 @@ use crate::Runner;
 const RASUSA: &str = "rasusa";
 
 // we implementes traits manually to avoid comparing the full record
-// primary comparison is based using the random 'score'
-// if there is tie (two read have the same score), then we use 'qname' to ensure the deterministic sorting still
+// primary comparison is based using the random priority 'key'
+// if there is tie (two read have the same key), then we use 'qname' to ensure the deterministic sorting still
 #[derive(Debug)]
 struct ScoredRead {
     /// Alignment record (SAM/BAM/CRAM)
     record: RecordBuf,
 
-    /// The deterministic score assigned to this record
-    score: u64,
+    /// The deterministic key assigned to this record
+    key: u64,
 
     /// Alignment end for the record (1-based inclusive)
     end: i64,
 }
 
 impl ScoredRead {
-    fn new(record: RecordBuf, score: u64, end: i64) -> Self {
-        Self { record, score, end }
+    fn new(record: RecordBuf, key: u64, end: i64) -> Self {
+        Self { record, key, end }
     }
 }
 
 impl PartialEq for ScoredRead {
     fn eq(&self, other: &Self) -> bool {
-        self.score == other.score && self.record.name() == other.record.name()
+        self.key == other.key && self.record.name() == other.record.name()
     }
 }
 
@@ -69,11 +69,11 @@ impl PartialOrd for ScoredRead {
     }
 }
 
-// if the random score is equal (very rare),
+// if the random key is equal (very rare),
 // then compare it based the qname record (which i think will be unique)
 impl Ord for ScoredRead {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.score.cmp(&other.score) {
+        match self.key.cmp(&other.key) {
             std::cmp::Ordering::Equal => self.record.name().cmp(&other.record.name()),
             std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
             std::cmp::Ordering::Less => std::cmp::Ordering::Less,
@@ -83,10 +83,10 @@ impl Ord for ScoredRead {
 
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum SubsamplingStrategy {
-    /// Fast linear scan (Sweep Line algorithm). Efficient for high depth. Requires sorted alignment input.
+    /// A linear scan approach using sweep line algorithm with random priority. Requires sorted alignment input.
     Stream,
 
-    /// Slower random access (Fetching). Minimises read overlap. Requires indexed input (.bai).
+    /// A fetching approach to randomly subsample reads given read overlap position. Requires indexed input (.bai).
     Fetch,
 }
 
@@ -124,9 +124,10 @@ pub struct Alignment {
 
     // Algorithm specific arguments
     /// [Stream] A maximum distance (bp) allowed between start position of new read and the worst read
-    /// in the heap to consider them 'swappable'.
+    /// in the heap to consider them to be 'swappable'.
     ///
     /// Larger values allow swapping reads over greater distances, but may cause local undersampling.
+    /// A value of `0` means only allows swap between reads that have the same start position.
     #[arg(long, default_value_t = 5, value_name = "INT", value_parser = clap::value_parser!(i64).range(0..))]
     pub swap_distance: i64,
 
@@ -140,8 +141,9 @@ pub struct Alignment {
 
     /// [Fetch] The size of the genomic window (bp) to cache into memory at once.
     ///
-    /// Larger values reduce disk seeking (faster), but at the cost of high memory usage.
-    #[arg(long, default_value_t = 50_000, value_name = "INT", value_parser = clap::value_parser!(u64).range(10000..))]
+    /// Larger values reduce disk seeking, but at the cost of high memory usage.
+    /// The minimum value is 1,000 bp to avoid small region queries.
+    #[arg(long, default_value_t = 10_000, value_name = "INT", value_parser = clap::value_parser!(u64).range(1000..))]
     pub batch_size: u64,
 }
 
@@ -238,7 +240,7 @@ impl Alignment {
         // the sweep line algorithm starts here
 
         // the active set to store reads that currently in the scan
-        // using max heap, it keeps the read with the highest score (worst priority) at the top.
+        // using max heap, it keeps the read with the highest key (worst priority) at the top.
         let target_depth = self.coverage as usize;
         let mut active_reads: BinaryHeap<ScoredRead> = BinaryHeap::with_capacity(target_depth);
 
@@ -368,10 +370,11 @@ impl Alignment {
                 // if the heap has records fewer than N reads, just accept it.
                 active_reads.push(new_read);
             } else {
-                // if the heap is full, only accept it if its score is smaller than the current worst (highest score) in the heap
+                // if the heap is full, we only consider the new read if it has a better (lower) key
+                // than the current worst read in the haep
                 if let Some(mut worst) = active_reads.peek_mut() {
-                    // does the new record has better key (lower score)?
-                    if key < worst.score {
+                    // does the new record has better key?
+                    if key < worst.key {
                         // calculate the distance between these two reads
                         let worst_start = worst.record.alignment_start();
                         let worst_pos = worst_start.map(|p| usize::from(p) as i64 - 1).unwrap_or(0);
@@ -1222,19 +1225,19 @@ mod tests {
         let r1 = RecordBuf::default();
         let small = ScoredRead {
             record: r1,
-            score: 10,
+            key: 10,
             end: 1000,
         };
 
         let r2 = RecordBuf::default();
         let big = ScoredRead {
             record: r2,
-            score: 99,
+            key: 99,
             end: 1000,
         };
 
-        assert!(big > small, "Higher score should be 'Greater' in ordering");
-        assert!(small < big, "Lower score should be 'Less' in ordering");
+        assert!(big > small, "Higher key should be 'Greater' in ordering");
+        assert!(small < big, "Lower key should be 'Less' in ordering");
     }
 
     #[test]
@@ -1243,7 +1246,7 @@ mod tests {
         *r1.name_mut() = Some("readA".parse().unwrap());
         let record1 = ScoredRead {
             record: r1,
-            score: 21,
+            key: 21,
             end: 1000,
         };
 
@@ -1251,7 +1254,7 @@ mod tests {
         *r2.name_mut() = Some("readB".parse().unwrap());
         let record2 = ScoredRead {
             record: r2,
-            score: 21,
+            key: 21,
             end: 1001,
         };
 
@@ -1483,7 +1486,7 @@ mod tests {
         *r1.name_mut() = Some("readA".parse().unwrap());
         let record1 = ScoredRead {
             record: r1.clone(),
-            score: 21,
+            key: 21,
             end: 1000,
         };
 
@@ -1491,7 +1494,7 @@ mod tests {
         *r2.name_mut() = Some("readA".parse().unwrap());
         let record2 = ScoredRead {
             record: r2.clone(),
-            score: 21,
+            key: 21,
             end: 1000,
         };
 
