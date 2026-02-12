@@ -4,6 +4,7 @@ use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Write};
+use std::ops::Div;
 use std::path::{Path, PathBuf};
 use std::result::Result::Ok;
 
@@ -89,6 +90,12 @@ pub enum SubsamplingStrategy {
     /// A fetching approach to randomly subsample reads given read overlap position. Requires indexed input (.bai).
     Fetch,
 }
+
+// #[derive(Debug, Clone, Copy)]
+// pub enum DataSource {
+//     Paired,
+//     Single,
+// }
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -224,9 +231,8 @@ impl Alignment {
         Ok((rng, writer))
     }
 
-    fn run_stream(&self) -> Result<()> {
-        info!("Subsampling alignment file (Stream): {:?}", self.aln);
-
+    // a function which infers data source based the fact we find paired reads in the first ten records or no
+    fn check_pair(&self) -> Result<bool> {
         // set up reader
         let mut reader = noodles_util::alignment::io::reader::Builder::default()
             .build_from_path(&self.aln)
@@ -234,14 +240,126 @@ impl Alignment {
 
         let header = reader.read_header()?;
 
-        // setup resources
+        // read records only to check what type of the data
+        let mut check_n: u8 = 1;
+        for result in reader.records(&header) {
+            let record = result.context("Failed to parse BAM record")?;
+            if record.flags()?.is_segmented() {
+                return Ok(true);
+            }
+            if check_n > 10 {
+                break;
+            }
+            check_n += 1;
+        }
+        Ok(false)
+    }
+
+    // Scan the file linearly to find mates, only relevent on paired end illumina data
+    fn recover_mates(
+        &self,
+        survivor_names: &mut HashSet<Vec<u8>>,
+        header: &Header,
+        writer: &mut AlignmentWriter,
+    ) -> Result<()> {
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(&self.aln)
+            .context("Failed to read alignment file")?;
+
+        let _ = reader.read_header()?; // skip header
+
+        for result in reader.records(header) {
+            let record = result.context("Failed to parse BAM record")?;
+
+            // only care about the last segment (read 2)
+            if !record.flags()?.is_last_segment() {
+                continue;
+            }
+
+            let qname: Vec<u8> = record
+                .name()
+                .map(|name| {
+                    let b: &[u8] = name.as_ref();
+                    b.to_vec()
+                })
+                .unwrap_or_default();
+
+            if survivor_names.contains(&qname) {
+                writer
+                    .write_record(header, &record)
+                    .context("Failed to write mate records")?;
+            }
+        }
+        Ok(())
+    }
+
+    fn run_stream(&self) -> Result<()> {
+        info!("Subsampling alignment file (Stream): {:?}", self.aln);
+
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(&self.aln)
+            .context("Failed to read alignment file")?;
+
+        let header = reader.read_header()?;
+
         let (mut rng, mut writer) = self.setup_resources(&header)?;
 
-        // the sweep line algorithm starts here
+        // check if reads come from paired end sequencing
+        let is_paired = self.check_pair()?;
+        let mut target_depth = self.coverage as usize;
+
+        let mut survivor_names: HashSet<Vec<u8>> = HashSet::new();
+
+        if is_paired {
+            info!("Detected Paired-End data");
+
+            // divide the original target by 2 because we will add the mates back later
+            target_depth = target_depth.div(2).max(1); // in case we hit 0
+
+            // run sweep read, but only care aabout first segment record
+            self.stream(
+                target_depth,
+                true,
+                &mut survivor_names,
+                &header,
+                &mut writer,
+                &mut rng,
+            )?;
+
+            // iterate again to recover their mates (or last segement record)
+            self.recover_mates(&mut survivor_names, &header, &mut writer)?;
+        } else {
+            // single end mode, just run sweep line normally
+            self.stream(
+                target_depth,
+                false,
+                &mut survivor_names,
+                &header,
+                &mut writer,
+                &mut rng,
+            )?;
+        }
+        Ok(())
+    }
+
+    // subsampling using sweep line algorithm
+    fn stream(
+        &self,
+        target_depth: usize,
+        paired_mode: bool,
+        survivor_names: &mut HashSet<Vec<u8>>,
+        header: &Header,
+        writer: &mut AlignmentWriter,
+        rng: &mut rand_pcg::Pcg64,
+    ) -> Result<()> {
+        // set up reader
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(&self.aln)
+            .context("Failed to read alignment file")?;
+        let _ = reader.read_header()?; // skip header
 
         // the active set to store reads that currently in the scan
         // using max heap, it keeps the read with the highest key (worst priority) at the top.
-        let target_depth = self.coverage as usize;
         let mut active_reads: BinaryHeap<ScoredRead> = BinaryHeap::with_capacity(target_depth);
 
         // we also pre alocated a vector here, and will be reused
@@ -264,10 +382,17 @@ impl Alignment {
             if let Some(id) = tid {
                 let name = chrom_names.get(id).map(|s| s.as_str()).unwrap_or("*");
                 if max_depth < target_depth {
-                    warn!(
-                        "Chromosome {} never reached target depth (Max: {}X)",
-                        name, max_depth
-                    );
+                    if paired_mode {
+                        warn!(
+                            "Chromosome {} may not have reached target depth (Max: ~{}X [Based on the first segments])",
+                            name, max_depth * 2
+                        );
+                    } else {
+                        warn!(
+                            "Chromosome {} never reached target depth (Max: {}X)",
+                            name, max_depth
+                        );
+                    }
                 } else {
                     info!("Subsampling complete for: {}", name);
                 }
@@ -275,7 +400,7 @@ impl Alignment {
         };
 
         // iterate thriugh every read in the file
-        for result in reader.records(&header) {
+        for result in reader.records(header) {
             let record = result.context("Failed to parse BAM record")?;
 
             // if the read is unmapped, we skip it
@@ -283,11 +408,16 @@ impl Alignment {
                 continue;
             }
 
+            // if it is paired, we care only the first segment first
+            if paired_mode && record.flags()?.is_last_segment() {
+                continue;
+            }
+
             let Some(alignment_start) = record.alignment_start().transpose()? else {
                 continue;
             };
 
-            let tid = record.reference_sequence_id(&header).transpose()?;
+            let tid = record.reference_sequence_id(header).transpose()?;
 
             // noodles use 1-base coordinate.. inclusive start
             let pos = usize::from(alignment_start) as i64 - 1;
@@ -315,8 +445,21 @@ impl Alignment {
                 // we need to write them
                 if current_tid.is_some() {
                     for scored_read in &active_reads {
+                        // before we write into the result, we need to extract the read name
+                        if paired_mode {
+                            let qname: Vec<u8> = scored_read
+                                .record
+                                .name()
+                                .map(|name| {
+                                    let b: &[u8] = name.as_ref();
+                                    b.to_vec()
+                                })
+                                .unwrap_or_default();
+
+                            survivor_names.insert(qname);
+                        }
                         writer
-                            .write_record(&header, &scored_read.record)
+                            .write_record(header, &scored_read.record)
                             .context("Failed to write record")?;
                     }
                 }
@@ -341,9 +484,23 @@ impl Alignment {
                 // inclusive end
                 if scored_read.end <= start {
                     // the reads survived!
+
+                    // before we write into the result, we need to extract the read name
+                    if paired_mode {
+                        let qname: Vec<u8> = scored_read
+                            .record
+                            .name()
+                            .map(|name| {
+                                let b: &[u8] = name.as_ref();
+                                b.to_vec()
+                            })
+                            .unwrap_or_default();
+
+                        survivor_names.insert(qname);
+                    }
                     // and we write it into the result
                     writer
-                        .write_record(&header, &scored_read.record)
+                        .write_record(header, &scored_read.record)
                         .context("Failed to write record")?;
                 } else {
                     // still active,
@@ -364,7 +521,7 @@ impl Alignment {
                     .unwrap_or(pos);
 
                 // we convert to Recordbuf here before we want to push it to the heap
-                let record = RecordBuf::try_from_alignment_record(&header, &record)?;
+                let record = RecordBuf::try_from_alignment_record(header, &record)?;
                 let new_read = ScoredRead::new(record, key, end);
 
                 // if the heap has records fewer than N reads, just accept it.
@@ -392,7 +549,7 @@ impl Alignment {
                                 .unwrap_or(pos);
 
                             // we convert to Recordbuf here before we want to swap it to the heap
-                            let record = RecordBuf::try_from_alignment_record(&header, &record)?;
+                            let record = RecordBuf::try_from_alignment_record(header, &record)?;
                             let new_read = ScoredRead::new(record, key, end);
                             // we swap the records
                             *worst = new_read;
@@ -414,8 +571,21 @@ impl Alignment {
         // any remaining read in the heap survive
         // write into the subsampled result.
         for scored_read in active_reads {
+            // before we write into the result, we need to extract the read name
+            if paired_mode {
+                let qname: Vec<u8> = scored_read
+                    .record
+                    .name()
+                    .map(|name| {
+                        let b: &[u8] = name.as_ref();
+                        b.to_vec()
+                    })
+                    .unwrap_or_default();
+
+                survivor_names.insert(qname);
+            }
             writer
-                .write_record(&header, &scored_read.record)
+                .write_record(header, &scored_read.record)
                 .context("Failed to write record")?;
         }
 
@@ -432,6 +602,55 @@ impl Alignment {
         let header = reader.read_header()?;
 
         let (mut rng, mut writer) = self.setup_resources(&header)?;
+
+        let mut target_depth = self.coverage; // no memory allocation, do not need to convert into usize
+
+        let is_paired = self.check_pair()?;
+        let mut survivor_names: HashSet<Vec<u8>> = HashSet::new();
+
+        if is_paired {
+            info!("Detected Paired-End data");
+
+            // subsample read 1 (half of the target)
+            target_depth = self.coverage.div(2).max(1); // in case we hit 0
+            self.fetching(
+                target_depth,
+                true,
+                &mut survivor_names,
+                &header,
+                &mut writer,
+                &mut rng,
+            )?;
+
+            // recover their mates
+            self.recover_mates(&mut survivor_names, &header, &mut writer)?;
+        } else {
+            self.fetching(
+                target_depth,
+                false,
+                &mut survivor_names,
+                &header,
+                &mut writer,
+                &mut rng,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn fetching(
+        &self,
+        target_depth: u32,
+        paired_mode: bool,
+        survivor_names: &mut HashSet<Vec<u8>>,
+        header: &Header,
+        writer: &mut AlignmentWriter,
+        rng: &mut rand_pcg::Pcg64,
+    ) -> Result<()> {
+        let mut reader = indexed_reader::Builder::default()
+            .build_from_path(&self.aln)
+            .context("Failed to read alignment file")?;
+
+        let _ = reader.read_header()?;
 
         // to hold batch of reads inside batch size query
         let mut batch_cache: Vec<RecordBuf> = Vec::new();
@@ -456,7 +675,7 @@ impl Alignment {
             // get first record position
             let first_pos = {
                 let full_region = Region::new(chrom_name.clone(), ..);
-                let mut query = reader.query(&header, &full_region)?;
+                let mut query = reader.query(header, &full_region)?;
                 // Peek the first record to find start position
                 match query.next() {
                     Some(Ok(r)) => r
@@ -474,7 +693,7 @@ impl Alignment {
             let mut next_pos = first_pos;
             let start_pos = next_pos;
 
-            let mut n_reads_needed = self.coverage;
+            let mut n_reads_needed = target_depth;
             let mut current_reads = HashSet::new();
             let mut heap: BinaryHeap<Reverse<(usize, Vec<u8>)>> = BinaryHeap::new();
             let mut regions_below_coverage = false;
@@ -505,13 +724,13 @@ impl Alignment {
                     // clear it for new batch
                     batch_cache.clear();
                     // query reads that intersect the region
-                    let query = reader.query(&header, &region)?;
+                    let query = reader.query(header, &region)?;
 
                     // put them in the cache
                     for result in query {
                         let record = result?;
                         // convert to owned Record, because we want shuffle these reads
-                        let recordbuf = RecordBuf::try_from_alignment_record(&header, &record)?;
+                        let recordbuf = RecordBuf::try_from_alignment_record(header, &record)?;
                         batch_cache.push(recordbuf);
                     }
                 }
@@ -528,6 +747,10 @@ impl Alignment {
                 });
 
                 for record in &batch_cache[..partition_idx] {
+                    if paired_mode && record.flags().is_last_segment() {
+                        continue;
+                    }
+
                     let end = usize::from(record.alignment_end().unwrap_or(Position::MIN));
 
                     // just check if next_pos "inside" the reads
@@ -537,9 +760,9 @@ impl Alignment {
                 }
 
                 if next_pos == start_pos {
-                    candidates.shuffle(&mut rng);
+                    candidates.shuffle(rng);
                 } else {
-                    shuffle_records_by_position(&mut candidates, &mut rng);
+                    shuffle_records_by_position(&mut candidates, rng);
                 }
 
                 let mut num_output = 0;
@@ -566,11 +789,16 @@ impl Alignment {
                     let end = record.alignment_end().map(usize::from).unwrap_or(next_pos);
 
                     current_reads.insert(qname.clone());
-                    heap.push(Reverse((end, qname)));
+                    heap.push(Reverse((end, qname.clone())));
+
+                    // save record names if, paired end data
+                    if paired_mode {
+                        survivor_names.insert(qname);
+                    }
 
                     // write the record
                     writer
-                        .write_record(&header, record)
+                        .write_record(header, record)
                         .context("Failed to write record")?;
                     num_output += 1;
                 }
@@ -618,7 +846,14 @@ impl Alignment {
                 }
             }
             if regions_below_coverage {
-                warn!("Chromosome {chrom_name} has regions with less than the requested coverage");
+                if paired_mode {
+                    warn!(
+                        "Chromosome {chrom_name} has regions that may have less than the requested coverage [Based on the first segments]");
+                } else {
+                    warn!(
+                        "Chromosome {chrom_name} has regions with less than the requested coverage"
+                    );
+                }
             }
         }
         Ok(())
@@ -1592,5 +1827,106 @@ mod tests {
             mean,
             target_depth
         );
+    }
+
+    #[test]
+    fn test_paired_end_retention_stream() {
+        let input_path = PathBuf::from("tests/cases/test.paired.bam");
+
+        let target_depth: u32 = 2;
+        let output = NamedTempFile::new().unwrap();
+
+        // subsample to 2x depth
+        let mut align = Alignment {
+            aln: input_path,
+            output: Some(output.path().to_path_buf()),
+            output_type: Some(Format::Bam),
+            coverage: target_depth,
+            seed: Some(2109),
+            strategy: SubsamplingStrategy::Stream,
+            swap_distance: 5,
+            step_size: 100,
+            batch_size: 1000,
+        };
+
+        align.run().expect("Subsampling failed");
+
+        // verify
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(output.path())
+            .unwrap();
+        // read the header, get the length of chromosome
+        let header = reader.read_header().unwrap();
+
+        let mut r1_names: Vec<String> = Vec::new();
+        let mut r2_names: Vec<String> = Vec::new();
+
+        for result in reader.records(&header) {
+            let record = result.unwrap();
+            let name = record.name().unwrap().to_string();
+            let flags = record.flags().unwrap();
+
+            if flags.is_first_segment() {
+                r1_names.push(name);
+            } else if flags.is_last_segment() {
+                r2_names.push(name);
+            }
+        }
+        // make sure r1 and r2 names are identical because they come from the same template, sam spec guarantees this
+        // read more: https://samtools.github.io/hts-specs/SAMv1.pdf
+        r1_names.sort();
+        r2_names.sort();
+        assert_eq!(r1_names, r2_names, "Mismatch!");
+    }
+
+    #[test]
+    fn test_paired_end_retention_fetch() {
+        let input_path = PathBuf::from("tests/cases/test.paired.bam");
+
+        let target_depth: u32 = 2;
+        let output = NamedTempFile::new().unwrap();
+
+        // subsample to 2x depth
+        let mut align = Alignment {
+            aln: input_path,
+            output: Some(output.path().to_path_buf()),
+            output_type: Some(Format::Bam),
+            coverage: target_depth,
+            seed: Some(2109),
+            strategy: SubsamplingStrategy::Fetch,
+            swap_distance: 5,
+            step_size: 100,
+            batch_size: 10000,
+        };
+
+        align.run().expect("Subsampling failed");
+
+        // verify
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(output.path())
+            .unwrap();
+        // read the header, get the length of chromosome
+        let header = reader.read_header().unwrap();
+
+        let mut r1_names: Vec<String> = Vec::new();
+        let mut r2_names: Vec<String> = Vec::new();
+
+        for result in reader.records(&header) {
+            let record = result.unwrap();
+            let name = record.name().unwrap().to_string();
+            let flags = record.flags().unwrap();
+
+            if flags.is_first_segment() {
+                r1_names.push(name);
+            } else if flags.is_last_segment() {
+                r2_names.push(name);
+            }
+        }
+        // make sure r1 and r2 names are identical because they come from the same template, sam spec guarantees this
+        // read more: https://samtools.github.io/hts-specs/SAMv1.pdf
+        r1_names.sort();
+        r2_names.sort();
+
+        assert_eq!(r1_names, r2_names, "Mismatch!");
     }
 }
