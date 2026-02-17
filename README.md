@@ -255,13 +255,13 @@ this will subsample each position in the alignment to 30x coverage.
 
 ### Required parameters
 
-There are three required options to run `rasusa reads`.
+`rasusa` has three required options for the `reads` command, and two required options for the `aln` command.
 
 #### Input
 
 This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. The
 file(s) must be valid fasta or fastq format for the `reads` command and can be compressed (with a tool such as
-`gzip`). For the `aln` command, the file must be a valid **indexed** SAM/BAM file.  
+`gzip`). For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
 If two files are passed to `reads`, `rasusa` will assume they are paired-end reads.
 
 > Bash wizard tip 🧙: Let globs do the work for you `r*.fq`
@@ -282,15 +282,20 @@ requested. For example, if the last included read is very long. The log messages
 inform you of the actual coverage in the end.
 
 For the `aln` command, the coverage is the minimum number of reads that should be present at each position in the
-alignment. If a position has fewer than the requested number of reads, all reads at that position will be included. In
-addition, there will be (small) regions with more than the requested number of reads - usually localised to where the
-alignment of a read ends. This is
-because when the alignment of a selected read ends, the next read is selected based on it spanning the end of the
-previous alignment.
-When selecting this next alignment, we preference alignments whose start is closest to the end of the previous
-alignment, ensuring minimal overlap with the previous alignment. See the below screenshot from IGV for a visual example.
+alignment. If a position has fewer than the requested number of reads, all reads at that position will be included.
 
-![IGV screenshot](img/igv_panel.png)
+**Note for paired-end data:**
+To ensure 100% pair retention (i.e. no orphan reads) during subsampling, the `aln` command uses a two-pass strategy.
+It first subsamples the first segment (Read 1) at half the target coverage (`coverage / 2`) and then recovers
+the corresponding mates (Read 2).
+
+Because this approach is constrained by pairing rather than per-position depth alone, the resulting coverage
+is not guaranteed to be perfectly uniform across all positions. Instead, some fluctuations around the requested
+depth should be expected.
+
+If the requested coverage is a strict minimum requirement, we recommend setting `--coverage` slightly higher to account
+for these fluctuations.
+See the discussion in [this PR](https://github.com/mbhall88/rasusa/pull/118) for additional details.
 
 #### Genome size
 
@@ -408,6 +413,8 @@ format will be guessed from the `--output` path extension if given. Valid option
 
 ##### `-l`, `--compress-level`
 
+> `reads` only
+
 Compression level to use if compressing the output. By default this is set to the default for the compression type being
 output.
 
@@ -466,12 +473,39 @@ future.
 
 > `reads` only
 
-If the requested coverage, total bases, number of reads, or fraction of reads cannot be met, an error will be thrown. 
+If the requested coverage, total bases, number of reads, or fraction of reads cannot be met, an error will be thrown.
 By default, a warning is displayed, and the maximum possible coverage, total bases, number of reads, or fraction of reads is used.
+
+#### Subsampling strategy
+
+#### `--strategy`
+
+> `aln` only
+
+By default, `rasusa aln` uses the `stream` strategy, which implements a fast sweep-line algorithm with random priority.
+It processes a coordinate-sorted alignment file in a single pass while maintaining an active set of reads in a heap,
+ensuring that no position exceeds the target depth **N**.
+
+
+This strategy provides the option `--swap-distance` (default: 5 bp), which limits the allowed distance when swapping
+between reads encountered in the current scan and reads already in the heap.
+
+Alternatively, users can select the `fetch` strategy. This approach repeatedly fetches overlapping reads,
+shuffles them, and samples to the target depth **N**.
+
+The fetch strategy provides additional controls:
+
+- `--batch-size` (default: 10 kb): size of genomic window cached in memory
+- `--step-size` (default: 100 bp): step size used when scanning along the chromosome to find overlapping reads
+
+In most cases, the default `stream` strategy is recommended due to its speed and low memory usage.
+See [this PR](https://github.com/mbhall88/rasusa/pull/118) for a discussion of performance and behavior differences between these two strategies.
 
 #### Verbosity
 
 ##### `-v`
+
+> `reads` only
 
 Adding this optional flag will make the logging more verbose. By default, logging will
 produce messages considered "info" or above (see [here][log-lvl] for more details). If
@@ -518,7 +552,7 @@ Options:
           For paired Illumina pass this flag twice `-o o1.fq -o o2.fq`
 
           NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2. This option is required for paired input.
-          
+
   -g, --genome-size <size|faidx>
           Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
@@ -580,7 +614,9 @@ Usage: rasusa aln [OPTIONS] --coverage <INT> <FILE>
 
 Arguments:
   <FILE>
-          Path to the indexed alignment file (SAM/BAM/CRAM) to subsample
+          Path to the input alignment file (SAM/BAM/CRAM) to subsample
+
+          Note: An index (.bai) is required when using '--strategy fetch'.
 
 Options:
   -o, --output <FILE>
@@ -597,12 +633,35 @@ Options:
   -s, --seed <INT>
           Random seed to use
 
+      --strategy <STRATEGY>
+          Subsampling strategy
+
+          Possible values:
+          - stream: A linear scan approach using sweep line algorithm with random priority. Requires sorted alignment input
+          - fetch:  A fetching approach to randomly subsample reads given read overlap position. Requires indexed input (.bai)
+
+          [default: stream]
+
+      --swap-distance <INT>
+          [Stream] A maximum distance (bp) allowed between start position of new read and the worst read in the heap to consider them to be 'swappable'.
+
+          Larger values allow swapping reads over greater distances, but may cause local undersampling. A value of `0` means only allows swap between reads that have the same start position.
+
+          [default: 5]
+
       --step-size <INT>
-          When a region has less than the desired coverage, the step size to move along the chromosome to find more reads.
+          [Fetch] When a region has less than the desired coverage, the step size to move along the chromosome to find more reads.
 
           The lowest of the step and the minimum end coordinate of the reads in the region will be used. This parameter can have a significant impact on the runtime of the subsampling process.
 
           [default: 100]
+
+      --batch-size <INT>
+          [Fetch] The size of the genomic window (bp) to cache into memory at once.
+
+          Larger values reduce disk seeking, but at the cost of high memory usage. The minimum value is 1,000 bp to avoid small region queries.
+
+          [default: 10000]
 
   -h, --help
           Print help (see a summary with '-h')

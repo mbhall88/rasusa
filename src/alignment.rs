@@ -157,7 +157,6 @@ impl Runner for Alignment {
 }
 
 impl Alignment {
-
     fn setup_resources(&self, input_header: &Header) -> Result<(rand_pcg::Pcg64, AlignmentWriter)> {
         // set up random number generator
         let rng = match self.seed {
