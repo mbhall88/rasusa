@@ -33,7 +33,9 @@ jobs:
       - name: Conventional commit check
         uses: cocogitto/cocogitto-action@v4
         with:
-          check-latest-tag-only: true
+          command: check
+          args: --from-latest-tag
+
   check:
     name: Check Rust version ${{ matrix.rust }} on OS ${{ matrix.os }}
     strategy:
