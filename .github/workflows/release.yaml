@@ -35,6 +35,7 @@ jobs:
         job:
           - { os: ubuntu-20.04, target: x86_64-unknown-linux-musl, use-cross: true }
           - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, use-cross: true }
+          - { os: ubuntu-latest, target: aarch64-unknown-linux-gnu, use-cross: true }
           - { os: ubuntu-latest, target: aarch64-unknown-linux-musl, use-cross: true }
           - { os: macos-latest, target: x86_64-apple-darwin, use-cross: true }
           - { os: macos-latest, target: aarch64-apple-darwin, use-cross: true }
@@ -42,18 +43,19 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
 
-      - name: Extract crate information
-        shell: bash
-        run: |
-          echo "PROJECT_NAME=rasusa" >> $GITHUB_ENV
-          echo "PROJECT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)" >> $GITHUB_ENV
-          echo "PROJECT_MAINTAINER=$(sed -n 's/^authors = \["\(.*\)"\]/\1/p' Cargo.toml)" >> $GITHUB_ENV
-          echo "PROJECT_HOMEPAGE=$(sed -n 's/^homepage = "\(.*\)"/\1/p' Cargo.toml)" >> $GITHUB_ENV
-
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.job.target }}
+
+      - name: Extract crate information
+        shell: bash
+        run: |
+          metadata=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0]')
+          echo "PROJECT_NAME=$(echo "$metadata" | jq -r '.name')" >> $GITHUB_ENV
+          echo "PROJECT_VERSION=$(echo "$metadata" | jq -r '.version')" >> $GITHUB_ENV
+          echo "PROJECT_MAINTAINER=$(echo "$metadata" | jq -r '.authors[0]')" >> $GITHUB_ENV
+          echo "PROJECT_HOMEPAGE=$(echo "$metadata" | jq -r '.homepage')" >> $GITHUB_ENV
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -77,14 +79,8 @@ jobs:
         id: bin
         shell: bash
         run: |
-          # Figure out suffix of binary
-          EXE_suffix=""
-          case ${{ matrix.job.target }} in
-          *-pc-windows-*) EXE_suffix=".exe" ;;
-          esac;
-
           # Setup paths
-          BIN_NAME="${{ env.PROJECT_NAME }}${EXE_suffix}"
+          BIN_NAME="${{ env.PROJECT_NAME }}"
           BIN_PATH="target/${{ matrix.job.target }}/release/${BIN_NAME}"
 
           # Let subsequent steps know where to find the binary
@@ -95,9 +91,8 @@ jobs:
         id: package
         shell: bash
         run: |
-          PKG_suffix=".tar.gz" ; case ${{ matrix.job.target }} in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
           PKG_BASENAME=${PROJECT_NAME}-${PROJECT_VERSION}-${{ matrix.job.target }}
-          PKG_NAME=${PKG_BASENAME}${PKG_suffix}
+          PKG_NAME=${PKG_BASENAME}.tar.gz
           echo "PKG_NAME=${PKG_NAME}" >> $GITHUB_OUTPUT
           PKG_STAGING="${{ env.CICD_INTERMEDIATES_DIR }}/package"
           ARCHIVE_DIR="${PKG_STAGING}/${PKG_BASENAME}/"
@@ -111,31 +106,20 @@ jobs:
           
           # base compressed package
           pushd "${PKG_STAGING}/" >/dev/null
-          case ${{ matrix.job.target }} in
-            *-pc-windows-*) 7z -y a "${PKG_NAME}" "${PKG_BASENAME}"/* | tail -2 ;;
-            *) tar czf "${PKG_NAME}" "${PKG_BASENAME}"/* ;;
-          esac;
+          tar czf "${PKG_NAME}" "${PKG_BASENAME}"/*
           popd >/dev/null
           
           # Let subsequent steps know where to find the compressed package
           echo "PKG_PATH=${PKG_STAGING}/${PKG_NAME}" >> $GITHUB_OUTPUT
 
       - name: "Artifact upload: tarball"
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.PKG_NAME }}
           path: ${{ steps.package.outputs.PKG_PATH }}
 
-      - name: Check for release
-        id: is-release
-        shell: bash
-        run: |
-          unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/[0-9].* ]]; then IS_RELEASE='true' ; fi
-          echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_OUTPUT
-
       - name: Publish archives and packages
         uses: softprops/action-gh-release@v2
-        if: steps.is-release.outputs.IS_RELEASE
         with:
           files: |
             ${{ steps.package.outputs.PKG_PATH }}

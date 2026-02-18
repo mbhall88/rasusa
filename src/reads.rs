@@ -211,9 +211,9 @@ impl Runner for Reads {
         info!("{} reads detected", read_lengths.len());
 
         // calculate the depth of coverage if using coverage-based subsampling
-        if self.genome_size.is_some() {
+        if let Some(size) = self.genome_size {
             let number_of_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
-            let depth_of_covg = (number_of_bases as f64) / f64::from(self.genome_size.unwrap());
+            let depth_of_covg = (number_of_bases as f64) / f64::from(size);
             info!("Input coverage is {:.2}x", depth_of_covg);
 
             if self.strict

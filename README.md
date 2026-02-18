@@ -15,91 +15,17 @@
 ## Table of Contents
 
 - [Table of Contents](#table-of-contents)
-- [Motivation](#motivation)
 - [Install](#install)
-  - [`cargo`](#cargo)
-  - [`conda`](#conda)
-  - [Container](#container)
-    - [`apptainer`](#apptainer)
-    - [`docker`](#docker)
-  - [`homebrew`](#homebrew)
-  - [Build locally](#build-locally)
 - [Usage](#usage)
-  - [Basic usage - reads](#basic-usage---reads)
-  - [Basic usage - alignments](#basic-usage---alignments)
-  - [Required parameters](#required-parameters)
-    - [Input](#input)
-    - [Coverage](#coverage)
-      - [`-c`, `--coverage`](#-c---coverage)
-    - [Genome size](#genome-size)
-      - [`-g`, `--genome-size`](#-g---genome-size)
-  - [Optional parameters](#optional-parameters)
-    - [Output](#output)
-      - [`-o`, `--output`](#-o---output)
-    - [Output compression/format](#output-compressionformat)
-      - [`-O`, `--output-type`](#-o---output-type)
-    - [Compresion level](#compresion-level)
-      - [`-l`, `--compress-level`](#-l---compress-level)
-    - [Target number of bases](#target-number-of-bases)
-      - [`-b`, `--bases`](#-b---bases)
-    - [Number of reads](#number-of-reads)
-      - [`-n`, `--num`](#-n---num)
-    - [Fraction of reads](#fraction-of-reads)
-      - [`-f`, `--frac`](#-f---frac)
-    - [Random seed](#random-seed)
-      - [`-s`, `--seed`](#-s---seed)
-    - [Verbosity](#verbosity)
-      - [`-v`](#-v)
-  - [Full usage](#full-usage)
-    - [`reads` command](#reads-command)
-    - [`aln` command](#aln-command)
 - [Benchmark](#benchmark)
-  - [Single long read input](#single-long-read-input)
-    - [Results](#results)
-  - [Paired-end input](#paired-end-input)
-    - [Results](#results-1)
 - [Contributing](#contributing)
 - [Citing](#citing)
-  - [Bibtex](#bibtex)
-
-## Motivation
-
-I couldn't find a tool for subsampling fastq reads that met my requirements. All the
-strategies I could find fell short as they either just wanted a number or percentage of
-reads to subsample to or, if they did subsample to a coverage, they assume all reads are
-the same size (i.e Illumina). As I mostly work with long-read data this posed a problem
-if I wanted to subsample a file to certain coverage, as length of reads was never taken
-into account. `rasusa` addresses this shortcoming.
-
-A workaround I had been using for a while was using [`filtlong`][filtlong]. It was
-simple enough, I just figure out the number of bases I need to achieve a (theoretical)
-coverage for my sample. Say I have a fastq from an _E. coli_ sample with 5 million reads
-and I want to subset it to 50x coverage. I just need to multiply the expected size of
-the sample's genome, 4.6 million base pairs, by the coverage I want and I have my target
-bases - 230 million base pairs. In `filtlong`, I can do the following
-
-```sh
-target=230000000
-filtlong --target_bases "$target" reads.fq > reads.50x.fq
-```
-
-However, this is technically not the intended function of `filtlong`; it's a quality
-filtering tool. What you get in the end is a subset of the ["highest scoring"][score]
-reads at a (theoretical) coverage of 50x. Depending on your circumstances, this might be
-what you want. However, you bias yourself towards the best/longest reads in the dataset
-\- not a fair representation of your dataset as a whole. There is also the possibility
-of favouring regions of the genome that produce longer/higher quality reads. [De Maio
-_et al._][mgen-ref] even found that by randomly subsampling nanopore reads you achieve
-_better_ genome assemblies than if you had filtered.
-
-So, depending on your circumstances, an unbiased subsample of your reads might be what
-you need. And if this is the case, `rasusa` has you covered.
 
 ## Install
 
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/mbhall88/rasusa/total)
 
-**tl;dr**: precompiled binary
+### Precompiled binary
 
 ```shell
 curl -sSL rasusa.mbh.sh | sh
@@ -161,9 +87,6 @@ Prerequisite: [`conda`][conda] (and bioconda channel [correctly set up][channels
 ```sh
 conda install rasusa
 ```
-
-Thank you to Devon Ryan ([@dpryan79][dpryan79]) for [help debugging the bioconda
-recipe][pr-help].
 
 ### Container
 
@@ -255,13 +178,13 @@ this will subsample each position in the alignment to 30x coverage.
 
 ### Required parameters
 
-There are three required options to run `rasusa reads`.
+`rasusa` has three required options for the `reads` command, and two required options for the `aln` command.
 
 #### Input
 
 This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. The
 file(s) must be valid fasta or fastq format for the `reads` command and can be compressed (with a tool such as
-`gzip`). For the `aln` command, the file must be a valid **indexed** SAM/BAM file.  
+`gzip`). For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
 If two files are passed to `reads`, `rasusa` will assume they are paired-end reads.
 
 > Bash wizard tip 🧙: Let globs do the work for you `r*.fq`
@@ -281,16 +204,22 @@ desired coverage in the `reads` command, the actual coverage, in the end, could 
 requested. For example, if the last included read is very long. The log messages should
 inform you of the actual coverage in the end.
 
-For the `aln` command, the coverage is the minimum number of reads that should be present at each position in the
-alignment. If a position has fewer than the requested number of reads, all reads at that position will be included. In
-addition, there will be (small) regions with more than the requested number of reads - usually localised to where the
-alignment of a read ends. This is
-because when the alignment of a selected read ends, the next read is selected based on it spanning the end of the
-previous alignment.
-When selecting this next alignment, we preference alignments whose start is closest to the end of the previous
-alignment, ensuring minimal overlap with the previous alignment. See the below screenshot from IGV for a visual example.
+For the `aln` command, the coverage is the maximum number of reads that should be present at each position in the
+alignment. If a position has fewer than the requested number of reads, all reads at that position will be included.
 
-![IGV screenshot](img/igv_panel.png)
+> [!NOTE]
+> **For paired-end data:**
+> To ensure 100% pair retention (i.e., no orphan reads) during subsampling, the `aln` command uses a two-pass strategy.
+> It first subsamples the first segment (Read 1) at half the target coverage (`coverage / 2`) and then recovers
+> the corresponding mates (Read 2).
+> 
+> Because this approach is constrained by pairing rather than per-position depth alone, the resulting coverage
+> is not guaranteed to be perfectly uniform across all positions. Instead, some fluctuations around the requested
+> depth should be expected.
+> 
+> If the requested coverage is a strict *minimum* requirement, we recommend setting `--coverage` slightly higher to account
+> for these fluctuations.
+> See the discussion in [this PR](https://github.com/mbhall88/rasusa/pull/118) for additional details.
 
 #### Genome size
 
@@ -328,7 +257,7 @@ set to the sum of all reference sequences in it.
 > ```
 > `lrge` is designed for long reads. If you want to estimate the genome size from short 
 > reads, you could use something like [Mash](https://github.com/marbl/Mash) or 
-> [GenomeScope2](https://github.com/tbenavi1/genomescope2.0). See [the `lrge` docs](https://github.com/tbenavi1/genomescope2.0) 
+> [GenomeScope2](https://github.com/tbenavi1/genomescope2.0). See [the `lrge` docs](https://github.com/mbhall88/lrge?tab=readme-ov-file#alternatives) 
 > for examples of how Mash/GenomeScope2 can be used for this task.
 
 [faidx]: https://www.htslib.org/doc/faidx.html
@@ -341,7 +270,8 @@ set to the sum of all reference sequences in it.
 
 **`reads`**
 
-NOTE: This parameter is required if passing paired Illumina data to `reads`.
+> [!IMPORTANT]
+> This parameter is required if passing paired Illumina data to `reads`.
 
 By default, `rasusa` will output the subsampled file to `stdout` (if one file is given).
 If you would prefer to specify an output file path, then use this option.
@@ -349,8 +279,9 @@ If you would prefer to specify an output file path, then use this option.
 Output for Illumina paired files must be specified using `--output` twice - `-o out.r1.fq -o out.r2.fq`
 
 The ordering of the output files is assumed to be the same as the input.  
-_Note: The output will always be in the same format as the input. You cannot pass fastq
-as input and ask for fasta as output._
+> [!NOTE]
+> The output will always be in the same format as the input. You cannot pass FASTQ
+> as input and ask for fasta as output.
 
 `rasusa reads` will also attempt to automatically infer whether compression of the output
 file(s) is required. It does this by detecting any of the supported extensions:
@@ -364,11 +295,12 @@ file(s) is required. It does this by detecting any of the supported extensions:
 For the `aln` command, the output file format will be the same as the input if writing to stdout, otherwise it will be
 inferred from the file extension. 
 
-**Note:** the output alignment will most likely **not be sorted**. You can use `samtools sort` to sort the output. e.g.,
-
-```
-rasusa aln -c 5 in.bam | samtools sort -o out.bam
-```
+> [!NOTE]
+> The output alignment will most likely **not be sorted**. You can use `samtools sort` to sort the output. e.g.,
+> 
+> ```
+> rasusa aln -c 5 in.bam | samtools sort -o out.bam
+> ```
 
 [gzip]: http://www.gzip.org/
 
@@ -402,11 +334,13 @@ format will be guessed from the `--output` path extension if given. Valid option
 - `c` or `cram`: CRAM
 - `s` or `sam`: SAM
 
-*Note: all values to this option are case insensitive.*
+All values to this option are case insensitive.
 
 #### Compresion level
 
 ##### `-l`, `--compress-level`
+
+> `reads` only
 
 Compression level to use if compressing the output. By default this is set to the default for the compression type being
 output.
@@ -420,8 +354,8 @@ output.
 Explicitly set the number of bases required in the subsample. This option takes the
 number in the same format as [genome size](#genome-size).
 
-*Note: if this option is given, genome size and coverage are not required, or ignored if
-they are provided.*
+> [!NOTE]
+> If this option is given, genome size and coverage are not required.
 
 #### Number of reads
 
@@ -448,7 +382,8 @@ Explicitly set the fraction of total reads in the subsample. The value given to 
 option can be a float or a percentage - i.e., `-f 0.5` and `-f 50` will both take half
 of the reads.
 
-*Note: if this option is given, genome size and coverage are not required.*
+> [!NOTE]
+> If this option is given, genome size and coverage are not required.
 
 #### Random seed
 
@@ -466,12 +401,39 @@ future.
 
 > `reads` only
 
-If the requested coverage, total bases, number of reads, or fraction of reads cannot be met, an error will be thrown. 
+If the requested coverage, total bases, number of reads, or fraction of reads cannot be met, an error will be thrown.
 By default, a warning is displayed, and the maximum possible coverage, total bases, number of reads, or fraction of reads is used.
+
+#### Subsampling strategy
+
+##### `--strategy`
+
+> `aln` only
+
+By default, `rasusa aln` uses the `stream` strategy, which implements a fast sweep-line algorithm with random priority.
+It processes a coordinate-sorted alignment file in a single pass (two passes if using paired-end data) while maintaining an active set of reads in a heap,
+ensuring that no position exceeds the target depth **N**.
+
+
+This strategy provides the option `--swap-distance` (default: 5 bp), which limits the allowed distance when swapping
+between reads encountered in the current scan and reads already in the heap.
+
+Alternatively, users can select the `fetch` strategy. This approach repeatedly fetches overlapping reads,
+shuffles them, and samples to the target depth **N**.
+
+The fetch strategy provides additional controls:
+
+- `--batch-size` (default: 10 kb): size of genomic window cached in memory
+- `--step-size` (default: 100 bp): step size used when scanning along the chromosome to find overlapping reads
+
+In most cases, the default `stream` strategy is recommended due to its speed and low memory usage.
+See [this PR](https://github.com/mbhall88/rasusa/pull/118) for a discussion of performance and behavior differences between these two strategies.
 
 #### Verbosity
 
 ##### `-v`
+
+> `reads` only
 
 Adding this optional flag will make the logging more verbose. By default, logging will
 produce messages considered "info" or above (see [here][log-lvl] for more details). If
@@ -518,7 +480,7 @@ Options:
           For paired Illumina pass this flag twice `-o o1.fq -o o2.fq`
 
           NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2. This option is required for paired input.
-          
+
   -g, --genome-size <size|faidx>
           Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
 
@@ -580,7 +542,9 @@ Usage: rasusa aln [OPTIONS] --coverage <INT> <FILE>
 
 Arguments:
   <FILE>
-          Path to the indexed alignment file (SAM/BAM/CRAM) to subsample
+          Path to the input alignment file (SAM/BAM/CRAM) to subsample
+
+          Note: An index (.bai) is required when using '--strategy fetch'.
 
 Options:
   -o, --output <FILE>
@@ -597,12 +561,35 @@ Options:
   -s, --seed <INT>
           Random seed to use
 
+      --strategy <STRATEGY>
+          Subsampling strategy
+
+          Possible values:
+          - stream: A linear scan approach using sweep line algorithm with random priority. Requires sorted alignment input
+          - fetch:  A fetching approach to randomly subsample reads given read overlap position. Requires indexed input (.bai)
+
+          [default: stream]
+
+      --swap-distance <INT>
+          [Stream] A maximum distance (bp) allowed between start position of new read and the worst read in the heap to consider them to be 'swappable'.
+
+          Larger values allow swapping reads over greater distances, but may cause local undersampling. A value of `0` means only allows swap between reads that have the same start position.
+
+          [default: 5]
+
       --step-size <INT>
-          When a region has less than the desired coverage, the step size to move along the chromosome to find more reads.
+          [Fetch] When a region has less than the desired coverage, the step size to move along the chromosome to find more reads.
 
           The lowest of the step and the minimum end coordinate of the reads in the region will be used. This parameter can have a significant impact on the runtime of the subsampling process.
 
           [default: 100]
+
+      --batch-size <INT>
+          [Fetch] The size of the genomic window (bp) to cache into memory at once.
+
+          Larger values reduce disk seeking, but at the cost of high memory usage. The minimum value is 1,000 bp to avoid small region queries.
+
+          [default: 10000]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -628,7 +615,8 @@ The data I used comes from
 > identifies novel variation in repetitive PE/PPE gene regions." Microbial genomics 4.7
 > (2018).][1]
 
-_Note, these benchmarks are for `reads` only as there is no other tool that replicates the functionality of `aln`._
+> [!NOTE]
+> These benchmarks are for `reads` only as there is no other tool that replicates the functionality of `aln`.
 
 ### Single long read input
 
@@ -710,12 +698,11 @@ For changes to be accepted, they must pass the CI and coverage checks. These inc
 - There are no compiler errors/warnings. You can check this by running `cargo clippy
   --all-features --all-targets -- -D warnings`
 - Code coverage has not reduced. If you want to check coverage before pushing changes, I
-  use [`kcov`][kcov].
+  use [`tarpaulin`][tarpaulin].
 
 ## Citing
 
-If you use `rasusa` in your research, it would be very much appreciated if you could
-cite it.
+If you use `rasusa` in your research, it would be appreciated if you could cite it.
 
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
 
@@ -762,7 +749,7 @@ You can get the following citation by running `rasusa cite`
 
 [hyperfine]: https://github.com/sharkdp/hyperfine
 
-[kcov]: https://github.com/SimonKagstrom/kcov
+[tarpaulin]: https://github.com/xd009642/tarpaulin
 
 [log-lvl]: https://docs.rs/log/0.4.6/log/enum.Level.html#variants
 
