@@ -21,7 +21,7 @@ ignored = ["noodles-bgzf"] # it is used by noodles to handle decompression, but 
 
 [dependencies]
 clap = { version = "4.5.59", features = ["derive"] }
-regex = "1.12.2"
+regex = "1.12.3"
 thiserror = "2.0"
 anyhow = "1.0"
 needletail = { version = "0.5.1", features = ["compression"] }
