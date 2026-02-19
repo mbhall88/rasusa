@@ -10,8 +10,9 @@ use std::result::Result::Ok;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
 use log::{info, warn};
-use rand::prelude::SliceRandom;
-use rand::{random, Rng, SeedableRng};
+use rand::prelude::*;
+use rand::random;
+use rand::Rng;
 
 use noodles::core::{Position, Region};
 use noodles::sam::alignment::{Record, RecordBuf};
@@ -452,7 +453,7 @@ impl Alignment {
             let start = pos;
 
             // assign deterministic random priority
-            let key: u64 = rng.gen();
+            let key: u64 = rng.next_u64();
 
             // clear and move everything from the heap to the preallocated vector
             // to check whether the reads in the heap already expire
@@ -931,6 +932,7 @@ mod tests {
     use noodles::core::Position;
     use noodles::sam::alignment::{Record, RecordBuf};
     use rand::prelude::StdRng;
+    use rand::RngExt;
     use tempfile::NamedTempFile;
 
     const SUB: &str = "aln";
@@ -1315,7 +1317,7 @@ mod tests {
         fn old_random_compare<T: Ord>(a: T, b: T, rng: &mut impl Rng) -> Ordering {
             if a == b {
                 // Introduce randomness when elements are equal
-                if rng.gen::<bool>() {
+                if rng.random::<bool>() {
                     Ordering::Less
                 } else {
                     Ordering::Greater
