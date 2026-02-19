@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0](https://github.com/mbhall88/rasusa/compare/2.2.2...3.0.0) (2026-02-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** Subsampling results for a fixed seed will differ from versions < 3.0.0. This is caused by internal algorithmic changes in the rand crate (0.8.5 -> 0.10.0) and requires a major version bump.
+
+### Features
+
+* **deps:** upgrade rand to 0.10.0 and rand_pcg to 0.10.1 ([#129](https://github.com/mbhall88/rasusa/issues/129)) ([23f330a](https://github.com/mbhall88/rasusa/commit/23f330a7ede2606611a2520303bd34c983193053))
+* implement sweep-line algorithm for BAM downsampling ([f0dada6](https://github.com/mbhall88/rasusa/commit/f0dada6a1ef7688b4ba2835baf3ae486d3e61f8c))
+
 ## [2.2.2](https://github.com/mbhall88/rasusa/compare/2.2.1...2.2.2) (2025-09-09)
 
 
