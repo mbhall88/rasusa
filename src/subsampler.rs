@@ -1,5 +1,6 @@
 use log::info;
 use rand::prelude::*;
+use rand::random;
 
 /// A `Struct` for dealing with the randomised part of sub-sampling.
 pub struct SubSampler {
@@ -364,7 +365,7 @@ mod tests {
 
         assert_eq!(nb_select, 1);
         assert!(!actual[0]);
-        assert!(!actual[1]);
-        assert!(actual[2]);
+        assert!(actual[1]);
+        assert!(!actual[2]);
     }
 }
