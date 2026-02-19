@@ -16,7 +16,7 @@ PROJECT="rasusa"
 GH_USER="mbhall88"
 
 SUPPORTED_TARGETS="x86_64-unknown-linux-musl x86_64-unknown-linux-gnu \
-                   aarch64-unknown-linux-musl \
+                   aarch64-unknown-linux-musl aarch64-unknown-linux-gnu \
                    aarch64-apple-darwin x86_64-apple-darwin"
 
 info() {
