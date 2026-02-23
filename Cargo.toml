@@ -29,7 +29,7 @@ rand = "0.10.0"
 rand_pcg = "0.10.1"
 log = "0.4"
 niffler = "2.5"
-env_logger = "0.11.8"
+env_logger = "0.11.9"
 noodles-util = { version = "0.73.0", features = ["alignment"] }
 noodles = { version = "0.104.0", features = ["bam", "core", "sam"] }
 noodles-bgzf = { version = "0.45.0", features = ["libdeflate"] }
