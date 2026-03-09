@@ -20,7 +20,7 @@ maintenance = { status = "actively-developed" }
 ignored = ["noodles-bgzf"] # it is used by noodles to handle decompression, but not used in the code
 
 [dependencies]
-clap = { version = "4.5.59", features = ["derive"] }
+clap = { version = "4.5.60", features = ["derive"] }
 regex = "1.12.3"
 thiserror = "2.0"
 anyhow = "1.0"
