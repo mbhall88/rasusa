@@ -36,7 +36,7 @@ noodles-bgzf = { version = "0.45.0", features = ["libdeflate"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
-predicates = "3.1.3"
+predicates = "3.1.4"
 tempfile = "3.25.0"
 
 [profile.release]
