@@ -12,7 +12,7 @@ The `reads` subcommand currently only supports FASTA/FASTQ files via `needletail
 - **Format Detection**: Automatically detect if an input file is SAM, BAM, or CRAM.
 - **Single-Pass/Two-Pass Support**: Maintain the current two-pass approach for the `reads` subcommand (first pass for lengths, second for filtering).
 - **Paired-End Integrity**: If two SAM/BAM/CRAM files are provided as input (paired-end), ensure matching records are handled together.
-- **Single-File Paired-End**: Support paired-end data stored in a single SAM/BAM/CRAM file (where pairs are consecutive or identified by name). *Note: The user specified "paired end data that is stored in unaligned BAM too", which usually means a single file.*
+- **Single-File Paired-End**: Support paired-end data stored in a single SAM/BAM/CRAM file (where pairs are consecutive or identified by name). *Note: Use the `SEGMENTED` flag (bit 0x1) for detection.*
 - **Output Support**: Allow writing the subsampled output back to SAM/BAM/CRAM (matching input format or as specified).
 - **Target Calculation**: Correctly calculate target bases/reads for these new formats.
 

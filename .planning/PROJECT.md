@@ -18,3 +18,4 @@
 - Implement new features with a focus on efficiency and performance.
 - Refactor fragile areas as they are touched by new functionality.
 - Maintain high test coverage using `assert_cmd` and `predicates`.
+- **Note:** Use the `SEGMENTED` flag (bit 0x1) in SAM/BAM/CRAM records to detect paired-end data.
