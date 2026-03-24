@@ -40,6 +40,10 @@ pub enum FastxError {
     /// Indicates that writing to the output file failed.
     #[error("Could not write to output file")]
     WriteError { source: anyhow::Error },
+
+    /// Indicates an error when reading an alignment file (SAM/BAM/CRAM).
+    #[error("Alignment read error: {source}")]
+    AlignmentReadError { source: std::io::Error },
 }
 
 /// A `Struct` used for seamlessly dealing with either compressed or uncompressed fasta/fastq files.
@@ -117,6 +121,29 @@ impl Fastx {
     /// ```
     pub fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
         let mut read_lengths: Vec<u32> = vec![];
+
+        let ext = self
+            .path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if matches!(ext.as_str(), "sam" | "bam" | "cram") {
+            let mut reader = noodles_util::alignment::io::reader::Builder::default()
+                .build_from_path(&self.path)
+                .map_err(|source| FastxError::AlignmentReadError { source })?;
+            let header = reader
+                .read_header()
+                .map_err(|source| FastxError::AlignmentReadError { source })?;
+
+            for result in reader.records(&header) {
+                let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
+                read_lengths.push(record.sequence().len() as u32);
+            }
+            return Ok(read_lengths);
+        }
+
         let reader = match niffler::send::from_path(&self.path) {
             Ok((rdr, _)) => rdr,
             Err(source) => match source {
@@ -307,6 +334,17 @@ mod tests {
         let expected: Vec<u32> = vec![4, 1];
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn get_read_lengths_for_bam() {
+        // We use an existing BAM test file
+        let path = Path::new("tests/cases/test.bam");
+        let fastx = Fastx::from_path(path);
+
+        let actual = fastx.read_lengths().unwrap();
+        // Just verify it read some lengths
+        assert!(!actual.is_empty());
     }
 
     #[test]
