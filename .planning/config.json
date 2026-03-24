@@ -1,0 +1,15 @@
+{
+  "workflow": "collaborative",
+  "conventions": {
+    "commits": "conventional",
+    "style": "rustfmt",
+    "linting": "clippy"
+  },
+  "tech_stack": [
+    "rust",
+    "cargo",
+    "clap",
+    "noodles",
+    "needletail"
+  ]
+}
