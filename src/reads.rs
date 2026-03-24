@@ -289,8 +289,14 @@ impl Runner for Reads {
         }
         debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
+        let output_format_1 = if self.output.is_empty() {
+            None
+        } else {
+            crate::alignment::infer_format_from_path(&self.output[0])
+        };
+
         let mut total_kept_bases =
-            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle)?
+            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle, output_format_1)?
                 as u64;
 
         // repeat the same process for the second input fastx (if illumina)
@@ -301,10 +307,13 @@ impl Runner for Reads {
                 .create(self.compress_level, self.output_type)
                 .context("unable to create the second output file")?;
 
+            let output_format_2 = crate::alignment::infer_format_from_path(&self.output[1]);
+
             total_kept_bases += second_input_fastx.filter_reads_into(
                 &reads_to_keep,
                 nb_reads_to_keep,
                 &mut second_output_handle,
+                output_format_2,
             )? as u64;
         }
 

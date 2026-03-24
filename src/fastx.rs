@@ -190,7 +190,7 @@ impl Fastx {
     /// let output_fastx = Fastx::from_path(output.path()).unwrap();
     /// {
     ///     let mut out_fh = output_fastx.create().unwrap();
-    ///     let filter_result = fastx.filter_reads_into(&mut reads_to_keep, 1, &mut out_fh);
+    ///     let filter_result = fastx.filter_reads_into(&mut reads_to_keep, 1, &mut out_fh, None);
     ///     assert!(filter_result.is_ok());
     /// }
     /// let actual = std::fs::read_to_string(output).unwrap();
@@ -202,8 +202,63 @@ impl Fastx {
         reads_to_keep: &[bool],
         nb_reads_keep: usize,
         write_to: &mut T,
+        output_format: Option<noodles_util::alignment::io::Format>,
     ) -> Result<usize, FastxError> {
         let mut total_len = 0;
+
+        let ext = self
+            .path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if matches!(ext.as_str(), "sam" | "bam" | "cram") {
+            let mut reader = noodles_util::alignment::io::reader::Builder::default()
+                .build_from_path(&self.path)
+                .map_err(|source| FastxError::AlignmentReadError { source })?;
+            let header = reader
+                .read_header()
+                .map_err(|source| FastxError::AlignmentReadError { source })?;
+
+            let out_fmt = output_format.unwrap_or_else(|| {
+                crate::alignment::infer_format_from_path(&self.path)
+                    .unwrap_or(noodles_util::alignment::io::Format::Bam)
+            });
+
+            let mut writer = noodles_util::alignment::io::writer::Builder::default()
+                .set_format(out_fmt)
+                .build_from_writer(write_to)
+                .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
+
+            writer.write_header(&header)
+                .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
+
+            let mut read_idx: usize = 0;
+            let mut nb_reads_written = 0;
+
+            for result in reader.records(&header) {
+                let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
+                
+                if read_idx < reads_to_keep.len() && reads_to_keep[read_idx] {
+                    total_len += record.sequence().len();
+                    writer.write_record(&header, &record)
+                        .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
+                    nb_reads_written += 1;
+                    if nb_reads_keep == nb_reads_written {
+                        break;
+                    }
+                }
+                read_idx += 1;
+            }
+
+            if nb_reads_written == nb_reads_keep {
+                return Ok(total_len);
+            } else {
+                return Err(FastxError::IndicesNotFound);
+            }
+        }
+
         let (reader, _) = niffler::send::from_path(&self.path)?;
         let mut reader = needletail::parse_fastx_reader(reader)
             .map_err(|source| FastxError::ReadError { source })?;
@@ -357,7 +412,7 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let output_fastx = Fastx::from_path(output.path());
         let mut out_fh = output_fastx.create(None, None).unwrap();
-        let filter_result = fastx.filter_reads_into(&reads_to_keep, 0, &mut out_fh);
+        let filter_result = fastx.filter_reads_into(&reads_to_keep, 0, &mut out_fh, None);
 
         assert!(filter_result.is_ok());
 
@@ -379,7 +434,7 @@ mod tests {
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create(None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None);
             assert!(filter_result.is_ok());
         }
 
@@ -400,7 +455,7 @@ mod tests {
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create(None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None);
             assert!(filter_result.is_ok());
         }
 
@@ -421,7 +476,7 @@ mod tests {
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create(None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None);
             assert!(filter_result.is_ok());
         }
 
@@ -442,7 +497,7 @@ mod tests {
         let output_fastx = Fastx::from_path(output.path());
         {
             let mut out_fh = output_fastx.create(None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None);
             assert!(filter_result.is_ok());
         }
 
@@ -465,7 +520,7 @@ mod tests {
             let mut out_fh = output_fastx
                 .create(Some(niffler::Level::Four), None)
                 .unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None);
             assert!(filter_result.is_err());
         }
 
@@ -488,7 +543,7 @@ mod tests {
             let mut out_fh = output_fastx
                 .create(Some(niffler::Level::Four), None)
                 .unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None);
             assert!(filter_result.is_err());
         }
 
