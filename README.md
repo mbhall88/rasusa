@@ -150,13 +150,19 @@ cargo test --all
 
 ### Basic usage - reads
 
-Subsample fastq reads
+Subsample fastq reads or alignments
 
 ```
 rasusa reads --coverage 30 --genome-size 4.6mb in.fq
 ```
 
-The above command will output the subsampled file to `stdout`.
+`rasusa reads` also supports SAM/BAM/CRAM input:
+
+```
+rasusa reads --coverage 30 --genome-size 4.6mb in.bam
+```
+
+The above commands will output the subsampled file to `stdout`.
 
 Or, if you have paired Illumina
 
@@ -182,10 +188,12 @@ this will subsample each position in the alignment to 30x coverage.
 
 #### Input
 
-This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. The
-file(s) must be valid fasta or fastq format for the `reads` command and can be compressed (with a tool such as
-`gzip`). For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
+This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. 
+
+For the `reads` command, the file(s) can be in FASTA, FASTQ, SAM, BAM, or CRAM format. FASTA and FASTQ files can be compressed (with a tool such as `gzip`).
 If two files are passed to `reads`, `rasusa` will assume they are paired-end reads.
+
+For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
 
 > Bash wizard tip 🧙: Let globs do the work for you `r*.fq`
 
@@ -278,17 +286,23 @@ If you would prefer to specify an output file path, then use this option.
 
 Output for Illumina paired files must be specified using `--output` twice - `-o out.r1.fq -o out.r2.fq`
 
-The ordering of the output files is assumed to be the same as the input.  
-> [!NOTE]
-> The output will always be in the same format as the input. You cannot pass FASTQ
-> as input and ask for fasta as output.
+The ordering of the output files is assumed to be the same as the input.
 
-`rasusa reads` will also attempt to automatically infer whether compression of the output
+`rasusa reads` will attempt to automatically infer the output format and whether compression of the output
 file(s) is required. It does this by detecting any of the supported extensions:
 
+- `.fa`/`.fasta`: FASTA format
+- `.fq`/`.fastq`: FASTQ format
+- `.bam`: BAM format
+- `.cram`: CRAM format
+- `.sam`: SAM format
 - `.gz`: will compress the output with [`gzip`][gzip]
 - `.bz` or `.bz2`: will compress the output with [`bzip2`][bzip]
 - `.lzma`: will compress the output with the [`xz`][xz] LZMA algorithm
+
+> [!NOTE]
+> If no extension is matched, the output will be in the same format as the input. You can convert between formats
+> by specifying the desired extension (e.g., input BAM and output FASTQ).
 
 **`aln`**
 
@@ -314,16 +328,24 @@ inferred from the file extension.
 
 **`reads`**
 
-Use this option to manually set the compression algoritm to use for the output file(s).
+Use this option to manually set the compression algorithm or alignment format to use for the output file(s).
 It will override any format automatically detected from the output path.
 
-Valid options are:
+Valid options for compression are:
 
 - `g`: [`gzip`][gzip]
 - `b`: [`bzip2`][bzip]
 - `l` or `x`: [`xz`][xz] LZMA algorithm
 - `z`: [`zstd`][zstd]
 - `u`: no compression
+
+Valid options for alignment format are:
+
+- `b` or `bam`: BAM
+- `c` or `cram`: CRAM
+- `s` or `sam`: SAM
+
+All values to this option are case insensitive.
 
 **`aln`**
 
