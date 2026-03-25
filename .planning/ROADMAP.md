@@ -22,6 +22,5 @@
 - [x] Verify paired-end integrity for single-file BAM inputs.
 - [x] Ensure output format matches input or `-O` flag.
 
-## Phase 5: Documentation & Cleanup
-**Plans:** 1 plan
-- [ ] PLAN.md — Update README, final code review, and cleanup.
+## Phase 5: Documentation & Cleanup (Done)
+- [x] PLAN.md — Update README, final code review, and cleanup.
