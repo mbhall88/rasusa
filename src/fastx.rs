@@ -10,10 +10,6 @@ use thiserror::Error;
 /// A collection of custom errors relating to the working with files for this package.
 #[derive(Error, Debug)]
 pub enum FastxError {
-    /// Indicates that the file is not one of the allowed file types as specified by [`FileType`](#filetype).
-    #[error("File type of {0} is not fasta or fastq")]
-    UnknownFileType(String),
-
     /// Indicates that the specified input file could not be opened/read.
     #[error("Read error")]
     ReadError {
