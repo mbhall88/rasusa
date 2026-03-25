@@ -274,3 +274,107 @@ fn frac_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> 
 
     Ok(())
 }
+
+#[test]
+fn reads_bam_num() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![READS, "tests/cases/test.bam", "-n", "10"]);
+    cmd.assert().success();
+    Ok(())
+}
+
+#[test]
+fn reads_bam_frac() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![READS, "tests/cases/test.bam", "-f", "0.1"]);
+    cmd.assert().success();
+    Ok(())
+}
+
+#[test]
+fn reads_bam_coverage() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/test.bam",
+        "-c",
+        "1",
+        "-g",
+        "10kb",
+    ]);
+    cmd.assert().success();
+    Ok(())
+}
+
+#[test]
+fn reads_bam_to_sam() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.sam");
+    cmd.args(vec![
+        READS,
+        "tests/cases/test.bam",
+        "-n",
+        "10",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+    
+    // Verify it is indeed SAM
+    let content = std::fs::read_to_string(out).unwrap();
+    assert!(content.starts_with("@HD"));
+    Ok(())
+}
+
+#[test]
+fn reads_reproducibility() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out1 = temp_dir.path().join("out1.bam");
+    let out2 = temp_dir.path().join("out2.bam");
+    let seed = "42";
+
+    cmd.args(vec![
+        READS,
+        "tests/cases/test.bam",
+        "-n",
+        "10",
+        "-s",
+        seed,
+        "-o",
+        out1.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/test.bam",
+        "-n",
+        "10",
+        "-s",
+        seed,
+        "-o",
+        out2.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+
+    let bytes1 = std::fs::read(out1).unwrap();
+    let bytes2 = std::fs::read(out2).unwrap();
+    assert_eq!(bytes1, bytes2);
+    Ok(())
+}
+
+#[test]
+fn reads_paired_bam() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/test.paired.bam",
+        "-n",
+        "10",
+    ]);
+    cmd.assert().success();
+    Ok(())
+}
