@@ -23,5 +23,5 @@
 - [x] Ensure output format matches input or `-O` flag.
 
 ## Phase 5: Documentation & Cleanup
-- [ ] Update README with new format support.
-- [ ] Final code review and performance check.
+**Plans:** 1 plan
+- [ ] PLAN.md — Update README, final code review, and cleanup.
