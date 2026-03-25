@@ -16,11 +16,11 @@
 - [x] Support paired-end logic for SAM/BAM/CRAM.
 - [x] Update CLI to accept SAM/BAM/CRAM extensions in the `reads` subcommand.
 
-## Phase 4: Validation & Testing
-- [ ] Add unit tests for SAM/BAM/CRAM record length gathering.
-- [ ] Add integration tests using small SAM/BAM/CRAM test cases.
-- [ ] Verify paired-end integrity for single-file BAM inputs.
-- [ ] Ensure output format matches input or `-O` flag.
+## Phase 4: Validation & Testing (Done)
+- [x] Add unit tests for SAM/BAM/CRAM record length gathering.
+- [x] Add integration tests using small SAM/BAM/CRAM test cases.
+- [x] Verify paired-end integrity for single-file BAM inputs.
+- [x] Ensure output format matches input or `-O` flag.
 
 ## Phase 5: Documentation & Cleanup
 - [ ] Update README with new format support.
