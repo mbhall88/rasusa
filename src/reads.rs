@@ -13,9 +13,10 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 pub struct Reads {
-    /// The fast{a,q} file(s) to subsample.
+    /// The fast{a,q} or SAM/BAM/CRAM file(s) to subsample.
     ///
     /// For paired Illumina, the order matters. i.e., R1 then R2.
+    /// Single-file paired-end is also supported for SAM/BAM/CRAM.
     #[arg(
     value_parser = check_path_exists,
     num_args = 1..=2,

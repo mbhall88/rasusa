@@ -137,9 +137,23 @@ impl Fastx {
                 .read_header()
                 .map_err(|source| FastxError::AlignmentReadError { source })?;
 
+            let mut qname_to_idx: std::collections::HashMap<Vec<u8>, usize> = std::collections::HashMap::new();
+
             for result in reader.records(&header) {
                 let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
-                read_lengths.push(record.sequence().len() as u32);
+                let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
+                
+                if flags.is_segmented() {
+                    let name = record.name().map(|n| (n.as_ref() as &[u8]).to_vec()).unwrap_or_default();
+                    if let Some(&idx) = qname_to_idx.get(&name) {
+                        read_lengths[idx] += record.sequence().len() as u32;
+                    } else {
+                        qname_to_idx.insert(name, read_lengths.len());
+                        read_lengths.push(record.sequence().len() as u32);
+                    }
+                } else {
+                    read_lengths.push(record.sequence().len() as u32);
+                }
             }
             return Ok(read_lengths);
         }
@@ -235,29 +249,42 @@ impl Fastx {
                 .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
 
             let mut read_idx: usize = 0;
-            let mut nb_reads_written = 0;
+            let mut written_templates: std::collections::HashSet<usize> = std::collections::HashSet::new();
+            let mut qname_to_idx: std::collections::HashMap<Vec<u8>, usize> = std::collections::HashMap::new();
 
             for result in reader.records(&header) {
                 let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
-                
-                if read_idx < reads_to_keep.len() && reads_to_keep[read_idx] {
+                let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
+
+                let current_idx = if flags.is_segmented() {
+                    let name = record.name().map(|n| (n.as_ref() as &[u8]).to_vec()).unwrap_or_default();
+                    if let Some(&idx) = qname_to_idx.get(&name) {
+                        idx
+                    } else {
+                        let idx = read_idx;
+                        qname_to_idx.insert(name, idx);
+                        read_idx += 1;
+                        idx
+                    }
+                } else {
+                    let idx = read_idx;
+                    read_idx += 1;
+                    idx
+                };
+
+                if current_idx < reads_to_keep.len() && reads_to_keep[current_idx] {
                     total_len += record.sequence().len();
                     writer.write_record(&header, &record)
                         .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                    nb_reads_written += 1;
-                    if nb_reads_keep == nb_reads_written {
-                        break;
-                    }
+                    written_templates.insert(current_idx);
                 }
-                read_idx += 1;
             }
 
-            if nb_reads_written == nb_reads_keep {
+            if written_templates.len() == nb_reads_keep {
                 return Ok(total_len);
             } else {
                 return Err(FastxError::IndicesNotFound);
-            }
-        }
+            }        }
 
         let (reader, _) = niffler::send::from_path(&self.path)?;
         let mut reader = needletail::parse_fastx_reader(reader)
