@@ -2,7 +2,9 @@ use crate::cli::{
     check_path_exists, parse_compression_format, parse_fraction, parse_level, CliError, Coverage,
     GenomeSize,
 };
-use crate::{Fastx, Runner, SubSampler};
+use crate::fastx::create_output_writer;
+use crate::source::determine_record_source;
+use crate::{Runner, SubSampler};
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, error, info, warn};
@@ -148,11 +150,11 @@ impl Runner for Reads {
             info!("Two input files given. Assuming paired Illumina...")
         }
 
-        let input_fastx = Fastx::from_path(&self.input[0]);
+        let input_source = determine_record_source(&self.input[0]);
 
         let mut output_handle = match self.output.len() {
             0 => match self.output_type {
-                None => Box::new(stdout()),
+                None => Box::new(stdout()) as Box<dyn std::io::Write>,
                 Some(fmt) => {
                     let lvl = match fmt {
                         compression::Format::Gzip => compression::Level::Six,
@@ -165,9 +167,7 @@ impl Runner for Reads {
                 }
             },
             _ => {
-                let out_fastx = Fastx::from_path(&self.output[0]);
-                out_fastx
-                    .create(self.compress_level, self.output_type)
+                create_output_writer(&self.output[0], self.compress_level, self.output_type)
                     .context("unable to create the first output file")?
             }
         };
@@ -183,15 +183,15 @@ impl Runner for Reads {
         }
 
         info!("Gathering read lengths...");
-        let mut read_lengths = input_fastx
+        let mut read_lengths = input_source
             .read_lengths()
             .context("unable to gather read lengths for the first input file")?;
 
         if is_paired {
-            let second_input_fastx = Fastx::from_path(&self.input[1]);
+            let second_input_source = determine_record_source(&self.input[1]);
             let expected_num_reads = read_lengths.len();
             info!("Gathering read lengths for second input file...");
-            let mate_lengths = second_input_fastx
+            let mate_lengths = second_input_source
                 .read_lengths()
                 .context("unable to gather read lengths for the second input file")?;
 
@@ -297,20 +297,18 @@ impl Runner for Reads {
         };
 
         let mut total_kept_bases =
-            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle, output_format_1)?
+            input_source.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle, output_format_1)?
                 as u64;
 
-        // repeat the same process for the second input fastx (if illumina)
+        // repeat the same process for the second input (if illumina)
         if is_paired {
-            let second_input_fastx = Fastx::from_path(&self.input[1]);
-            let second_out_fastx = Fastx::from_path(&self.output[1]);
-            let mut second_output_handle = second_out_fastx
-                .create(self.compress_level, self.output_type)
+            let second_input_source = determine_record_source(&self.input[1]);
+            let mut second_output_handle = create_output_writer(&self.output[1], self.compress_level, self.output_type)
                 .context("unable to create the second output file")?;
 
             let output_format_2 = crate::alignment::infer_format_from_path(&self.output[1]);
 
-            total_kept_bases += second_input_fastx.filter_reads_into(
+            total_kept_bases += second_input_source.filter_reads_into(
                 &reads_to_keep,
                 nb_reads_to_keep,
                 &mut second_output_handle,
