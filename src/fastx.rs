@@ -41,6 +41,10 @@ pub enum FastxError {
     /// Indicates an error when reading an alignment file (SAM/BAM/CRAM).
     #[error("Alignment read error: {source}")]
     AlignmentReadError { source: std::io::Error },
+
+    /// Indicates that a mapped read was detected in the input alignment file.
+    #[error("Error: Mapped read detected, please use `rasusa aln` for aligned data")]
+    MappedReadDetected,
 }
 
 /// A `Struct` used for seamlessly dealing with either compressed or uncompressed fasta/fastq files.

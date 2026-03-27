@@ -151,6 +151,16 @@ impl Runner for Reads {
         }
 
         let input_source = determine_record_source(&self.input[0]);
+        let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
+
+        if input_format.is_none() && !self.output.is_empty() {
+            if let Some(out_fmt) = crate::alignment::infer_format_from_path(&self.output[0]) {
+                return Err(anyhow::anyhow!(
+                    "Conversion from FASTA/FASTQ to {:?} is not supported. Please use FASTA/FASTQ output for FASTA/FASTQ input.",
+                    out_fmt
+                ));
+            }
+        }
 
         let mut output_handle = match self.output.len() {
             0 => match self.output_type {
@@ -291,7 +301,7 @@ impl Runner for Reads {
         debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
         let output_format_1 = if self.output.is_empty() {
-            None
+            input_format
         } else {
             crate::alignment::infer_format_from_path(&self.output[0])
         };
@@ -303,10 +313,16 @@ impl Runner for Reads {
         // repeat the same process for the second input (if illumina)
         if is_paired {
             let second_input_source = determine_record_source(&self.input[1]);
+            let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
+
             let mut second_output_handle = create_output_writer(&self.output[1], self.compress_level, self.output_type)
                 .context("unable to create the second output file")?;
 
-            let output_format_2 = crate::alignment::infer_format_from_path(&self.output[1]);
+            let output_format_2 = if self.output.len() < 2 {
+                second_input_format
+            } else {
+                crate::alignment::infer_format_from_path(&self.output[1])
+            };
 
             total_kept_bases += second_input_source.filter_reads_into(
                 &reads_to_keep,

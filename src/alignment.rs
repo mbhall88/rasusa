@@ -815,7 +815,7 @@ impl Alignment {
     }
 
     /// Generates a rasusa program entry from a SAM header
-    fn program_entry(&self, header: &Header) -> (String, Map<Program>) {
+    pub fn program_entry(&self, header: &Header) -> (String, Map<Program>) {
         let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
 
         // Creates a SAM header record map value
@@ -865,7 +865,7 @@ fn shuffle_records_by_position(records: &mut [&RecordBuf], rng: &mut impl Rng) {
 
 /// Makes a program ID unique by looking for existing program records with the same ID and adding
 /// a suffix to the ID if necessary. Also returns the program ID of the last program in the header
-fn make_program_id_unique<'a>(
+pub fn make_program_id_unique<'a>(
     header: &Header,
     program_id: &'a str,
 ) -> (Cow<'a, str>, Option<String>) {

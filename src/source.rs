@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use noodles_util::alignment::io::Format;
 use anyhow::Result;
+use noodles::sam::header::record::value::map::{Program, program::tag};
+use noodles::sam::header::record::value::Map;
+use crate::alignment::make_program_id_unique;
 
 pub trait RecordSource {
     fn read_lengths(&self) -> Result<Vec<u32>, FastxError>;
@@ -26,6 +29,24 @@ impl AlignmentSource {
             path: path.to_path_buf(),
         }
     }
+
+    fn program_entry(&self, header: &noodles::sam::Header) -> (String, Map<Program>) {
+        let (program_id, previous_pgid) = make_program_id_unique(header, "rasusa");
+
+        let mut record = Map::<Program>::builder();
+        record = record.insert(tag::NAME, "rasusa");
+        record = record.insert(tag::VERSION, env!("CARGO_PKG_VERSION"));
+
+        let cl = std::env::args().collect::<Vec<String>>().join(" ");
+        record = record.insert(tag::COMMAND_LINE, cl);
+
+        if let Some(pp) = previous_pgid {
+            record = record.insert(tag::PREVIOUS_PROGRAM_ID, pp);
+        };
+
+        let program = record.build().expect("Failed to build program record");
+        (program_id.into_owned(), program)
+    }
 }
 
 impl RecordSource for AlignmentSource {
@@ -43,6 +64,11 @@ impl RecordSource for AlignmentSource {
         for result in reader.records(&header) {
             let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
             let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
+            
+            if !flags.is_unmapped() {
+                return Err(FastxError::MappedReadDetected);
+            }
+
             let rlen = record.sequence().len() as u32;
             
             if flags.is_segmented() {
@@ -72,7 +98,7 @@ impl RecordSource for AlignmentSource {
             .build_from_path(&self.path)
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-        let header = reader.read_header()
+        let mut header = reader.read_header()
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let mut read_idx: usize = 0;
@@ -83,6 +109,10 @@ impl RecordSource for AlignmentSource {
         // If the output format is an alignment format (SAM/BAM/CRAM), we write alignment records
         if let Some(format) = output_format {
             {
+                // add rasusa program command line to header
+                let (pg_id, pg_map) = self.program_entry(&header);
+                header.programs_mut().as_mut().insert(pg_id.into(), pg_map);
+
                 let mut writer = noodles_util::alignment::io::writer::Builder::default()
                     .set_format(format)
                     .build_from_writer(&mut *write_to)
@@ -214,8 +244,8 @@ mod tests {
         let mut file = File::create(path).unwrap();
         let content = b"@HD\tVN:1.6\tSO:coordinate\n\
                         @SQ\tSN:ref\tLN:1000\n\
-                        r01\t0\tref\t10\t255\t10M\t*\t0\t0\tACTGACTGAW\t*\n\
-                        r02\t0\tref\t20\t255\t10M\t*\t0\t0\tGCTGACTGAC\t*\n";
+                        r01\t4\tref\t10\t255\t10M\t*\t0\t0\tACTGACTGAW\t*\n\
+                        r02\t4\tref\t20\t255\t10M\t*\t0\t0\tGCTGACTGAC\t*\n";
         file.write_all(content).unwrap();
     }
 
@@ -223,10 +253,10 @@ mod tests {
         let mut file = File::create(path).unwrap();
         let content = b"@HD\tVN:1.6\tSO:coordinate\n\
                         @SQ\tSN:ref\tLN:1000\n\
-                        r01\t99\tref\t10\t255\t10M\t=\t20\t20\tACTGACTGAC\t*\n\
-                        r01\t147\tref\t20\t255\t10M\t=\t10\t-20\tGCTGACTGAC\t*\n\
-                        r02\t99\tref\t30\t255\t10M\t=\t40\t20\tACTGACTGAC\t*\n\
-                        r02\t147\tref\t40\t255\t10M\t=\t30\t-20\tGCTGACTGAC\t*\n";
+                        r01\t77\tref\t10\t255\t10M\t=\t20\t20\tACTGACTGAC\t*\n\
+                        r01\t141\tref\t20\t255\t10M\t=\t10\t-20\tGCTGACTGAC\t*\n\
+                        r02\t77\tref\t30\t255\t10M\t=\t40\t20\tACTGACTGAC\t*\n\
+                        r02\t141\tref\t40\t255\t10M\t=\t30\t-20\tGCTGACTGAC\t*\n";
         file.write_all(content).unwrap();
     }
 
@@ -234,8 +264,8 @@ mod tests {
         let mut file = File::create(path).unwrap();
         let content = b"@HD\tVN:1.6\tSO:coordinate\n\
                         @SQ\tSN:ref\tLN:1000\n\
-                        r01\t0\tref\t10\t255\t10M\t*\t0\t0\tACTGACTGAC\tIIIIIIIIII\n\
-                        r02\t0\tref\t20\t255\t10M\t*\t0\t0\tGCTGACTGAC\tJJJJJJJJJJ\n";
+                        r01\t4\tref\t10\t255\t10M\t*\t0\t0\tACTGACTGAC\tIIIIIIIIII\n\
+                        r02\t4\tref\t20\t255\t10M\t*\t0\t0\tGCTGACTGAC\tJJJJJJJJJJ\n";
         file.write_all(content).unwrap();
     }
 

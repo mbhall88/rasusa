@@ -278,7 +278,7 @@ fn frac_from_each_with_paired_reads() -> Result<(), Box<dyn std::error::Error>> 
 #[test]
 fn reads_bam_num() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec![READS, "tests/cases/test.bam", "-n", "10"]);
+    cmd.args(vec![READS, "tests/cases/ubam/single_ubam.bam", "-n", "10"]);
     cmd.assert().success();
     Ok(())
 }
@@ -286,7 +286,7 @@ fn reads_bam_num() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn reads_bam_frac() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec![READS, "tests/cases/test.bam", "-f", "0.1"]);
+    cmd.args(vec![READS, "tests/cases/ubam/single_ubam.bam", "-f", "0.1"]);
     cmd.assert().success();
     Ok(())
 }
@@ -296,7 +296,7 @@ fn reads_bam_coverage() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         READS,
-        "tests/cases/test.bam",
+        "tests/cases/ubam/single_ubam.bam",
         "-c",
         "1",
         "-g",
@@ -313,7 +313,7 @@ fn reads_bam_to_sam() -> Result<(), Box<dyn std::error::Error>> {
     let out = temp_dir.path().join("out.sam");
     cmd.args(vec![
         READS,
-        "tests/cases/test.bam",
+        "tests/cases/ubam/single_ubam.bam",
         "-n",
         "10",
         "-o",
@@ -330,14 +330,15 @@ fn reads_bam_to_sam() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn reads_reproducibility() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    let temp_dir = tempfile::tempdir().unwrap();
-    let out1 = temp_dir.path().join("out1.bam");
-    let out2 = temp_dir.path().join("out2.bam");
+    let temp_dir1 = tempfile::tempdir().unwrap();
+    let temp_dir2 = tempfile::tempdir().unwrap();
+    let out1 = temp_dir1.path().join("out.bam");
+    let out2 = temp_dir2.path().join("out.bam");
     let seed = "42";
 
     cmd.args(vec![
         READS,
-        "tests/cases/test.bam",
+        "tests/cases/ubam/single_ubam.bam",
         "-n",
         "10",
         "-s",
@@ -350,7 +351,7 @@ fn reads_reproducibility() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         READS,
-        "tests/cases/test.bam",
+        "tests/cases/ubam/single_ubam.bam",
         "-n",
         "10",
         "-s",
@@ -360,9 +361,19 @@ fn reads_reproducibility() -> Result<(), Box<dyn std::error::Error>> {
     ]);
     cmd.assert().success();
 
-    let bytes1 = std::fs::read(out1).unwrap();
-    let bytes2 = std::fs::read(out2).unwrap();
-    assert_eq!(bytes1, bytes2);
+    let mut reader1 = noodles_util::alignment::io::reader::Builder::default()
+        .build_from_path(out1)
+        .unwrap();
+    let header1 = reader1.read_header().unwrap();
+    let recs1: Vec<_> = reader1.records(&header1).map(|r| r.unwrap().name().map(|n| n.to_vec())).collect();
+
+    let mut reader2 = noodles_util::alignment::io::reader::Builder::default()
+        .build_from_path(out2)
+        .unwrap();
+    let header2 = reader2.read_header().unwrap();
+    let recs2: Vec<_> = reader2.records(&header2).map(|r| r.unwrap().name().map(|n| n.to_vec())).collect();
+
+    assert_eq!(recs1, recs2);
     Ok(())
 }
 
@@ -371,10 +382,83 @@ fn reads_paired_bam() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         READS,
-        "tests/cases/test.paired.bam",
+        "tests/cases/ubam/paired_interleave_ubam.bam",
         "-n",
         "10",
     ]);
     cmd.assert().success();
+    Ok(())
+}
+
+#[test]
+fn reads_single_ubam_default_output() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.bam");
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_ubam.bam",
+        "-n",
+        "10",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+    
+    // Verify it is indeed BAM
+    let mut reader = noodles_util::alignment::io::reader::Builder::default()
+        .build_from_path(out)
+        .unwrap();
+    let header = reader.read_header().unwrap();
+    assert!(header.programs().as_ref().get(&b"rasusa"[..]).is_some());
+    Ok(())
+}
+
+#[test]
+fn reads_single_ubam_fastq_output() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.fq");
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_ubam.bam",
+        "-n",
+        "10",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+    
+    // Verify it is indeed FASTQ
+    let content = std::fs::read_to_string(out).unwrap();
+    assert!(content.starts_with("@"));
+    Ok(())
+}
+
+#[test]
+fn reads_mapped_bam_errors() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/test.bam",
+        "-n",
+        "10",
+    ]);
+    cmd.assert().failure().stderr(predicate::str::contains("Error: Mapped read detected, please use `rasusa aln` for aligned data"));
+    Ok(())
+}
+
+#[test]
+fn reads_fastq_to_bam_errors() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/r1.fq.gz",
+        "-n",
+        "10",
+        "-o",
+        "out.bam",
+    ]);
+    cmd.assert().failure().stderr(predicate::str::contains("Conversion from FASTA/FASTQ to Bam is not supported"));
     Ok(())
 }
