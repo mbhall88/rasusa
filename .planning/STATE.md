@@ -1,7 +1,7 @@
 # Project State: rasusa
 
-**Current Phase:** Completed
-**Next Phase:** None (Project finished)
+**Current Phase:** Phase 5.2: SBC Refinements and Fixes
+**Next Phase:** Completion
 
 ## Active Tasks
 - [x] Initial codebase mapping.
@@ -14,6 +14,7 @@
 - [x] Phase 4: Validation & Testing (Done).
 - [x] Phase 5: Documentation & Cleanup (Done).
 - [x] Phase 5.1: Fix Phase 1 Output unaligned BAM (Done).
+- [ ] Phase 5.2: SBC Refinements and Fixes.
 
 ## Milestones
 - [x] 1.0 Project Setup (Done).
@@ -22,3 +23,4 @@
 - [x] 4.0 Validation & Reproducibility (Done).
 - [x] 5.0 Documentation & Release (Done).
 - [x] 5.1 SBC Refinement (Done).
+- [ ] 5.2 Final SBC Polish (In Progress).
