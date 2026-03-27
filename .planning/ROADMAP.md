@@ -25,5 +25,5 @@
 ## Phase 5: Documentation & Cleanup (Done)
 - [x] PLAN.md — Update README, final code review, and cleanup.
 
-## Phase 5.1: Fix Phase 1 Output unaligned BAM
-- [ ] PLAN.md — Refine SBC support: format matching, program entry, and unmapped validation.
+## Phase 5.1: Fix Phase 1 Output unaligned BAM (Done)
+- [x] PLAN.md — Refine SBC support: format matching, program entry, and unmapped validation.
