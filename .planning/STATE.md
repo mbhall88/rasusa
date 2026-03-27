@@ -1,7 +1,7 @@
 # Project State: rasusa
 
-**Current Phase:** Completed
-**Next Phase:** None (Project finished)
+**Current Phase:** Phase 5.1: Fix Phase 1 Output unaligned BAM
+**Next Phase:** Completion
 
 ## Active Tasks
 - [x] Initial codebase mapping.
@@ -13,6 +13,7 @@
 - [x] Phase 3: Integration and Refined Implementation (Done).
 - [x] Phase 4: Validation & Testing (Done).
 - [x] Phase 5: Documentation & Cleanup (Done).
+- [ ] Phase 5.1: Fix Phase 1 Output unaligned BAM.
 
 ## Milestones
 - [x] 1.0 Project Setup (Done).
@@ -20,3 +21,4 @@
 - [x] 3.0 Core Implementation and Refactoring (Done).
 - [x] 4.0 Validation & Reproducibility (Done).
 - [x] 5.0 Documentation & Release (Done).
+- [ ] 5.1 SBC Refinement (In Progress).
