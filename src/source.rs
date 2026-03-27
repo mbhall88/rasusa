@@ -43,17 +43,18 @@ impl RecordSource for AlignmentSource {
         for result in reader.records(&header) {
             let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
             let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
+            let rlen = record.sequence().len() as u32;
             
             if flags.is_segmented() {
                 let name = record.name().map(|n| (n.as_ref() as &[u8]).to_vec()).unwrap_or_default();
                 if let Some(&idx) = qname_to_idx.get(&name) {
-                    read_lengths[idx] += record.sequence().len() as u32;
+                    read_lengths[idx] += rlen;
                 } else {
                     qname_to_idx.insert(name, read_lengths.len());
-                    read_lengths.push(record.sequence().len() as u32);
+                    read_lengths.push(rlen);
                 }
             } else {
-                read_lengths.push(record.sequence().len() as u32);
+                read_lengths.push(rlen);
             }
         }
 
