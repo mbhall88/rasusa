@@ -48,6 +48,15 @@ pub enum Commands {
     Cite(Cite),
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+pub enum OutputFormat {
+    Fasta,
+    Fastq,
+    Sam,
+    Bam,
+    Cram,
+}
+
 /// A collection of custom errors relating to the command line interface for this package.
 #[derive(Error, Debug, PartialEq)]
 pub enum CliError {
