@@ -133,6 +133,7 @@ impl RecordSource for Fastx {
         nb_reads_keep: usize,
         write_to: &mut dyn Write,
         _output_format: Option<noodles_util::alignment::io::Format>,
+        is_fasta: bool,
     ) -> Result<usize, FastxError> {
         let mut total_len = 0;
 
@@ -147,10 +148,38 @@ impl RecordSource for Fastx {
                 Err(source) => return Err(FastxError::ParseError { source }),
                 Ok(rec) if reads_to_keep[read_idx] => {
                     total_len += rec.num_bases();
-                    rec.write(write_to, None)
-                        .map_err(|err| FastxError::WriteError {
-                            source: anyhow::Error::from(err),
-                        })?;
+                    if is_fasta {
+                        write_to
+                            .write_all(b">")
+                            .map_err(|err| FastxError::WriteError {
+                                source: anyhow::Error::from(err),
+                            })?;
+                        write_to
+                            .write_all(rec.id())
+                            .map_err(|err| FastxError::WriteError {
+                                source: anyhow::Error::from(err),
+                            })?;
+                        write_to
+                            .write_all(b"\n")
+                            .map_err(|err| FastxError::WriteError {
+                                source: anyhow::Error::from(err),
+                            })?;
+                        write_to
+                            .write_all(&rec.seq())
+                            .map_err(|err| FastxError::WriteError {
+                                source: anyhow::Error::from(err),
+                            })?;
+                        write_to
+                            .write_all(b"\n")
+                            .map_err(|err| FastxError::WriteError {
+                                source: anyhow::Error::from(err),
+                            })?;
+                    } else {
+                        rec.write(write_to, None)
+                            .map_err(|err| FastxError::WriteError {
+                                source: anyhow::Error::from(err),
+                            })?;
+                    }
                     nb_reads_written += 1;
                     if nb_reads_keep == nb_reads_written {
                         break;
@@ -298,7 +327,7 @@ mod tests {
         let reads_to_keep: Vec<bool> = vec![false];
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-        let filter_result = fastx.filter_reads_into(&reads_to_keep, 0, &mut out_fh, None);
+        let filter_result = fastx.filter_reads_into(&reads_to_keep, 0, &mut out_fh, None, false);
 
         assert!(filter_result.is_ok());
 
@@ -319,7 +348,7 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
             assert!(filter_result.is_ok());
         }
 
@@ -339,7 +368,7 @@ mod tests {
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, true);
             assert!(filter_result.is_ok());
         }
 
@@ -359,7 +388,7 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
             assert!(filter_result.is_ok());
         }
 
@@ -379,7 +408,7 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
             assert!(filter_result.is_ok());
         }
 
@@ -399,7 +428,7 @@ mod tests {
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, true);
             assert!(filter_result.is_err());
         }
 
@@ -419,7 +448,7 @@ mod tests {
         let output = Builder::new().suffix(".fq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None);
+            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
             assert!(filter_result.is_err());
         }
 

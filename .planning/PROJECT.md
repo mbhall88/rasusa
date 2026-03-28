@@ -5,13 +5,13 @@
 **Primary Language:** Rust (v1.84.1)
 
 ## High-Level Goals
-- Efficiently subsample biological sequence files (FASTA/FASTQ).
-- Subsample alignment files (SAM/BAM/CRAM) while maintaining coverage depth or counts.
+- Efficiently subsample biological sequence files (FASTA/FASTQ/unaligned SAM/BAM/CRAM).
+- Subsample aligned SAM/BAM/CRAM files while maintaining per-position coverage depth.
 - Provide a robust, user-friendly CLI.
 
 ## Current State
 - Version 3.0.0.
-- Established support for multiple formats via `noodles` and `needletail`.
+- Established support for multiple formats (FASTX and unaligned SAM/BAM/CRAM) via `noodles` and `needletail`.
 - Known technical debt in `src/alignment.rs` and double-pass I/O in `src/reads.rs`.
 
 ## Strategy

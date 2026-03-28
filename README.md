@@ -150,13 +150,13 @@ cargo test --all
 
 ### Basic usage - reads
 
-Subsample fastq reads or alignments
+Subsample fastq reads or unaligned SAM/BAM/CRAM.
 
 ```
 rasusa reads --coverage 30 --genome-size 4.6mb in.fq
 ```
 
-`rasusa reads` also supports SAM/BAM/CRAM input:
+`rasusa reads` also supports unaligned SAM/BAM/CRAM input:
 
 ```
 rasusa reads --coverage 30 --genome-size 4.6mb in.bam
@@ -188,9 +188,9 @@ this will subsample each position in the alignment to 30x coverage.
 
 #### Input
 
-This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. 
+This positional argument specifies the file(s) containing the reads or unaligned alignments you would like to subsample. 
 
-For the `reads` command, the file(s) can be in FASTA, FASTQ, SAM, BAM, or CRAM format. FASTA and FASTQ files can be compressed (with a tool such as `gzip`).
+For the `reads` command, the file(s) can be in FASTA, FASTQ, or unaligned SAM, BAM, or CRAM format. FASTA and FASTQ files can be compressed (with a tool such as `gzip`).
 If two files are passed to `reads`, `rasusa` will assume they are paired-end reads.
 
 For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
@@ -299,6 +299,7 @@ file(s) is required. It does this by detecting any of the supported extensions:
 - `.gz`: will compress the output with [`gzip`][gzip]
 - `.bz` or `.bz2`: will compress the output with [`bzip2`][bzip]
 - `.lzma`: will compress the output with the [`xz`][xz] LZMA algorithm
+- `.zst`: will compress the output with [`zstd`][zstd]
 
 > [!NOTE]
 > If no extension is matched, the output will be in the same format as the input. You can convert between formats
@@ -491,7 +492,7 @@ Usage: rasusa reads [OPTIONS] <FILE(S)>...
 
 Arguments:
   <FILE(S)>...
-          The fast{a,q} file(s) to subsample.
+          The fast{a,q} or unaligned SAM/BAM/CRAM file(s) to subsample.
 
           For paired Illumina, the order matters. i.e., R1 then R2.
 

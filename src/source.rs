@@ -16,6 +16,7 @@ pub trait RecordSource {
         nb_reads_keep: usize,
         write_to: &mut dyn Write,
         output_format: Option<Format>,
+        is_fasta: bool,
     ) -> Result<usize, FastxError>;
 }
 
@@ -93,6 +94,7 @@ impl RecordSource for AlignmentSource {
         nb_reads_keep: usize,
         write_to: &mut dyn Write,
         output_format: Option<Format>,
+        is_fasta: bool,
     ) -> Result<usize, FastxError> {
         let mut reader = noodles_util::alignment::io::reader::Builder::default()
             .build_from_path(&self.path)
@@ -183,7 +185,7 @@ impl RecordSource for AlignmentSource {
                     let qual: Vec<u8> = record.quality_scores().iter().map(|q| q.map(|score| score + 33)).collect::<Result<Vec<u8>, _>>()
                         .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-                    if qual.is_empty() {
+                    if qual.is_empty() || is_fasta {
                         // FASTA
                         write_to.write_all(b">")
                             .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
@@ -313,7 +315,7 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
         
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Bam));
+        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Bam), false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -342,7 +344,7 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
         
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None);
+        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, true);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -363,7 +365,7 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
         
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None);
+        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -387,7 +389,7 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
         
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Sam));
+        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Sam), false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 20);
 
@@ -416,7 +418,7 @@ mod tests {
         {
             let source = AlignmentSource::new(&sam_path);
             let mut bam_file = File::create(&bam_path).unwrap();
-            source.filter_reads_into(&[true, true], 2, &mut bam_file, Some(Format::Bam)).unwrap();
+            source.filter_reads_into(&[true, true], 2, &mut bam_file, Some(Format::Bam), false).unwrap();
         }
 
         let source = AlignmentSource::new(&bam_path);
@@ -424,7 +426,7 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
         
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Sam));
+        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Sam), false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 

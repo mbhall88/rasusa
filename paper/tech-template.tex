@@ -1,0 +1,175 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Please note that whilst this template provides a 
+% preview of the typeset manuscript for submission, it 
+% will not necessarily be the final publication layout.
+%
+% letterpaper/a4paper: US/UK paper size toggle
+% num-refs/alpha-refs: numeric/author-year citation and bibliography toggle
+
+\documentclass[a4paper,num-refs,gigabyte]{oup-contemporary}
+
+%%% Journal toggle; only specific options recognised.
+%%% (Only "gigabyte", "gigascience" and "general" are implemented now. Support for other journals is planned.)
+\journal{gigabyte}
+
+\usepackage{graphicx}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{lineno}
+\linenumbers
+
+%%% Flushend: You can add this package to automatically balance the final page, but if things go awry (e.g. section contents appearing out-of-order or entire blocks or paragraphs are coloured), remove it!
+% \usepackage{flushend}
+
+\title{Efficient downsampling of genome alignments with Rasusa}
+
+%%% Use the \authfn to add symbols for additional footnotes, if any. 1 is reserved for correspondence emails; then continuing with 2 etc for contributions.
+\author[1]{Achmad Dimas Cahyaning Furqon}
+\author[1]{Leah W Roberts}
+\author[1,\authfn{1}]{Michael B Hall}
+
+\affil[1]{The University of Queensland, UQ Centre for Clinical Research, Herston, QLD 4029, Australia}
+
+%%% Author Notes
+\authnote{\authfn{1}michael.hall1@uq.edu.au}
+
+%%% Paper category
+\papercat{Paper}
+
+%%% "Short" author for running page header
+\runningauthor{Furqon et al.}
+
+%%% Should only be set by an editor
+\jvolume{00}
+\jnumber{0}
+\jyear{2020}
+
+\begin{document}
+
+\begin{frontmatter}
+\maketitle
+\begin{abstract}
+High-throughput sequencing datasets frequently exhibit extreme read depth variation, biasing downstream analysis. Normalising coverage to a specific depth cap is important, yet existing tools rely on computationally expensive fetch-based or non-deterministic greedy algorithms. Here, we present a new coordinate-sorted sweep-line algorithm implemented in the open-source software \texttt{rasusa} that enforces a strict coverage cap at every genomic position. By utilising seeded random priority assignment, we achieve unbiased, reproducible read selection. The algorithm reduces runtimes by over 1,400-fold compared to legacy fetch-based methods---slashing processing from hours to mere seconds---and operates roughly four times faster than \texttt{VariantBam}. Furthermore, it requires only 8 MB of memory for long-read data. This provides a highly efficient, scalable, and reproducible solution for sequencing coverage normalisation.
+\end{abstract}
+
+\begin{keywords}
+Alignment; Bioinformatics; Downsampling; Software; Algorithm
+\end{keywords}
+\end{frontmatter}
+    
+\section{Statement of Need}
+\label{sec:background}
+
+Next-generation sequencing datasets frequently suffer from uneven coverage due to PCR duplication, GC bias, or simple abundance variation \citep{chen_effects_2013}. For many applications---such as benchmarking variant callers, simulating lower-yield runs, or training deep learning models---it is desirable to normalise data to a uniform depth.
+
+While simple downsampling (subsampling a fixed fraction of reads) is supported by standard tools like \texttt{samtools}, this method preserves existing coverage peaks and troughs rather than flattening them. True ``capped-depth'' downsampling (ensuring no position exceeds coverage $N$) is rarely implemented. To our knowledge, the only other tool offering this capability is \texttt{VariantBam} \cite{wala_variantbam_2016}. However, \texttt{VariantBam} has seen limited development activity in recent years (last updated circa 2023). Furthermore, users have reported outstanding issues regarding its application to Oxford Nanopore Technologies (ONT) data, highlighting the need for a tool explicitly designed to handle the specific characteristics of modern long-read sequencing.
+
+Naive implementations of capped downsampling often perform repeated random access to the alignment file (BAM/CRAM) to calculate depth at every locus, resulting in severe performance bottlenecks due to I/O latency. There is a need for a maintained, high-performance tool that can enforce coverage caps efficiently, particularly for short read datasets, where read overlaps are small but significant in number. We address this by implementing a streaming sweep-line algorithm within the existing \texttt{rasusa} framework \citep{hall_rasusa_2022}.
+
+\section{Implementation}
+
+\subsection{Algorithm Design}
+The core innovation in this work is the replacement of fetch-based depth calculations with a coordinate-sorted sweep-line algorithm. The method processes the SAM/BAM/CRAM file sequentially, maintaining an ``active set'' of reads that cover the current genomic position.
+
+Consistent with the \texttt{rasusa} suite's design philosophy, read selection is fundamentally random rather than greedy (e.g., retaining the first $N$ reads). To ensure this randomness is reproducible, we employ a deterministic seeding strategy:
+
+\begin{enumerate}
+    \item \textbf{Seeded Priority Assignment:} We use a pseudo-random number generator (PRNG) with a user-provided seed (or a random seed if none is provided). As the file is streamed, each read is assigned a random 64-bit integer drawn sequentially from the PRNG. This assigns a priority score that is deterministic given the same seed and input file order.
+    \item \textbf{Active Set Maintenance:} We use a standard binary heap (specifically a max-heap) to track active reads. As the sweep-line advances across the genome, reads ending before the current position are evicted.
+    \item \textbf{Selection Logic:} When a new read is encountered:
+    \begin{itemize}
+        \item If the active set size is below the target coverage $N$, the read is added.
+        \item If the set is full, the new read's priority is compared against the highest priority currently in the heap. If the new read has a lower (better) priority, we perform a distance check: the swap is only permitted if the start positions of the new read and the evictee are within a configurable \texttt{swap\_distance} (default 5 bp). This constraint prevents the introduction of coverage gaps in previously processed regions.   
+    \end{itemize}
+\end{enumerate}
+
+This approach guarantees that at any position $i$, the retained reads represent a random sample of size $\min(\text{depth}_i, N)$ with the lowest priority scores.
+
+\subsection{Optimised Batched-Fetching Strategy}\label{sec:optimise}
+While the streaming sweep-line algorithm is the primary innovation for coordinate-sorted files, we also overhauled \texttt{rasusa}'s existing fetch-based strategy for scenarios where index-based random access (.bai/.crai) is preferred. To overcome the severe I/O bottlenecks of the legacy naive approach, the newly optimised batched-fetching implementation queries and caches reads in large, contiguous genomic windows (default 10 kbp). By shuffling and sampling from these in-memory batches, this method drastically reduces disk-seeking overhead compared to querying locus by locus.
+
+\subsection{Processing Strategies}
+
+\subsubsection{Long-read} 
+For single-end long reads, we perform a single pass over the file. The decision to keep or discard a read is made instantaneously based on the sweep-line state, and the read is written to the output stream immediately if retained.
+
+\subsubsection{Paired-end} 
+To maintain read pairing information, we employ a \textit{two-pass} strategy.
+\begin{itemize}
+    \item \textit{Pass 1 (Selection):} The file is scanned to determine which read templates (pairs) should be kept based on the coverage cap. We store the unique identifiers of selected reads in a hash set.
+    \item \textit{Pass 2 (Retrieval):} The file is read a second time. Any read whose name is present in the selection set is written to the output, ensuring that mate pairs are correctly recovered even if they are unmapped, or physically distant in the file.
+\end{itemize}
+
+\section{Validation}
+
+\subsection{Performance Benchmarking}
+We benchmarked the new sweep-line implementation against three alternatives: the legacy naive fetch-based implementation in \texttt{rasusa}, the newly optimised batched-fetching implementation (\nameref{sec:optimise}), and \texttt{VariantBam} \cite{wala_variantbam_2016}. Benchmarks were conducted on the Bunya supercomputer (University of Queensland) \citep{the_university_of_queensland_research_computing_centre_bunya_2024}. All tests were performed on a standard compute node equipped with dual 48-core AMD EPYC 4th Gen ``Genoa'' processors (though only a single core was used). The datasets used were high-depth \textit{Salmonella enterica} Illumina paired-end (average depth $\sim$824$\times$; accession SRR26899147) and ONT long read (average depth $\sim$2943$\times$; accession SRR26899102) alignments from the same sample (accession SAMN38321309). The downsampling was targeted to a uniform depth of coverage $50\times$ using a fixed random seed (\texttt{-s 2109}). Run times were measured using \texttt{hyperfine} \citep{peter_hyperfine_2023}, and peak memory usage was captured via GNU \texttt{\//usr\//bin\//time -v}. The performance improvements delivered by the sweep-line algorithm were striking (\autoref{tab:performance_benchmarks}). It dramatically outperformed all other implementations in processing speed, running roughly four times faster than \texttt{VariantBam} on both datasets. Compared to the legacy naive fetch approach, the runtime reductions are remarkable: for the Illumina dataset, processing time fell from nearly 5.4 hours (19,369~s) to just 30 seconds (an over 600-fold improvement). The gains were even more pronounced on the ONT dataset, where the sweep-line method reduced the runtime from 37.7 hours (135,767~s) down to just 95 seconds---an improvement of over 1,400-fold. Furthermore, the memory efficiency of the sweep-line approach on the long-read ONT dataset was impressive, requiring only 8 MB compared to the 23.6 GB consumed by \texttt{VariantBam}. While the legacy naive approach maintained a marginally smaller memory footprint on the Illumina dataset (22 MB versus 56 MB), the sweep-line algorithm provides an overwhelmingly superior balance of speed and memory efficiency.
+
+\begin{table}[h!]
+\caption{Performance benchmarking results targeting a uniform $50\times$ coverage depth. Mean runtime ($n=10$ runs) and peak memory were evaluated on a single core.}\label{tab:performance_benchmarks}
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Dataset & Implementation & Command & Mean Runtime (s)  & Peak Memory (MB) \\ \midrule
+\multirow{4}{*}{\begin{tabular}[c]{@{}l@{}}Illumina\end{tabular}} & \texttt{variantBam} & \texttt{variant in.bam -m 50 -b -o out.bam} & 118 $\pm$ <1 & 116   \\
+        & \texttt{rasusa} (Naive Fetch) & \texttt{rasusa aln -s 2109 -c 50 in.bam -o out.bam}\textsuperscript{*}         & 19369 $\pm$ 34               & 22              \\
+        & \texttt{rasusa} (Batched Fetch) & \texttt{rasusa aln -s 2109 -c 50 ---strategy fetch in.bam -o out.bam} & 130 $\pm$ 1   & 128           \\
+        & \texttt{rasusa} (Sweep-line) & \texttt{rasusa aln -s 2109 -c 50 in.bam -o out.bam} & 30 $\pm$ 1    & 56            \\ \cmidrule(l){1-5}
+\multirow{4}{*}{\begin{tabular}[c]{@{}l@{}}ONT\end{tabular}}      & \texttt{variantBam} & \texttt{variant in.bam -m 50 -b -o out.bam} &  391 $\pm$ <1 & 23652 \\
+        & \texttt{rasusa} (Naive Fetch) & \texttt{rasusa aln -s 2109 -c 50 in.bam -o out.bam}\textsuperscript{*}         & 135767\textsuperscript{\textdagger}               & 97              \\
+        & \texttt{rasusa} (Batched Fetch) & \texttt{rasusa aln -s 2109 -c 50 ---strategy fetch in.bam -o out.bam}      & 1227 $\pm$ 20 & 314           \\
+        & \texttt{rasusa} (Sweep-line) & \texttt{rasusa aln -s 2109 -c 50 in.bam -o out.bam} & 95 $\pm$ 3    & 8             \\ \bottomrule 
+\end{tabular}%
+}
+\begin{tablenotes}
+\item \textsuperscript{*}Command executed using a previous release of \texttt{rasusa} (v2.2.2) that utilised the original naive fetching algorithm.
+\item \textsuperscript{\textdagger}Executing 10 replicates exceeded the allocated walltime limit; therefore, the reported runtime represents a single run.
+\end{tablenotes}
+\end{table}
+
+\subsection{Correctness and Bias}
+To verify correctness, we computed per-position coverage on the downsampled output using \texttt{samtools depth} \citep{danecek_twelve_2021}. For long read data, the observed coverage formed a flat line strictly adhering to the requested cap $N$ (\autoref{fig:depth}). For paired-end Illumina data, coverage was observed to fluctuate near to, but rarely exceed, the target cap. This fluctuation is an expected consequence of three factors: the \texttt{swap\_distance} constraint, which limits the search space for optimal read replacement to preserve local continuity; the presence of unmapped mates, which results in singleton alignments that do not contribute to coverage in their expected mate's region; and natural variation in template lengths, meaning the physical distance between the first and last segment is not identical across pairs, which makes it difficult to perfectly optimise the coverage cap simultaneously at both mate loci. The \texttt{VariantBam} depth fluctuated considerably more, particularly on the ONT data (\autoref{fig:depth}B).
+
+\begin{figure}[h!] %% preferably at bottom or top of column
+\centering
+\includegraphics[width=0.7\linewidth]{variantBam_vs_rasusa_depth.pdf}
+\caption{Mean coverage depth across the \textit{S. enterica} chromosome and plasmid after downsampling to a $50\times$ target (red dashed line; LOESS smoothed average in dark blue).\textbf{(A, B)} \texttt{VariantBam} applied to Illumina paired-end and ONT long read data, respectively. \textbf{(C, D)} \texttt{rasusa} (sweep-line algorithm) applied to the same datasets.}\label{fig:depth}
+\end{figure}
+
+\section{Availability of source code and requirements}
+
+Rasusa is a platform-independent tool implemented in the Rust programming language. The source code is hosted on GitHub at \url{https://github.com/mbhall88/rasusa} and is distributed under the MIT License. The algorithm described here is implemented in version 3.0.0.
+
+\section{Availability of Test Data}
+
+The raw sequencing data supporting the results of the article are available in the European Nucleotide Archive (ENA) under accession numbers SRR26899147 (Illumina paired-end) and SRR26899102 (ONT). The \textit{S. enterica} ATCC 10708 reference genome used for alignment was RefSeq GCF\_045287905.1 \citep{hall_benchmarking_2024}.
+
+To generate the high-depth BAM files used for the benchmarking, Illumina reads were aligned against the reference genome using Bowtie2 \citep{langmead_scaling_2018} with the default settings. The ONT reads were aligned using minimap2 \citep{li_minimap2_2018} using options \texttt{-aL --cs --MD -t 8 -x map-ont ---secondary=no}. All resulting alignments were coordinate-sorted and converted to BAM format using \texttt{samtools sort} \citep{danecek_twelve_2021}.
+
+\section{Declarations}
+
+\subsection{List of abbreviations}
+ONT -- Oxford Nanopore Technologies; PRNG -- pseudo-random number generator
+
+\subsection{Competing Interests}
+
+The author(s) declare that they have no competing interests.
+
+\subsection{Funding}
+
+This research was supported by a National Health and Medical Research Council (NHMRC) Investigator grant [Grant ID: 2026911]. Achmad Dimas Cahyaning Furqon was supported by a scholarship from the Indonesia Endowment Fund for Education Agency (LPDP), Ministry of Finance, Republic of Indonesia.
+
+\subsection{Author's Contributions}
+
+\textbf{Achmad Dimas Cahyaning Furqon}: Conceptualisation, Methodology, Software, Validation, Formal analysis, Investigation, Data Curation, Writing - Original Draft, Writing - Review \& Editing, Visualisation. \textbf{Leah W Roberts}: Conceptualisation, Writing - Review \& Editing, Supervision, Funding acquisition. \textbf{Michael B Hall}: Conceptualisation, Methodology, Software, Investigation, Data Curation, Writing - Original Draft, Writing - Review \& Editing, Supervision.
+
+\section{Acknowledgements}
+
+This work was supported by resources provided by The University of Queensland Research Computing Centre’s Bunya supercomputer \citep{the_university_of_queensland_research_computing_centre_bunya_2024}, with funding from The University of Queensland, Brisbane, Australia.
+
+%% Specify your .bib file name here, without the extension
+\bibliography{paper-refs}
+
+\end{document}

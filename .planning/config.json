@@ -1,5 +1,7 @@
 {
-  "workflow": "collaborative",
+  "workflow": {
+    "_auto_chain_active": false
+  },
   "conventions": {
     "commits": "conventional",
     "style": "rustfmt",

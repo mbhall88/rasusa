@@ -462,3 +462,24 @@ fn reads_fastq_to_bam_errors() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert().failure().stderr(predicate::str::contains("Conversion from FASTA/FASTQ to Bam is not supported"));
     Ok(())
 }
+
+#[test]
+fn reads_bam_to_fasta() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.fasta");
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_ubam.bam",
+        "-n",
+        "10",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+
+    let content = std::fs::read_to_string(out).unwrap();
+    assert!(content.starts_with(">"));
+    assert!(!content.contains("+"));
+    Ok(())
+}
