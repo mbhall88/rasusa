@@ -39,7 +39,7 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Randomly subsample reads (FASTA/Q, SAM/BAM/CRAM)
+    /// Randomly subsample reads (FASTA/Q, unaligned SAM/BAM/CRAM)
     Reads(Reads),
     /// Randomly subsample alignments to a specified depth of coverage
     #[command(name = "aln")]

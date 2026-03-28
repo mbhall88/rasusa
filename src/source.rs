@@ -1,12 +1,12 @@
+use crate::alignment::make_program_id_unique;
 use crate::fastx::{Fastx, FastxError};
+use anyhow::Result;
+use noodles::sam::header::record::value::map::{program::tag, Program};
+use noodles::sam::header::record::value::Map;
+use noodles_util::alignment::io::Format;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::collections::{HashMap, HashSet};
-use noodles_util::alignment::io::Format;
-use anyhow::Result;
-use noodles::sam::header::record::value::map::{Program, program::tag};
-use noodles::sam::header::record::value::Map;
-use crate::alignment::make_program_id_unique;
 
 pub trait RecordSource {
     fn read_lengths(&self) -> Result<Vec<u32>, FastxError>;
@@ -56,7 +56,8 @@ impl RecordSource for AlignmentSource {
             .build_from_path(&self.path)
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-        let header = reader.read_header()
+        let header = reader
+            .read_header()
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let mut read_lengths: Vec<u32> = vec![];
@@ -64,16 +65,21 @@ impl RecordSource for AlignmentSource {
 
         for result in reader.records(&header) {
             let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
-            let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
-            
+            let flags = record
+                .flags()
+                .unwrap_or(noodles::sam::alignment::record::Flags::empty());
+
             if !flags.is_unmapped() {
                 return Err(FastxError::MappedReadDetected);
             }
 
             let rlen = record.sequence().len() as u32;
-            
+
             if flags.is_segmented() {
-                let name = record.name().map(|n| (n.as_ref() as &[u8]).to_vec()).unwrap_or_default();
+                let name = record
+                    .name()
+                    .map(|n| (n.as_ref() as &[u8]).to_vec())
+                    .unwrap_or_default();
                 if let Some(&idx) = qname_to_idx.get(&name) {
                     read_lengths[idx] += rlen;
                 } else {
@@ -100,7 +106,8 @@ impl RecordSource for AlignmentSource {
             .build_from_path(&self.path)
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-        let mut header = reader.read_header()
+        let mut header = reader
+            .read_header()
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let mut read_idx: usize = 0;
@@ -120,15 +127,22 @@ impl RecordSource for AlignmentSource {
                     .build_from_writer(&mut *write_to)
                     .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-                writer.write_header(&header)
+                writer
+                    .write_header(&header)
                     .map_err(|source| FastxError::AlignmentReadError { source })?;
 
                 for result in reader.records(&header) {
-                    let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
-                    let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
+                    let record =
+                        result.map_err(|source| FastxError::AlignmentReadError { source })?;
+                    let flags = record
+                        .flags()
+                        .unwrap_or(noodles::sam::alignment::record::Flags::empty());
 
                     let current_idx = if flags.is_segmented() {
-                        let name = record.name().map(|n| (n.as_ref() as &[u8]).to_vec()).unwrap_or_default();
+                        let name = record
+                            .name()
+                            .map(|n| (n.as_ref() as &[u8]).to_vec())
+                            .unwrap_or_default();
                         if let Some(&idx) = qname_to_idx.get(&name) {
                             idx
                         } else {
@@ -145,24 +159,32 @@ impl RecordSource for AlignmentSource {
 
                     if current_idx < reads_to_keep.len() && reads_to_keep[current_idx] {
                         total_len += record.sequence().len();
-                        writer.write_record(&header, &record)
+                        writer
+                            .write_record(&header, &record)
                             .map_err(|source| FastxError::AlignmentReadError { source })?;
                         written_templates.insert(current_idx);
                     }
                 }
-                writer.finish(&header)
+                writer
+                    .finish(&header)
                     .map_err(|source| FastxError::AlignmentReadError { source })?;
             }
-            write_to.flush()
-                .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
+            write_to.flush().map_err(|source| FastxError::WriteError {
+                source: anyhow::Error::from(source),
+            })?;
         } else {
             // Otherwise, we output as FASTQ (or FASTA)
             for result in reader.records(&header) {
                 let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
-                let flags = record.flags().unwrap_or(noodles::sam::alignment::record::Flags::empty());
+                let flags = record
+                    .flags()
+                    .unwrap_or(noodles::sam::alignment::record::Flags::empty());
 
                 let current_idx = if flags.is_segmented() {
-                    let name = record.name().map(|n| (n.as_ref() as &[u8]).to_vec()).unwrap_or_default();
+                    let name = record
+                        .name()
+                        .map(|n| (n.as_ref() as &[u8]).to_vec())
+                        .unwrap_or_default();
                     if let Some(&idx) = qname_to_idx.get(&name) {
                         idx
                     } else {
@@ -179,40 +201,80 @@ impl RecordSource for AlignmentSource {
 
                 if current_idx < reads_to_keep.len() && reads_to_keep[current_idx] {
                     total_len += record.sequence().len();
-                    
+
                     let name = record.name().map(|n| n.as_ref()).unwrap_or(&b"*"[..]);
                     let seq: Vec<u8> = record.sequence().iter().collect();
-                    let qual: Vec<u8> = record.quality_scores().iter().map(|q| q.map(|score| score + 33)).collect::<Result<Vec<u8>, _>>()
+                    let qual: Vec<u8> = record
+                        .quality_scores()
+                        .iter()
+                        .map(|q| q.map(|score| score + 33))
+                        .collect::<Result<Vec<u8>, _>>()
                         .map_err(|source| FastxError::AlignmentReadError { source })?;
 
                     if qual.is_empty() || is_fasta {
                         // FASTA
-                        write_to.write_all(b">")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(name)
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(&seq)
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
+                        write_to
+                            .write_all(b">")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(name)
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(b"\n")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(&seq)
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(b"\n")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
                     } else {
                         // FASTQ
-                        write_to.write_all(b"@")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(name)
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(&seq)
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(b"\n+\n")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(&qual)
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
-                        write_to.write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError { source: anyhow::Error::from(source) })?;
+                        write_to
+                            .write_all(b"@")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(name)
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(b"\n")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(&seq)
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(b"\n+\n")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(&qual)
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
+                        write_to
+                            .write_all(b"\n")
+                            .map_err(|source| FastxError::WriteError {
+                                source: anyhow::Error::from(source),
+                            })?;
                     }
 
                     written_templates.insert(current_idx);
@@ -238,9 +300,9 @@ pub fn determine_record_source(path: &Path) -> Box<dyn RecordSource> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
-    use std::fs::File;
     use noodles_util::alignment::io::Format;
+    use std::fs::File;
+    use std::path::Path;
 
     fn create_test_sam(path: &Path) {
         let mut file = File::create(path).unwrap();
@@ -282,7 +344,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("test.sam");
         create_test_sam(&path);
-        
+
         let source = AlignmentSource::new(&path);
         let actual = source.read_lengths().unwrap();
         assert_eq!(actual.len(), 2);
@@ -309,13 +371,19 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("test.sam");
         create_test_sam(&input_path);
-        
+
         let source = AlignmentSource::new(&input_path);
         let reads_to_keep = vec![true, false];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
-        
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Bam), false);
+
+        let result = source.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_keep,
+            &mut buffer,
+            Some(Format::Bam),
+            false,
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -338,13 +406,14 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("test.sam");
         create_test_sam(&input_path);
-        
+
         let source = AlignmentSource::new(&input_path);
         let reads_to_keep = vec![false, true];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
-        
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, true);
+
+        let result =
+            source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, true);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -359,13 +428,14 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("test_qual.sam");
         create_test_sam_with_quality(&input_path);
-        
+
         let source = AlignmentSource::new(&input_path);
         let reads_to_keep = vec![false, true];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
-        
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, false);
+
+        let result =
+            source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -382,14 +452,20 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("test_paired.sam");
         create_test_paired_sam(&input_path);
-        
+
         let source = AlignmentSource::new(&input_path);
         // 2 templates. Keep first.
         let reads_to_keep = vec![true, false];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
-        
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Sam), false);
+
+        let result = source.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_keep,
+            &mut buffer,
+            Some(Format::Sam),
+            false,
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 20);
 
@@ -412,21 +488,29 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let sam_path = temp_dir.path().join("input.sam");
         create_test_sam_with_quality(&sam_path);
-        
+
         // Convert SAM to BAM first
         let bam_path = temp_dir.path().join("input.bam");
         {
             let source = AlignmentSource::new(&sam_path);
             let mut bam_file = File::create(&bam_path).unwrap();
-            source.filter_reads_into(&[true, true], 2, &mut bam_file, Some(Format::Bam), false).unwrap();
+            source
+                .filter_reads_into(&[true, true], 2, &mut bam_file, Some(Format::Bam), false)
+                .unwrap();
         }
 
         let source = AlignmentSource::new(&bam_path);
         let reads_to_keep = vec![false, true];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
-        
-        let result = source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, Some(Format::Sam), false);
+
+        let result = source.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_keep,
+            &mut buffer,
+            Some(Format::Sam),
+            false,
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 

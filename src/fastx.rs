@@ -38,7 +38,7 @@ pub enum FastxError {
     #[error("Could not write to output file")]
     WriteError { source: anyhow::Error },
 
-    /// Indicates an error when reading an alignment file (SAM/BAM/CRAM).
+    /// Indicates an error when reading an unaligned alignment file (SAM/BAM/CRAM).
     #[error("Alignment read error: {source}")]
     AlignmentReadError { source: std::io::Error },
 
@@ -219,8 +219,7 @@ pub fn create_output_writer(
         compression::Format::Zstd => compression::Level::Three,
         _ => compression::Level::Zero,
     });
-    niffler::get_writer(file_handle, fmt, compression_lvl)
-        .map_err(FastxError::CompressOutputError)
+    niffler::get_writer(file_handle, fmt, compression_lvl).map_err(FastxError::CompressOutputError)
 }
 
 #[cfg(test)]
@@ -260,8 +259,8 @@ mod tests {
     #[test]
     fn create_valid_output_file_and_can_write_to_it() {
         let file = Builder::new().suffix(".fastq").tempfile().unwrap();
-        let mut writer = create_output_writer(file.path(), Some(niffler::Level::Eight), None)
-            .unwrap();
+        let mut writer =
+            create_output_writer(file.path(), Some(niffler::Level::Eight), None).unwrap();
 
         let actual = writer.write(b"foo\nbar");
 
@@ -271,8 +270,8 @@ mod tests {
     #[test]
     fn create_valid_compressed_output_file_and_can_write_to_it() {
         let file = Builder::new().suffix(".fastq.gz").tempfile().unwrap();
-        let mut writer = create_output_writer(file.path(), Some(niffler::Level::Four), None)
-            .unwrap();
+        let mut writer =
+            create_output_writer(file.path(), Some(niffler::Level::Four), None).unwrap();
 
         let actual = writer.write(b"foo\nbar");
 
@@ -348,7 +347,8 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
+            let filter_result =
+                fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
             assert!(filter_result.is_ok());
         }
 
@@ -388,7 +388,8 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
+            let filter_result =
+                fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
             assert!(filter_result.is_ok());
         }
 
@@ -408,7 +409,8 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
+            let filter_result =
+                fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
             assert!(filter_result.is_ok());
         }
 
@@ -427,7 +429,8 @@ mod tests {
         let reads_to_keep: Vec<bool> = vec![true, false, true];
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         {
-            let mut out_fh = create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
+            let mut out_fh =
+                create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
             let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, true);
             assert!(filter_result.is_err());
         }
@@ -447,8 +450,10 @@ mod tests {
         let reads_to_keep: Vec<bool> = vec![true, false, true];
         let output = Builder::new().suffix(".fq").tempfile().unwrap();
         {
-            let mut out_fh = create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
+            let mut out_fh =
+                create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
+            let filter_result =
+                fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
             assert!(filter_result.is_err());
         }
 

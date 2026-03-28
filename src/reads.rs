@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 pub struct Reads {
-    /// The fast{a,q} or unaligned SAM/BAM/CRAM file(s) to subsample.
+    /// The FASTA/FASTQ or unaligned SAM/BAM/CRAM file(s) to subsample.
     ///
     /// For paired Illumina, the order matters. i.e., R1 then R2.
     /// Single-file paired-end is also supported for unaligned SAM/BAM/CRAM.
@@ -159,13 +159,32 @@ impl Runner for Reads {
         let input_source = determine_record_source(&self.input[0]);
         let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
 
-        if input_format.is_none() && !self.output.is_empty() {
-            if let Some(out_fmt) = crate::alignment::infer_format_from_path(&self.output[0]) {
-                return Err(anyhow::anyhow!(
-                    "Conversion from FASTA/FASTQ to {:?} is not supported. Please use FASTA/FASTQ output for FASTA/FASTQ input.",
-                    out_fmt
-                ));
+        let check_conversion = |in_fmt: Option<noodles_util::alignment::io::Format>, out_path: Option<&std::path::PathBuf>| -> Result<()> {
+            if in_fmt.is_none() {
+                let has_alignment_output = match &self.output_format {
+                    Some(crate::cli::OutputFormat::Sam) | Some(crate::cli::OutputFormat::Bam) | Some(crate::cli::OutputFormat::Cram) => true,
+                    _ => out_path.map(|p| crate::alignment::infer_format_from_path(p).is_some()).unwrap_or(false),
+                };
+                if has_alignment_output {
+                    let out_fmt = match &self.output_format {
+                        Some(crate::cli::OutputFormat::Sam) => noodles_util::alignment::io::Format::Sam,
+                        Some(crate::cli::OutputFormat::Bam) => noodles_util::alignment::io::Format::Bam,
+                        Some(crate::cli::OutputFormat::Cram) => noodles_util::alignment::io::Format::Cram,
+                        _ => crate::alignment::infer_format_from_path(out_path.unwrap()).unwrap(),
+                    };
+                    return Err(anyhow::anyhow!(
+                        "Conversion from FASTA/FASTQ to {:?} is not supported. Please use FASTA/FASTQ output for FASTA/FASTQ input.",
+                        out_fmt
+                    ));
+                }
             }
+            Ok(())
+        };
+
+        check_conversion(input_format, self.output.get(0))?;
+        if is_paired {
+            let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
+            check_conversion(second_input_format, self.output.get(1))?;
         }
 
         let mut output_handle = match self.output.len() {
@@ -182,10 +201,8 @@ impl Runner for Reads {
                     niffler::basic::get_writer(Box::new(stdout()), fmt, lvl)?
                 }
             },
-            _ => {
-                create_output_writer(&self.output[0], self.compress_level, self.compress_type)
-                    .context("unable to create the first output file")?
-            }
+            _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
+                .context("unable to create the first output file")?,
         };
 
         let target_total_bases: Option<u64> = match (self.genome_size, self.coverage, self.bases) {
@@ -306,10 +323,18 @@ impl Runner for Reads {
         }
         debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
-        let output_format_1 = if self.output.is_empty() {
-            input_format
-        } else {
-            crate::alignment::infer_format_from_path(&self.output[0])
+        let output_format_1 = match &self.output_format {
+            Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
+            Some(crate::cli::OutputFormat::Bam) => Some(noodles_util::alignment::io::Format::Bam),
+            Some(crate::cli::OutputFormat::Cram) => Some(noodles_util::alignment::io::Format::Cram),
+            Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => None,
+            None => {
+                if self.output.is_empty() {
+                    input_format
+                } else {
+                    crate::alignment::infer_format_from_path(&self.output[0])
+                }
+            }
         };
 
         let is_fasta_1 = match self.output_format {
@@ -341,10 +366,18 @@ impl Runner for Reads {
                 create_output_writer(&self.output[1], self.compress_level, self.compress_type)
                     .context("unable to create the second output file")?;
 
-            let output_format_2 = if self.output.len() < 2 {
-                second_input_format
-            } else {
-                crate::alignment::infer_format_from_path(&self.output[1])
+            let output_format_2 = match &self.output_format {
+                Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
+                Some(crate::cli::OutputFormat::Bam) => Some(noodles_util::alignment::io::Format::Bam),
+                Some(crate::cli::OutputFormat::Cram) => Some(noodles_util::alignment::io::Format::Cram),
+                Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => None,
+                None => {
+                    if self.output.len() < 2 {
+                        second_input_format
+                    } else {
+                        crate::alignment::infer_format_from_path(&self.output[1])
+                    }
+                }
             };
 
             let is_fasta_2 = match self.output_format {

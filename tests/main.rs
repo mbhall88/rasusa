@@ -320,7 +320,7 @@ fn reads_bam_to_sam() -> Result<(), Box<dyn std::error::Error>> {
         out.to_str().unwrap(),
     ]);
     cmd.assert().success();
-    
+
     // Verify it is indeed SAM
     let content = std::fs::read_to_string(out).unwrap();
     assert!(content.starts_with("@HD"));
@@ -365,13 +365,19 @@ fn reads_reproducibility() -> Result<(), Box<dyn std::error::Error>> {
         .build_from_path(out1)
         .unwrap();
     let header1 = reader1.read_header().unwrap();
-    let recs1: Vec<_> = reader1.records(&header1).map(|r| r.unwrap().name().map(|n| n.to_vec())).collect();
+    let recs1: Vec<_> = reader1
+        .records(&header1)
+        .map(|r| r.unwrap().name().map(|n| n.to_vec()))
+        .collect();
 
     let mut reader2 = noodles_util::alignment::io::reader::Builder::default()
         .build_from_path(out2)
         .unwrap();
     let header2 = reader2.read_header().unwrap();
-    let recs2: Vec<_> = reader2.records(&header2).map(|r| r.unwrap().name().map(|n| n.to_vec())).collect();
+    let recs2: Vec<_> = reader2
+        .records(&header2)
+        .map(|r| r.unwrap().name().map(|n| n.to_vec()))
+        .collect();
 
     assert_eq!(recs1, recs2);
     Ok(())
@@ -404,7 +410,7 @@ fn reads_single_ubam_default_output() -> Result<(), Box<dyn std::error::Error>> 
         out.to_str().unwrap(),
     ]);
     cmd.assert().success();
-    
+
     // Verify it is indeed BAM
     let mut reader = noodles_util::alignment::io::reader::Builder::default()
         .build_from_path(out)
@@ -428,7 +434,7 @@ fn reads_single_ubam_fastq_output() -> Result<(), Box<dyn std::error::Error>> {
         out.to_str().unwrap(),
     ]);
     cmd.assert().success();
-    
+
     // Verify it is indeed FASTQ
     let content = std::fs::read_to_string(out).unwrap();
     assert!(content.starts_with("@"));
@@ -438,13 +444,10 @@ fn reads_single_ubam_fastq_output() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn reads_mapped_bam_errors() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec![
-        READS,
-        "tests/cases/test.bam",
-        "-n",
-        "10",
-    ]);
-    cmd.assert().failure().stderr(predicate::str::contains("Error: Mapped read detected, please use `rasusa aln` for aligned data"));
+    cmd.args(vec![READS, "tests/cases/test.bam", "-n", "10"]);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "Error: Mapped read detected, please use `rasusa aln` for aligned data",
+    ));
     Ok(())
 }
 
@@ -459,7 +462,9 @@ fn reads_fastq_to_bam_errors() -> Result<(), Box<dyn std::error::Error>> {
         "-o",
         "out.bam",
     ]);
-    cmd.assert().failure().stderr(predicate::str::contains("Conversion from FASTA/FASTQ to Bam is not supported"));
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "Conversion from FASTA/FASTQ to Bam is not supported",
+    ));
     Ok(())
 }
 
@@ -481,5 +486,77 @@ fn reads_bam_to_fasta() -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(out).unwrap();
     assert!(content.starts_with(">"));
     assert!(!content.contains("+"));
+    Ok(())
+}
+use std::fs;
+
+#[test]
+fn reads_format_combinations() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let inputs = vec![
+        "tests/cases/ubam/test.fasta",
+        "tests/cases/ubam/test.fastq",
+        "tests/cases/ubam/single_usam.sam",
+        "tests/cases/ubam/single_ubam.bam",
+        "tests/cases/ubam/single_ucram.cram",
+    ];
+
+    let outputs = vec!["fasta", "fastq", "sam", "bam", "cram"];
+
+    for input in &inputs {
+        for output in &outputs {
+            let in_format = input.split('.').last().unwrap();
+            let mut cmd = Command::cargo_bin(BIN)?;
+            let out_file = temp_dir.path().join(format!("out_{}_{}.{}", in_format, output, output));
+            
+            cmd.args(vec![
+                READS,
+                input,
+                "-n",
+                "2",
+                "-o",
+                out_file.to_str().unwrap(),
+                "-O",
+                output,
+            ]);
+
+            // Verify that we also get a failure when writing to stdout (no -o flag)
+            if (in_format == "fasta" || in_format == "fastq") && (output == &"sam" || output == &"bam" || output == &"cram") {
+                let mut cmd_stdout = Command::cargo_bin(BIN)?;
+                cmd_stdout.args(vec![
+                    READS,
+                    input,
+                    "-n",
+                    "2",
+                    "-O",
+                    output,
+                ]);
+                cmd_stdout.assert().failure();
+                
+                // FASTA/FASTQ cannot be converted to SAM/BAM/CRAM with -o flag
+                cmd.assert().failure();
+                continue;
+            }
+
+            cmd.assert().success();
+
+            // Verify output format
+            if output == &"fasta" {
+                let content = fs::read_to_string(&out_file).unwrap();
+                assert!(content.starts_with(">"), "Expected FASTA output for {} -> {}", input, output);
+            } else if output == &"fastq" {
+                let content = fs::read_to_string(&out_file).unwrap();
+                assert!(content.starts_with("@"), "Expected FASTQ output for {} -> {}", input, output);
+            } else if output == &"sam" {
+                let content = fs::read_to_string(&out_file).unwrap();
+                assert!(content.starts_with("@HD") || content.starts_with("@PG") || content.contains("\t"), "Expected SAM output for {} -> {}", input, output);
+            } else if output == &"bam" || output == &"cram" {
+                // Just check if it's not text
+                let content = fs::read(&out_file).unwrap();
+                assert!(!content.starts_with(b">") && !content.starts_with(b"@\n"), "Expected binary output for {} -> {}", input, output);
+            }
+        }
+    }
+
     Ok(())
 }
