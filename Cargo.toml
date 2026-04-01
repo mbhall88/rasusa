@@ -30,14 +30,14 @@ rand_pcg = "0.10.1"
 log = "0.4"
 niffler = "2.5"
 env_logger = "0.11.9"
-noodles-util = { version = "0.73.0", features = ["alignment"] }
-noodles = { version = "0.104.0", features = ["bam", "cram", "core", "sam"] }
-noodles-bgzf = { version = "0.45.0", features = ["libdeflate"] }
+noodles-util = { version = "0.77.0", features = ["alignment"] }
+noodles = { version = "0.108.0", features = ["bam", "cram", "core", "sam"] }
+noodles-bgzf = { version = "0.46.0", features = ["libdeflate"] }
 
 [dev-dependencies]
-assert_cmd = "2.0.17"
+assert_cmd = "2.2.0"
 predicates = "3.1.4"
-tempfile = "3.25.0"
+tempfile = "3.27.0"
 
 [profile.release]
 strip = true   # https://github.com/johnthagen/min-sized-rust?tab=readme-ov-file#strip-symbols-from-binary
