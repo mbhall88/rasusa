@@ -505,10 +505,12 @@ fn reads_format_combinations() -> Result<(), Box<dyn std::error::Error>> {
 
     for input in &inputs {
         for output in &outputs {
-            let in_format = input.split('.').last().unwrap();
+            let in_format = input.split('.').next_back().unwrap();
             let mut cmd = Command::cargo_bin(BIN)?;
-            let out_file = temp_dir.path().join(format!("out_{}_{}.{}", in_format, output, output));
-            
+            let out_file = temp_dir
+                .path()
+                .join(format!("out_{}_{}.{}", in_format, output, output));
+
             cmd.args(vec![
                 READS,
                 input,
@@ -521,18 +523,13 @@ fn reads_format_combinations() -> Result<(), Box<dyn std::error::Error>> {
             ]);
 
             // Verify that we also get a failure when writing to stdout (no -o flag)
-            if (in_format == "fasta" || in_format == "fastq") && (output == &"sam" || output == &"bam" || output == &"cram") {
+            if (in_format == "fasta" || in_format == "fastq")
+                && (output == &"sam" || output == &"bam" || output == &"cram")
+            {
                 let mut cmd_stdout = Command::cargo_bin(BIN)?;
-                cmd_stdout.args(vec![
-                    READS,
-                    input,
-                    "-n",
-                    "2",
-                    "-O",
-                    output,
-                ]);
+                cmd_stdout.args(vec![READS, input, "-n", "2", "-O", output]);
                 cmd_stdout.assert().failure();
-                
+
                 // FASTA/FASTQ cannot be converted to SAM/BAM/CRAM with -o flag
                 cmd.assert().failure();
                 continue;
@@ -543,17 +540,39 @@ fn reads_format_combinations() -> Result<(), Box<dyn std::error::Error>> {
             // Verify output format
             if output == &"fasta" {
                 let content = fs::read_to_string(&out_file).unwrap();
-                assert!(content.starts_with(">"), "Expected FASTA output for {} -> {}", input, output);
+                assert!(
+                    content.starts_with(">"),
+                    "Expected FASTA output for {} -> {}",
+                    input,
+                    output
+                );
             } else if output == &"fastq" {
                 let content = fs::read_to_string(&out_file).unwrap();
-                assert!(content.starts_with("@"), "Expected FASTQ output for {} -> {}", input, output);
+                assert!(
+                    content.starts_with("@"),
+                    "Expected FASTQ output for {} -> {}",
+                    input,
+                    output
+                );
             } else if output == &"sam" {
                 let content = fs::read_to_string(&out_file).unwrap();
-                assert!(content.starts_with("@HD") || content.starts_with("@PG") || content.contains("\t"), "Expected SAM output for {} -> {}", input, output);
+                assert!(
+                    content.starts_with("@HD")
+                        || content.starts_with("@PG")
+                        || content.contains("\t"),
+                    "Expected SAM output for {} -> {}",
+                    input,
+                    output
+                );
             } else if output == &"bam" || output == &"cram" {
                 // Just check if it's not text
                 let content = fs::read(&out_file).unwrap();
-                assert!(!content.starts_with(b">") && !content.starts_with(b"@\n"), "Expected binary output for {} -> {}", input, output);
+                assert!(
+                    !content.starts_with(b">") && !content.starts_with(b"@\n"),
+                    "Expected binary output for {} -> {}",
+                    input,
+                    output
+                );
             }
         }
     }
