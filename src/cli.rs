@@ -213,7 +213,8 @@ impl FromStr for GenomeSize {
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let text = s.to_lowercase();
-        let re = Regex::new(r"(?P<size>[0-9]*\.?[0-9]+)(?P<sfx>\w*)$").unwrap();
+        let re = Regex::new(r"(?P<size>[0-9]*\.?[0-9]+)(?P<sfx>\w*)$")
+            .expect("Invalid regex in GenomeSize::from_str");
         let captures = match re.captures(text.as_str()) {
             Some(cap) => cap,
             None => match Self::from_faidx(Path::new(&s)) {
@@ -223,11 +224,16 @@ impl FromStr for GenomeSize {
         };
         let size = captures
             .name("size")
-            .unwrap()
+            .ok_or_else(|| CliError::InvalidGenomeSizeString(s.to_string()))?
             .as_str()
             .parse::<f64>()
-            .unwrap();
-        let metric_suffix = MetricSuffix::from_str(captures.name("sfx").unwrap().as_str())?;
+            .map_err(|_| CliError::InvalidGenomeSizeString(s.to_string()))?;
+        let metric_suffix = MetricSuffix::from_str(
+            captures
+                .name("sfx")
+                .ok_or_else(|| CliError::InvalidGenomeSizeString(s.to_string()))?
+                .as_str(),
+        )?;
 
         Ok(GenomeSize((size * metric_suffix) as u64))
     }
@@ -320,7 +326,8 @@ impl FromStr for Coverage {
     /// assert_eq!(covg, Coverage(100))
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = Regex::new(r"^(?P<covg>[0-9]*\.?[0-9]+)(?i)x?$").unwrap();
+        let re = Regex::new(r"^(?P<covg>[0-9]*\.?[0-9]+)(?i)x?$")
+            .expect("Invalid regex in Coverage::from_str");
         let captures = match re.captures(s) {
             Some(cap) => cap,
             None => {
@@ -330,10 +337,10 @@ impl FromStr for Coverage {
         Ok(Coverage(
             captures
                 .name("covg")
-                .unwrap()
+                .ok_or_else(|| CliError::InvalidCoverageValue(s.to_string()))?
                 .as_str()
                 .parse::<f32>()
-                .unwrap(),
+                .map_err(|_| CliError::InvalidCoverageValue(s.to_string()))?,
         ))
     }
 }
