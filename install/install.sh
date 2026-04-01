@@ -54,40 +54,60 @@ verify_shell_is_posix_or_exit() {
   fi
 }
 
-# Gets path to a temporary file, even if
+# Gets path to a temporary file
 get_tmpfile() {
   suffix="$1"
   if has mktemp; then
-    printf "%s.%s" "$(mktemp)" "${suffix}"
+    mktemp -t "${PROJECT}.XXXXXX.${suffix}"
   else
-    # No really good options here--let's pick a default + hope
-    printf "/tmp/${PROJECT}.%s" "${suffix}"
+    # Fallback to a PID-based filename if mktemp is unavailable
+    printf "/tmp/%s.%s.%s" "${PROJECT}" "$$" "${suffix}"
   fi
 }
 
 # Makes a temporary directory
 get_tmpdir() {
   if has mktemp; then
-    printf "%s" "$(mktemp -d)"
+    mktemp -d -t "${PROJECT}.XXXXXX"
   else
-    # No really good options here--let's pick a default + hope
-    printf "%s" "/tmp/${PROJECT}"
+    dir="/tmp/${PROJECT}.$$"
+    mkdir -p "$dir"
+    printf "%s" "$dir"
   fi
 }
 
 # Gets the latest github release tag (version)
 get_version_from_github() {
-  ver=$(wget -qO - "https://api.github.com/repos/${GH_USER}/${PROJECT}/releases/latest" |
-    grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+  tmp_json=$(get_tmpfile "json")
+  
+  # We always need the version to construct URLs, even in dry-run mode
+  if has curl; then
+    curl --fail --silent --location --output "$tmp_json" "https://api.github.com/repos/${GH_USER}/${PROJECT}/releases/latest"
+  elif has wget; then
+    wget --quiet --output-document="$tmp_json" "https://api.github.com/repos/${GH_USER}/${PROJECT}/releases/latest"
+  elif has fetch; then
+    fetch --quiet --output="$tmp_json" "https://api.github.com/repos/${GH_USER}/${PROJECT}/releases/latest"
+  else
+    error "No HTTP download program (curl, wget, fetch) found, exiting…"
+    exit 1
+  fi
+  
+  ver=$(grep '"tag_name":' "$tmp_json" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+  rm -f "$tmp_json"
+  
+  if [ -z "$ver" ]; then
+    error "Could not parse version from GitHub API response"
+    exit 1
+  fi
   echo "$ver"
 }
 
 # Test if a location is writeable by trying to write to it. Windows does not let
 # you test writeability other than by writing: https://stackoverflow.com/q/1999988
 test_writeable() {
-  path="${1:-}/test.txt"
-  if touch "${path}" 2>/dev/null; then
-    rm "${path}"
+  path="${1:-}"
+  if [ -d "$path" ] && touch "${path}/.rasusa_test" 2>/dev/null; then
+    rm "${path}/.rasusa_test"
     return 0
   else
     return 1
@@ -109,6 +129,11 @@ download() {
     return 1
   fi
 
+  if [ -n "${DRY_RUN-}" ]; then
+    info "[Dry-run] Would run: $cmd"
+    return 0
+  fi
+
   $cmd && return 0 || rc=$?
 
   error "Command failed (exit code $rc): ${BLUE}${cmd}${NO_COLOR}"
@@ -126,16 +151,25 @@ unpack() {
   temp_dir=$(get_tmpdir)
   sudo=${3-}
 
+  if [ -n "${DRY_RUN-}" ]; then
+    info "[Dry-run] Would unpack $archive to $bin_dir using $sudo"
+    return 0
+  fi
+
   case "$archive" in
   *.tar.gz)
     flags=$(test -n "${VERBOSE-}" && echo "-xzvof" || echo "-xzof")
-    ${sudo} tar "${flags}" "${archive}" -C "${temp_dir}"
-    ${sudo} mv "${temp_dir}"/${PROJECT}-*/${PROJECT} "${bin_dir}/${PROJECT}"
+    ${sudo} tar "${flags}" "${archive}" -C "${temp_dir}" --strip-components=1
+    ${sudo} mv "${temp_dir}/${PROJECT}" "${bin_dir}/${PROJECT}"
+    rm -rf "${temp_dir}"
     return 0
     ;;
   *.zip)
     flags=$(test -z "${VERBOSE-}" && echo "-qqo" || echo "-o")
     UNZIP="${flags}" ${sudo} unzip "${archive}" -d "${temp_dir}"
+    # Zip files might have a different internal structure, but usually it's project-version/rasusa
+    ${sudo} find "${temp_dir}" -name "${PROJECT}" -type f -exec mv {} "${bin_dir}/${PROJECT}" \;
+    rm -rf "${temp_dir}"
     return 0
     ;;
   esac
@@ -157,6 +191,7 @@ usage() {
   printf "\n%s\n" "Options"
   printf "\t%s\n\t\t%s\n\n" \
     "-V, --verbose" "Enable verbose output for the installer" \
+    "-d, --dry-run" "Display the actions that would be taken without performing them" \
     "-f, -y, --force, --yes" "Skip the confirmation prompt during installation" \
     "-p, --platform" "Override the platform identified by the installer [default: ${PLATFORM}]" \
     "-b, --bin-dir" "Override the bin installation directory [default: ${BIN_DIR}]" \
@@ -173,6 +208,12 @@ elevate_priv() {
     info "sudo."
     exit 1
   fi
+  
+  if [ -n "${DRY_RUN-}" ]; then
+    info "[Dry-run] Would elevate privileges using sudo"
+    return 0
+  fi
+
   if ! sudo -v; then
     error "Superuser not granted, aborting installation"
     exit 1
@@ -197,10 +238,18 @@ install() {
   archive=$(get_tmpfile "$ext")
 
   # download to the temp file
-  download "${archive}" "${url}"
+  if ! download "${archive}" "${url}"; then
+    rm -f "${archive}"
+    exit 1
+  fi
 
   # unpack the temp file to the bin dir, using sudo if required
-  unpack "${archive}" "${BIN_DIR}" "${sudo}"
+  if ! unpack "${archive}" "${BIN_DIR}" "${sudo}"; then
+    rm -f "${archive}"
+    exit 1
+  fi
+  
+  rm -f "${archive}"
 }
 
 # Currently supporting:
@@ -376,6 +425,10 @@ while [ "$#" -gt 0 ]; do
     VERBOSE=1
     shift 1
     ;;
+  -d | --dry-run)
+    DRY_RUN=1
+    shift 1
+    ;;
   -f | -y | --force | --yes)
     FORCE=1
     shift 1
@@ -403,6 +456,10 @@ while [ "$#" -gt 0 ]; do
     ;;
   -V=* | --verbose=*)
     VERBOSE="${1#*=}"
+    shift 1
+    ;;
+  -d=* | --dry-run=*)
+    DRY_RUN="${1#*=}"
     shift 1
     ;;
   -f=* | -y=* | --force=* | --yes=*)
