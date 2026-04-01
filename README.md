@@ -150,13 +150,19 @@ cargo test --all
 
 ### Basic usage - reads
 
-Subsample fastq reads
+Subsample FASTQ reads or unaligned SAM/BAM/CRAM.
 
 ```
 rasusa reads --coverage 30 --genome-size 4.6mb in.fq
 ```
 
-The above command will output the subsampled file to `stdout`.
+`rasusa reads` also supports unaligned SAM/BAM/CRAM input:
+
+```
+rasusa reads --coverage 30 --genome-size 4.6mb in.bam
+```
+
+The above commands will output the subsampled file to `stdout`.
 
 Or, if you have paired Illumina
 
@@ -182,10 +188,12 @@ this will subsample each position in the alignment to 30x coverage.
 
 #### Input
 
-This positional argument specifies the file(s) containing the reads or alignments you would like to subsample. The
-file(s) must be valid fasta or fastq format for the `reads` command and can be compressed (with a tool such as
-`gzip`). For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
+This positional argument specifies the file(s) containing the reads or unaligned alignments you would like to subsample. 
+
+For the `reads` command, the file(s) can be in FASTA, FASTQ, or unaligned SAM, BAM, or CRAM format. FASTA and FASTQ files can be compressed (with a tool such as `gzip`).
 If two files are passed to `reads`, `rasusa` will assume they are paired-end reads.
+
+For the `aln` command, the file must be a valid coordinate-sorted SAM/BAM/CRAM file. 
 
 > Bash wizard tip 🧙: Let globs do the work for you `r*.fq`
 
@@ -278,17 +286,25 @@ If you would prefer to specify an output file path, then use this option.
 
 Output for Illumina paired files must be specified using `--output` twice - `-o out.r1.fq -o out.r2.fq`
 
-The ordering of the output files is assumed to be the same as the input.  
-> [!NOTE]
-> The output will always be in the same format as the input. You cannot pass FASTQ
-> as input and ask for fasta as output.
+The ordering of the output files is assumed to be the same as the input.
 
-`rasusa reads` will also attempt to automatically infer whether compression of the output
+`rasusa reads` will attempt to automatically infer the output format and whether compression of the output
 file(s) is required. It does this by detecting any of the supported extensions:
 
+- `.fa`/`.fasta`: FASTA format
+- `.fq`/`.fastq`: FASTQ format
+- `.bam`: BAM format
+- `.cram`: CRAM format
+- `.sam`: SAM format
 - `.gz`: will compress the output with [`gzip`][gzip]
 - `.bz` or `.bz2`: will compress the output with [`bzip2`][bzip]
 - `.lzma`: will compress the output with the [`xz`][xz] LZMA algorithm
+- `.zst`: will compress the output with [`zstd`][zstd]
+
+> [!NOTE]
+> If no extension is matched, the output will be in the same format as the input. You can convert between formats
+> by specifying the desired extension (e.g., input BAM and output FASTQ). However, you cannot convert from FASTA/FASTQ 
+> to unaligned SAM/BAM/CRAM--though you can convert from unaligned SAM/BAM/CRAM to FASTA/FASTQ.
 
 **`aln`**
 
@@ -310,29 +326,45 @@ inferred from the file extension.
 
 #### Output compression/format
 
-##### `-O`, `--output-type`
-
 **`reads`**
 
-Use this option to manually set the compression algoritm to use for the output file(s).
-It will override any format automatically detected from the output path.
+`rasusa reads` provides two options for explicitly setting the output format and compression.
+
+##### `-Z`, `--compress-type`
+
+Use this option to manually set the compression algorithm to use for the output file(s).
+It will override any format automatically detected from the output path. Note: this is only used for FASTA/FASTQ output.
 
 Valid options are:
-
 - `g`: [`gzip`][gzip]
 - `b`: [`bzip2`][bzip]
 - `l` or `x`: [`xz`][xz] LZMA algorithm
 - `z`: [`zstd`][zstd]
 - `u`: no compression
 
-**`aln`**
+##### `-O`, `--output-format`
 
-Use this option to manually set the output file format. By default, the same format as the input will be used, or the
-format will be guessed from the `--output` path extension if given. Valid options are:
+Use this option to manually set the output format to use for the output file(s).
+It will override any format automatically detected from the output path.
 
+Valid options are:
+- `f` or `fasta`: FASTA
+- `q` or `fastq`: FASTQ
+- `s` or `sam`: SAM
 - `b` or `bam`: BAM
 - `c` or `cram`: CRAM
+
+**`aln`**
+
+##### `-O`, `--output-format`
+
+Use this option to manually set the output file format for `rasusa aln`. By default, the same format as the input will be used, or the
+format will be guessed from the `--output` path extension if given. 
+
+Valid options are:
 - `s` or `sam`: SAM
+- `b` or `bam`: BAM
+- `c` or `cram`: CRAM
 
 All values to this option are case insensitive.
 
@@ -448,7 +480,7 @@ Randomly subsample reads or alignments
 Usage: rasusa [OPTIONS] <COMMAND>
 
 Commands:
-  reads  Randomly subsample reads
+  reads  Randomly subsample reads (FASTA/Q, unaligned SAM/BAM/CRAM)
   aln    Randomly subsample alignments to a specified depth of coverage
   cite   Get a bibtex formatted citation for this package
   help   Print this message or the help of the given subcommand(s)
@@ -463,49 +495,51 @@ Options:
 
 ```text
 $ rasusa reads --help
-Randomly subsample reads
+Randomly subsample reads (FASTA/Q, unaligned SAM/BAM/CRAM)
 
 Usage: rasusa reads [OPTIONS] <FILE(S)>...
 
 Arguments:
   <FILE(S)>...
-          The fast{a,q} file(s) to subsample.
-
-          For paired Illumina, the order matters. i.e., R1 then R2.
+          The FASTA/FASTQ or unaligned SAM/BAM/CRAM file(s) to subsample.
+          
+          For paired Illumina, the order matters. i.e., R1 then R2. Single-file paired-end is also supported for unaligned SAM/BAM/CRAM.
 
 Options:
   -o, --output <OUTPUT>
           Output filepath(s); stdout if not present.
-
+          
           For paired Illumina pass this flag twice `-o o1.fq -o o2.fq`
-
-          NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2. This option is required for paired input.
+          
+          NOTE: The order of the pairs is assumed to be the same as the input - e.g., R1 then R2.
+          
+          This option is required for paired input.
 
   -g, --genome-size <size|faidx>
           Genome size to calculate coverage with respect to. e.g., 4.3kb, 7Tb, 9000, 4.1MB
-
+          
           Alternatively, a FASTA/Q index file can be provided and the genome size will be set to the sum of all reference sequences.
-
+          
           If --bases is not provided, this option and --coverage are required
 
   -c, --coverage <FLOAT>
           The desired depth of coverage to subsample the reads to
-
+          
           If --bases is not provided, this option and --genome-size are required
 
   -b, --bases <bases>
           Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
-
+          
           If this option is given, --coverage and --genome-size are ignored
 
   -n, --num <INT>
           Subsample to a specific number of reads
-
+          
           If paired-end reads are passed, this is the number of (matched) reads from EACH file. This option accepts the same format as genome size - e.g., 1k will take 1000 reads
 
   -f, --frac <FLOAT>
           Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
-
+          
           Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
 
   -e, --strict
@@ -517,10 +551,17 @@ Options:
   -v
           Switch on verbosity
 
-  -O, --output-type <u|b|g|l|x|z>
+  -Z, --compress-type <u|b|g|l|x|z>
           u: uncompressed; b: Bzip2; g: Gzip; l: Lzma; x: Xz (Lzma); z: Zstd
+          
+          Rasusa will attempt to infer the output compression format automatically from the filename extension. This option is used to override that. If writing to stdout, the default is uncompressed. Note: this is only used for FASTA/FASTQ output.
 
-          Rasusa will attempt to infer the output compression format automatically from the filename extension. This option is used to override that. If writing to stdout, the default is uncompressed
+  -O, --output-format <OUTPUT_FORMAT>
+          Explicitly set the output format.
+          
+          If not provided, Rasusa will attempt to infer the format from the filename extension.
+          
+          [possible values: fasta, fastq, sam, bam, cram]
 
   -l, --compress-level <1-21>
           Compression level to use if compressing output. Uses the default level for the format if not specified
@@ -543,16 +584,16 @@ Usage: rasusa aln [OPTIONS] --coverage <INT> <FILE>
 Arguments:
   <FILE>
           Path to the input alignment file (SAM/BAM/CRAM) to subsample
-
+          
           Note: An index (.bai) is required when using '--strategy fetch'.
 
 Options:
   -o, --output <FILE>
           Path to the output subsampled alignment file. Defaults to stdout (same format as input)
-
+          
           The output is not guaranteed to be sorted. We recommend piping the output to `samtools sort`
 
-  -O, --output-type <FMT>
+  -O, --output-format <FMT>
           Output format. Rasusa will attempt to infer the format from the output file extension if not provided
 
   -c, --coverage <INT>
@@ -567,28 +608,28 @@ Options:
           Possible values:
           - stream: A linear scan approach using sweep line algorithm with random priority. Requires sorted alignment input
           - fetch:  A fetching approach to randomly subsample reads given read overlap position. Requires indexed input (.bai)
-
+          
           [default: stream]
 
       --swap-distance <INT>
           [Stream] A maximum distance (bp) allowed between start position of new read and the worst read in the heap to consider them to be 'swappable'.
-
+          
           Larger values allow swapping reads over greater distances, but may cause local undersampling. A value of `0` means only allows swap between reads that have the same start position.
-
+          
           [default: 5]
 
       --step-size <INT>
           [Fetch] When a region has less than the desired coverage, the step size to move along the chromosome to find more reads.
-
+          
           The lowest of the step and the minimum end coordinate of the reads in the region will be used. This parameter can have a significant impact on the runtime of the subsampling process.
-
+          
           [default: 100]
 
       --batch-size <INT>
           [Fetch] The size of the genomic window (bp) to cache into memory at once.
-
+          
           Larger values reduce disk seeking, but at the cost of high memory usage. The minimum value is 1,000 bp to avoid small region queries.
-
+          
           [default: 10000]
 
   -h, --help
@@ -620,7 +661,7 @@ The data I used comes from
 
 ### Single long read input
 
-Download and rename the fastq
+Download and rename the FASTQ
 
 ```shell
 URL="ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR649/008/SRR6490088/SRR6490088_1.fastq.gz"
@@ -652,7 +693,7 @@ hyperfine --warmup 3 --runs 10 --export-markdown results-single.md \
 
 ### Paired-end input
 
-Download and then deinterleave the fastq with [`pyfastaq`][pyfastaq]
+Download and then deinterleave the FASTQ with [`pyfastaq`][pyfastaq]
 
 ```shell
 URL="ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR648/008/SRR6488968/SRR6488968.fastq.gz"

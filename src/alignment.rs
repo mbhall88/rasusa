@@ -107,8 +107,8 @@ pub struct Alignment {
     pub output: Option<PathBuf>,
 
     /// Output format. Rasusa will attempt to infer the format from the output file extension if not provided
-    #[arg(short='O', long, value_name = "FMT", value_parser = infer_format_from_char)]
-    pub output_type: Option<Format>,
+    #[arg(short='O', long = "output-format", value_name = "FMT", value_parser = infer_format_from_char)]
+    pub output_format: Option<Format>,
 
     /// The desired depth of coverage to subsample the alignment to
     #[arg(short, long, value_name = "INT", value_parser = clap::value_parser!(u32).range(1..))]
@@ -186,7 +186,7 @@ impl Alignment {
             }
         };
 
-        let output_fmt = match &self.output_type {
+        let output_fmt = match &self.output_format {
             Some(fmt) => *fmt,
             None => match &self.output {
                 None => input_fmt,
@@ -815,7 +815,7 @@ impl Alignment {
     }
 
     /// Generates a rasusa program entry from a SAM header
-    fn program_entry(&self, header: &Header) -> (String, Map<Program>) {
+    pub fn program_entry(&self, header: &Header) -> (String, Map<Program>) {
         let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
 
         // Creates a SAM header record map value
@@ -865,7 +865,7 @@ fn shuffle_records_by_position(records: &mut [&RecordBuf], rng: &mut impl Rng) {
 
 /// Makes a program ID unique by looking for existing program records with the same ID and adding
 /// a suffix to the ID if necessary. Also returns the program ID of the last program in the header
-fn make_program_id_unique<'a>(
+pub fn make_program_id_unique<'a>(
     header: &Header,
     program_id: &'a str,
 ) -> (Cow<'a, str>, Option<String>) {
@@ -1473,7 +1473,7 @@ mod tests {
         let mut align = Alignment {
             aln: input_path,
             output: Some(output_path.clone()),
-            output_type: Some(Format::Bam),
+            output_format: Some(Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1566,7 +1566,7 @@ mod tests {
         let mut aln1 = Alignment {
             aln: input.to_path_buf(),
             output: Some(out.path().to_path_buf()),
-            output_type: Some(Format::Bam),
+            output_format: Some(Format::Bam),
             coverage: target_depth,
             seed,
             strategy,
@@ -1651,7 +1651,7 @@ mod tests {
         let mut aln = Alignment {
             aln: input.to_path_buf(),
             output: None,
-            output_type: Some(Format::Bam),
+            output_format: Some(Format::Bam),
             coverage: 2,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1670,7 +1670,7 @@ mod tests {
         let mut aln = Alignment {
             aln: input.to_path_buf(),
             output: Some(output.to_path_buf()),
-            output_type: None,
+            output_format: None,
             coverage: 2,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1713,7 +1713,7 @@ mod tests {
         let mut align = Alignment {
             aln: input_path,
             output: Some(output_temp.path().to_path_buf()),
-            output_type: Some(Format::Bam),
+            output_format: Some(Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1806,7 +1806,7 @@ mod tests {
         let mut align = Alignment {
             aln: input_path,
             output: Some(output.path().to_path_buf()),
-            output_type: Some(Format::Bam),
+            output_format: Some(Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Stream,
@@ -1856,7 +1856,7 @@ mod tests {
         let mut align = Alignment {
             aln: input_path,
             output: Some(output.path().to_path_buf()),
-            output_type: Some(Format::Bam),
+            output_format: Some(Format::Bam),
             coverage: target_depth,
             seed: Some(2109),
             strategy: SubsamplingStrategy::Fetch,
