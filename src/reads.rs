@@ -2,20 +2,23 @@ use crate::cli::{
     check_path_exists, parse_compression_format, parse_fraction, parse_level, CliError, Coverage,
     GenomeSize,
 };
-use crate::{Fastx, Runner, SubSampler};
+use crate::fastx::create_output_writer;
+use crate::source::determine_record_source;
+use crate::{Runner, SubSampler};
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, error, info, warn};
 use niffler::compression;
 use std::io::stdout;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 pub struct Reads {
-    /// The fast{a,q} file(s) to subsample.
+    /// The FASTA/FASTQ or unaligned SAM/BAM/CRAM file(s) to subsample.
     ///
     /// For paired Illumina, the order matters. i.e., R1 then R2.
+    /// Single-file paired-end is also supported for unaligned SAM/BAM/CRAM.
     #[arg(
     value_parser = check_path_exists,
     num_args = 1..=2,
@@ -98,9 +101,15 @@ pub struct Reads {
     ///
     /// Rasusa will attempt to infer the output compression format automatically from the filename
     /// extension. This option is used to override that. If writing to stdout, the default is
-    /// uncompressed
-    #[clap(short = 'O', long, value_name = "u|b|g|l|x|z", value_parser = parse_compression_format)]
-    pub output_type: Option<niffler::compression::Format>,
+    /// uncompressed. Note: this is only used for FASTA/FASTQ output.
+    #[clap(short = 'Z', long = "compress-type", value_name = "u|b|g|l|x|z", value_parser = parse_compression_format)]
+    pub compress_type: Option<niffler::compression::Format>,
+
+    /// Explicitly set the output format.
+    ///
+    /// If not provided, Rasusa will attempt to infer the format from the filename extension.
+    #[clap(short = 'O', long = "output-format", value_enum)]
+    pub output_format: Option<crate::cli::OutputFormat>,
 
     /// Compression level to use if compressing output. Uses the default level for the format if
     /// not specified.
@@ -147,11 +156,40 @@ impl Runner for Reads {
             info!("Two input files given. Assuming paired Illumina...")
         }
 
-        let input_fastx = Fastx::from_path(&self.input[0]);
+        let input_source = determine_record_source(&self.input[0]);
+        let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
+
+        let check_conversion = |in_fmt: Option<noodles_util::alignment::io::Format>, out_path: Option<&std::path::PathBuf>| -> Result<()> {
+            if in_fmt.is_none() {
+                let has_alignment_output = match &self.output_format {
+                    Some(crate::cli::OutputFormat::Sam) | Some(crate::cli::OutputFormat::Bam) | Some(crate::cli::OutputFormat::Cram) => true,
+                    _ => out_path.map(|p| crate::alignment::infer_format_from_path(p).is_some()).unwrap_or(false),
+                };
+                if has_alignment_output {
+                    let out_fmt = match &self.output_format {
+                        Some(crate::cli::OutputFormat::Sam) => noodles_util::alignment::io::Format::Sam,
+                        Some(crate::cli::OutputFormat::Bam) => noodles_util::alignment::io::Format::Bam,
+                        Some(crate::cli::OutputFormat::Cram) => noodles_util::alignment::io::Format::Cram,
+                        _ => crate::alignment::infer_format_from_path(out_path.unwrap()).unwrap(),
+                    };
+                    return Err(anyhow::anyhow!(
+                        "Conversion from FASTA/FASTQ to {:?} is not supported. Please use FASTA/FASTQ output for FASTA/FASTQ input.",
+                        out_fmt
+                    ));
+                }
+            }
+            Ok(())
+        };
+
+        check_conversion(input_format, self.output.get(0))?;
+        if is_paired {
+            let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
+            check_conversion(second_input_format, self.output.get(1))?;
+        }
 
         let mut output_handle = match self.output.len() {
-            0 => match self.output_type {
-                None => Box::new(stdout()),
+            0 => match self.compress_type {
+                None => Box::new(stdout()) as Box<dyn std::io::Write>,
                 Some(fmt) => {
                     let lvl = match fmt {
                         compression::Format::Gzip => compression::Level::Six,
@@ -163,12 +201,8 @@ impl Runner for Reads {
                     niffler::basic::get_writer(Box::new(stdout()), fmt, lvl)?
                 }
             },
-            _ => {
-                let out_fastx = Fastx::from_path(&self.output[0]);
-                out_fastx
-                    .create(self.compress_level, self.output_type)
-                    .context("unable to create the first output file")?
-            }
+            _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
+                .context("unable to create the first output file")?,
         };
 
         let target_total_bases: Option<u64> = match (self.genome_size, self.coverage, self.bases) {
@@ -182,15 +216,15 @@ impl Runner for Reads {
         }
 
         info!("Gathering read lengths...");
-        let mut read_lengths = input_fastx
+        let mut read_lengths = input_source
             .read_lengths()
             .context("unable to gather read lengths for the first input file")?;
 
         if is_paired {
-            let second_input_fastx = Fastx::from_path(&self.input[1]);
+            let second_input_source = determine_record_source(&self.input[1]);
             let expected_num_reads = read_lengths.len();
             info!("Gathering read lengths for second input file...");
-            let mate_lengths = second_input_fastx
+            let mate_lengths = second_input_source
                 .read_lengths()
                 .context("unable to gather read lengths for the second input file")?;
 
@@ -289,22 +323,81 @@ impl Runner for Reads {
         }
         debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
 
-        let mut total_kept_bases =
-            input_fastx.filter_reads_into(&reads_to_keep, nb_reads_to_keep, &mut output_handle)?
-                as u64;
+        let output_format_1 = match &self.output_format {
+            Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
+            Some(crate::cli::OutputFormat::Bam) => Some(noodles_util::alignment::io::Format::Bam),
+            Some(crate::cli::OutputFormat::Cram) => Some(noodles_util::alignment::io::Format::Cram),
+            Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => None,
+            None => {
+                if self.output.is_empty() {
+                    input_format
+                } else {
+                    crate::alignment::infer_format_from_path(&self.output[0])
+                }
+            }
+        };
 
-        // repeat the same process for the second input fastx (if illumina)
+        let is_fasta_1 = match self.output_format {
+            Some(crate::cli::OutputFormat::Fasta) => true,
+            Some(crate::cli::OutputFormat::Fastq) => false,
+            _ => {
+                if self.output.is_empty() {
+                    is_fasta_path(&self.input[0])
+                } else {
+                    is_fasta_path(&self.output[0])
+                }
+            }
+        };
+
+        let mut total_kept_bases = input_source.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_to_keep,
+            &mut output_handle,
+            output_format_1,
+            is_fasta_1,
+        )? as u64;
+
+        // repeat the same process for the second input (if illumina)
         if is_paired {
-            let second_input_fastx = Fastx::from_path(&self.input[1]);
-            let second_out_fastx = Fastx::from_path(&self.output[1]);
-            let mut second_output_handle = second_out_fastx
-                .create(self.compress_level, self.output_type)
-                .context("unable to create the second output file")?;
+            let second_input_source = determine_record_source(&self.input[1]);
+            let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
 
-            total_kept_bases += second_input_fastx.filter_reads_into(
+            let mut second_output_handle =
+                create_output_writer(&self.output[1], self.compress_level, self.compress_type)
+                    .context("unable to create the second output file")?;
+
+            let output_format_2 = match &self.output_format {
+                Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
+                Some(crate::cli::OutputFormat::Bam) => Some(noodles_util::alignment::io::Format::Bam),
+                Some(crate::cli::OutputFormat::Cram) => Some(noodles_util::alignment::io::Format::Cram),
+                Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => None,
+                None => {
+                    if self.output.len() < 2 {
+                        second_input_format
+                    } else {
+                        crate::alignment::infer_format_from_path(&self.output[1])
+                    }
+                }
+            };
+
+            let is_fasta_2 = match self.output_format {
+                Some(crate::cli::OutputFormat::Fasta) => true,
+                Some(crate::cli::OutputFormat::Fastq) => false,
+                _ => {
+                    if self.output.len() < 2 {
+                        is_fasta_path(&self.input[1])
+                    } else {
+                        is_fasta_path(&self.output[1])
+                    }
+                }
+            };
+
+            total_kept_bases += second_input_source.filter_reads_into(
                 &reads_to_keep,
                 nb_reads_to_keep,
                 &mut second_output_handle,
+                output_format_2,
+                is_fasta_2,
             )? as u64;
         }
 
@@ -328,6 +421,19 @@ impl Runner for Reads {
         info!("Done 🎉");
         Ok(())
     }
+}
+
+fn is_fasta_path(path: &Path) -> bool {
+    let mut p = path.to_path_buf();
+    if let Some(ext) = p.extension().map(|e| e.to_string_lossy().to_lowercase()) {
+        if ["gz", "bz2", "xz", "zst", "bz"].contains(&ext.as_str()) {
+            p = p.with_extension("");
+        }
+    }
+    if let Some(ext) = p.extension().map(|e| e.to_string_lossy().to_lowercase()) {
+        return ext == "fasta" || ext == "fa";
+    }
+    false
 }
 
 #[cfg(test)]

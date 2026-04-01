@@ -39,13 +39,27 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Randomly subsample reads
+    /// Randomly subsample reads (FASTA/Q, unaligned SAM/BAM/CRAM)
     Reads(Reads),
     /// Randomly subsample alignments to a specified depth of coverage
     #[command(name = "aln")]
     Alignment(Alignment),
     /// Get a bibtex formatted citation for this package.
     Cite(Cite),
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+pub enum OutputFormat {
+    #[value(alias = "f")]
+    Fasta,
+    #[value(alias = "q")]
+    Fastq,
+    #[value(alias = "s")]
+    Sam,
+    #[value(alias = "b")]
+    Bam,
+    #[value(alias = "c")]
+    Cram,
 }
 
 /// A collection of custom errors relating to the command line interface for this package.

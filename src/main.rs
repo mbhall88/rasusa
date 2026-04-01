@@ -16,6 +16,7 @@ mod alignment;
 mod cli;
 mod fastx;
 mod reads;
+mod source;
 mod subsampler;
 
 pub trait Runner {
