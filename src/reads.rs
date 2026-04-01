@@ -159,17 +159,29 @@ impl Runner for Reads {
         let input_source = determine_record_source(&self.input[0]);
         let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
 
-        let check_conversion = |in_fmt: Option<noodles_util::alignment::io::Format>, out_path: Option<&std::path::PathBuf>| -> Result<()> {
+        let check_conversion = |in_fmt: Option<noodles_util::alignment::io::Format>,
+                                out_path: Option<&std::path::PathBuf>|
+         -> Result<()> {
             if in_fmt.is_none() {
                 let has_alignment_output = match &self.output_format {
-                    Some(crate::cli::OutputFormat::Sam) | Some(crate::cli::OutputFormat::Bam) | Some(crate::cli::OutputFormat::Cram) => true,
-                    _ => out_path.map(|p| crate::alignment::infer_format_from_path(p).is_some()).unwrap_or(false),
+                    Some(crate::cli::OutputFormat::Sam)
+                    | Some(crate::cli::OutputFormat::Bam)
+                    | Some(crate::cli::OutputFormat::Cram) => true,
+                    _ => out_path
+                        .map(|p| crate::alignment::infer_format_from_path(p).is_some())
+                        .unwrap_or(false),
                 };
                 if has_alignment_output {
                     let out_fmt = match &self.output_format {
-                        Some(crate::cli::OutputFormat::Sam) => noodles_util::alignment::io::Format::Sam,
-                        Some(crate::cli::OutputFormat::Bam) => noodles_util::alignment::io::Format::Bam,
-                        Some(crate::cli::OutputFormat::Cram) => noodles_util::alignment::io::Format::Cram,
+                        Some(crate::cli::OutputFormat::Sam) => {
+                            noodles_util::alignment::io::Format::Sam
+                        }
+                        Some(crate::cli::OutputFormat::Bam) => {
+                            noodles_util::alignment::io::Format::Bam
+                        }
+                        Some(crate::cli::OutputFormat::Cram) => {
+                            noodles_util::alignment::io::Format::Cram
+                        }
                         _ => crate::alignment::infer_format_from_path(out_path.unwrap()).unwrap(),
                     };
                     return Err(anyhow::anyhow!(
@@ -181,7 +193,7 @@ impl Runner for Reads {
             Ok(())
         };
 
-        check_conversion(input_format, self.output.get(0))?;
+        check_conversion(input_format, self.output.first())?;
         if is_paired {
             let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
             check_conversion(second_input_format, self.output.get(1))?;
@@ -367,10 +379,18 @@ impl Runner for Reads {
                     .context("unable to create the second output file")?;
 
             let output_format_2 = match &self.output_format {
-                Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
-                Some(crate::cli::OutputFormat::Bam) => Some(noodles_util::alignment::io::Format::Bam),
-                Some(crate::cli::OutputFormat::Cram) => Some(noodles_util::alignment::io::Format::Cram),
-                Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => None,
+                Some(crate::cli::OutputFormat::Sam) => {
+                    Some(noodles_util::alignment::io::Format::Sam)
+                }
+                Some(crate::cli::OutputFormat::Bam) => {
+                    Some(noodles_util::alignment::io::Format::Bam)
+                }
+                Some(crate::cli::OutputFormat::Cram) => {
+                    Some(noodles_util::alignment::io::Format::Cram)
+                }
+                Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => {
+                    None
+                }
                 None => {
                     if self.output.len() < 2 {
                         second_input_format
