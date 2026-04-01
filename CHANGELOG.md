@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0](https://github.com/mbhall88/rasusa/compare/3.0.0...4.0.0) (2026-04-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **reads:** --output-type has been renamed to --compress-type (-Z) for the reads subcommand. The -O short flag is now used for --output-format.
+
+### Features
+
+* **reads:** support unaligned SAM/BAM/CRAM and refactor CLI flags ([771b388](https://github.com/mbhall88/rasusa/commit/771b3887fea6c35417e4d338ecd8a421600f5a3b))
+
 ## [3.0.0](https://github.com/mbhall88/rasusa/compare/2.2.2...3.0.0) (2026-02-19)
 
 
