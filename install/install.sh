@@ -220,6 +220,51 @@ elevate_priv() {
   fi
 }
 
+verify_checksum() {
+  archive=$1
+  url=$2
+  
+  if [ -n "${DRY_RUN-}" ]; then
+    info "[Dry-run] Would verify checksum for $archive using ${url}.sha256"
+    return 0
+  fi
+
+  checksum_file=$(get_tmpfile "sha256")
+  if ! download "$checksum_file" "${url}.sha256"; then
+    warn "Could not download checksum file. Skipping verification."
+    rm -f "$checksum_file"
+    return 0
+  fi
+
+  info "Verifying checksum…"
+  if has sha256sum; then
+    # sha256sum expects "hash filename" format, which is what we have in the file
+    (cd "$(dirname "$archive")" && sha256sum -c "$checksum_file") >/dev/null 2>&1
+  elif has shasum; then
+    (cd "$(dirname "$archive")" && shasum -a 256 -c "$checksum_file") >/dev/null 2>&1
+  elif has openssl; then
+    expected_hash=$(awk '{print $1}' "$checksum_file")
+    actual_hash=$(openssl dgst -sha256 "$archive" | awk '{print $NF}')
+    if [ "$expected_hash" != "$actual_hash" ]; then
+      error "Checksum verification failed!"
+      exit 1
+    fi
+  else
+    warn "No checksum verification tool (sha256sum, shasum, openssl) found. Skipping verification."
+    rm -f "$checksum_file"
+    return 0
+  fi
+
+  if [ $? -ne 0 ]; then
+    error "Checksum verification failed! The downloaded file may be corrupted or tampered with."
+    rm -f "$checksum_file"
+    exit 1
+  fi
+
+  completed "Checksum verified"
+  rm -f "$checksum_file"
+}
+
 install() {
   ext="$1"
   url="$2"
@@ -242,6 +287,9 @@ install() {
     rm -f "${archive}"
     exit 1
   fi
+
+  # verify checksum
+  verify_checksum "${archive}" "${url}"
 
   # unpack the temp file to the bin dir, using sudo if required
   if ! unpack "${archive}" "${BIN_DIR}" "${sudo}"; then

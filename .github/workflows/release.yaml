@@ -107,10 +107,13 @@ jobs:
           # base compressed package
           pushd "${PKG_STAGING}/" >/dev/null
           tar czf "${PKG_NAME}" "${PKG_BASENAME}"/*
+          # Generate SHA-256 checksum
+          sha256sum "${PKG_NAME}" > "${PKG_NAME}.sha256"
           popd >/dev/null
           
           # Let subsequent steps know where to find the compressed package
           echo "PKG_PATH=${PKG_STAGING}/${PKG_NAME}" >> $GITHUB_OUTPUT
+          echo "SHA_PATH=${PKG_STAGING}/${PKG_NAME}.sha256" >> $GITHUB_OUTPUT
 
       - name: "Artifact upload: tarball"
         uses: actions/upload-artifact@v7
@@ -123,6 +126,7 @@ jobs:
         with:
           files: |
             ${{ steps.package.outputs.PKG_PATH }}
+            ${{ steps.package.outputs.SHA_PATH }}
             install/install.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
