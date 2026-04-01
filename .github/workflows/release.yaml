@@ -123,6 +123,7 @@ jobs:
         with:
           files: |
             ${{ steps.package.outputs.PKG_PATH }}
+            install/install.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
