@@ -27,16 +27,26 @@
 
 ### Precompiled binary
 
+The quickest way to get `rasusa` is with the install script:
+
 ```shell
-curl -sSL rasusa.mbh.sh | sh
+curl -sSL https://github.com/mbhall88/rasusa/releases/latest/download/install.sh | sh
 # or with wget
-wget -nv -O - rasusa.mbh.sh | sh
+wget -nv -O - https://github.com/mbhall88/rasusa/releases/latest/download/install.sh | sh
+```
+
+The installer will identify the architecture and OS, download the latest binary for your system, and move it to `/usr/local/bin` (on Linux/macOS).
+
+If you would like to install it to a different location, you can pass the `-b` or `--bin-dir` option to the script.
+
+```shell
+curl -sSL https://github.com/mbhall88/rasusa/releases/latest/download/install.sh | sh -s -- -b /my/custom/bin
 ```
 
 You can also pass options to the script like so
 
 ```
-$ curl -sSL rasusa.mbh.sh | sh -s -- --help
+$ curl -sSL https://github.com/mbhall88/rasusa/releases/latest/download/install.sh | sh -s -- --help
 install.sh [option]
 
 Fetch and install the latest version of rasusa, if rasusa is already
@@ -70,11 +80,18 @@ Options
 [![Crates.io](https://img.shields.io/crates/v/rasusa.svg)](https://crates.io/crates/rasusa)
 ![Crates.io Total Downloads](https://img.shields.io/crates/d/rasusa)
 
-Prerequisite: [`rust` toolchain][rust] (min. v1.74.1)
 
 ```sh
 cargo install rasusa
 ```
+
+Alternatively, for more modern Rust-based binary management, we recommend using [`cargo-binstall`][binstall]:
+
+```shell
+cargo binstall rasusa
+```
+
+[binstall]: https://github.com/cargo-bins/cargo-binstall
 
 ### `conda`
 
