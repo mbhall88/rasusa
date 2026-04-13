@@ -122,7 +122,7 @@ jobs:
           path: ${{ steps.package.outputs.PKG_PATH }}
 
       - name: Publish archives and packages
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{ steps.package.outputs.PKG_PATH }}
