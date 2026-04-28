@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 
-const CITATION: &str = r#"@article{Hall2022,
+const CITATION_2022: &str = r#"Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source Software, 7(69), 3941, https://doi.org/10.21105/joss.03941"#;
+const BIBTEX_2022: &str = r#"@article{Hall2022,
   doi = {10.21105/joss.03941},
   url = {https://doi.org/10.21105/joss.03941},
   year = {2022},
@@ -22,6 +23,23 @@ const CITATION: &str = r#"@article{Hall2022,
   author = {Michael B. Hall},
   title = {Rasusa: Randomly subsample sequencing reads to a specified coverage},
   journal = {Journal of Open Source Software}
+}"#;
+
+const CITATION_2026: &str = r#"Achmad Dimas Cahyaning Furqon, Leah W. Roberts, Michael B. Hall, Efficient downsampling of genome alignments with Rasusa, Gigabyte, 2026, https://doi.org/10.46471/gigabyte.180"#;
+const BIBTEX_2026: &str = r#"@article{furqon_efficient_2026,
+  title = {Efficient downsampling of genome alignments with {Rasusa}},
+  volume = {2026},
+  issn = {2709-4715},
+  url = {https://gigabytejournal.com/articles/180},
+  doi = {10.46471/gigabyte.180},
+  language = {en},
+  urldate = {2026-04-28},
+  journal = {Gigabyte},
+  publisher = {GigaScience Press},
+  author = {Furqon, Achmad Dimas Cahyaning and Roberts, Leah W. and Hall, Michael B.},
+  month = apr,
+  year = {2026},
+  pages = {gigabyte180--0}
 }"#;
 
 /// Randomly subsample reads or alignments
@@ -74,7 +92,9 @@ pub enum CliError {
     InvalidGenomeSizeString(String),
 
     /// Indicates that a string cannot be parsed into a [`Coverage`](#coverage).
-    #[error("{0} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character")]
+    #[error(
+        "{0} is not a valid coverage string. Coverage must be either an integer or a float and can end with an optional 'x' character"
+    )]
     InvalidCoverageValue(String),
 
     /// Indicates that a string cannot be parsed into a [`CompressionFormat`](#compressionformat).
@@ -100,7 +120,13 @@ pub struct Cite {}
 
 impl Runner for Cite {
     fn run(&mut self) -> anyhow::Result<()> {
-        println!("{CITATION}");
+        println!("If you use Rasusa in your research, please cite the following:\n");
+        println!("For subsampling alignments with the `aln` subcommand:");
+        println!("{CITATION_2026}");
+        println!("\n{BIBTEX_2026}\n");
+        println!("For subsampling of reads with the `reads` subcommand:");
+        println!("{CITATION_2022}");
+        println!("\n{BIBTEX_2022}");
         Ok(())
     }
 }
