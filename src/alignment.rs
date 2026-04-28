@@ -234,16 +234,11 @@ impl Alignment {
         let header = reader.read_header()?;
 
         // read records only to check what type of the data
-        let mut check_n: u8 = 1;
-        for result in reader.records(&header) {
+        for result in reader.records(&header).take(10) {
             let record = result.context("Failed to parse BAM record")?;
             if record.flags()?.is_segmented() {
                 return Ok(true);
             }
-            if check_n > 10 {
-                break;
-            }
-            check_n += 1;
         }
         Ok(false)
     }
