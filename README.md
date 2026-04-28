@@ -4,8 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![github release version](https://img.shields.io/github/v/release/mbhall88/rasusa)](https://github.com/mbhall88/rasusa/releases)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
+[![DOI](https://img.shields.io/badge/DOI-10.46471%2Fgigabyte.180-blue)](https://doi.org/10.46471/gigabyte.180)
 
 **Ra**ndomly **su**b**sa**mple sequencing reads or alignments.
+
+> Furqon, A. D. C., Roberts, L. W., & Hall, M. B. (2026). Efficient downsampling of genome alignments with Rasusa. Gigabyte, 2026, gigabyte180. https://doi.org/10.46471/gigabyte.180
 
 > Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source
 > Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
@@ -762,16 +765,41 @@ For changes to be accepted, they must pass the CI and coverage checks. These inc
 
 If you use `rasusa` in your research, it would be appreciated if you could cite it.
 
+[![DOI](https://img.shields.io/badge/DOI-10.46471%2Fgigabyte.180-blue)](https://doi.org/10.46471/gigabyte.180)
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.03941/status.svg)](https://doi.org/10.21105/joss.03941)
+
+### Alignment subsampling (v3.0.0+)
+
+> Furqon, A. D. C., Roberts, L. W., & Hall, M. B. (2026). Efficient downsampling of genome alignments with Rasusa. Gigabyte, 2026, gigabyte180. https://doi.org/10.46471/gigabyte.180
+
+### General read subsampling
 
 > Hall, M. B., (2022). Rasusa: Randomly subsample sequencing reads to a specified coverage. Journal of Open Source
 > Software, 7(69), 3941, https://doi.org/10.21105/joss.03941
 
+You can also find these citations in the [`CITATION.cff`](CITATION.cff) file or by running `rasusa cite`.
+
 ### Bibtex
 
-You can get the following citation by running `rasusa cite`
+You can get the following citations by running `rasusa cite`
 
 ```Bibtex
+@article{furqon_efficient_2026,
+  title = {Efficient downsampling of genome alignments with {Rasusa}},
+  volume = {2026},
+  issn = {2709-4715},
+  url = {https://gigabytejournal.com/articles/180},
+  doi = {10.46471/gigabyte.180},
+  language = {en},
+  urldate = {2026-04-28},
+  journal = {Gigabyte},
+  publisher = {GigaScience Press},
+  author = {Furqon, Achmad Dimas Cahyaning and Roberts, Leah W. and Hall, Michael B.},
+  month = apr,
+  year = {2026},
+  pages = {gigabyte180--0}
+}
+
 @article{Hall2022,
   doi = {10.21105/joss.03941},
   url = {https://doi.org/10.21105/joss.03941},
@@ -784,7 +812,6 @@ You can get the following citation by running `rasusa cite`
   title = {Rasusa: Randomly subsample sequencing reads to a specified coverage},
   journal = {Journal of Open Source Software}
 }
-
 ```
 
 [1]: https://doi.org/10.1099/mgen.0.000188
