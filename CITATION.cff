@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+message: "If you use Rasusa, please cite it as below."
+authors:
+- family-names: "Furqon"
+  given-names: "Achmad Dimas Cahyaning"
+  orcid: "https://orcid.org/0009-0007-8039-1951"
+- family-names: "Roberts"
+  given-names: "Leah W."
+  orcid: "https://orcid.org/0000-0002-1024-0564"
+- family-names: "Hall"
+  given-names: "Michael B."
+  orcid: "https://orcid.org/0000-0003-3683-6208"
+title: "Rasusa: Randomly subsample sequencing reads or alignments"
+version: 4.0.0
+doi: 10.46471/gigabyte.180
+date-released: 2026-04-28
+url: "https://github.com/mbhall88/rasusa"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Furqon"
+    given-names: "Achmad Dimas Cahyaning"
+    orcid: "https://orcid.org/0009-0007-8039-1951"
+  - family-names: "Roberts"
+    given-names: "Leah W."
+    orcid: "https://orcid.org/0000-0002-1024-0564"
+  - family-names: "Hall"
+    given-names: "Michael B."
+    orcid: "https://orcid.org/0000-0003-3683-6208"
+  doi: "10.46471/gigabyte.180"
+  journal: "Gigabyte"
+  month: 4
+  title: "Efficient downsampling of genome alignments with Rasusa"
+  year: 2026
+  publisher:
+    name: "GigaScience Press"
+references:
+  - type: article
+    authors:
+    - family-names: "Hall"
+      given-names: "Michael B."
+      orcid: "https://orcid.org/0000-0003-3683-6208"
+    doi: "10.21105/joss.03941"
+    journal: "Journal of Open Source Software"
+    title: "Rasusa: Randomly subsample sequencing reads to a specified coverage"
+    year: 2022
+    volume: 7
+    issue: 69
+    start: 3941
