@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0](https://github.com/mbhall88/rasusa/compare/4.0.0...4.1.0) (2026-04-28)
+
+
+### Features
+
+* **cite:** add 2026 alignment subsampling paper ([3483366](https://github.com/mbhall88/rasusa/commit/348336656a58f0b7ab5f10d2a919305e02d63b0b))
+
 ## [4.0.0](https://github.com/mbhall88/rasusa/compare/3.0.0...4.0.0) (2026-04-01)
 
 
