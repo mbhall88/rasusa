@@ -1,0 +1,42 @@
+{
+  "bench_reads": "1000000",
+  "commit": "3694f3453dba6b23692e97c46a58fc0e9db6c726",
+  "ref": "local",
+  "scenarios": {
+    "aln-fetch": {
+      "peak_rss_bytes": 14630912,
+      "wall_mean_s": 1.3183261658199998,
+      "wall_stddev_s": 0.002899039941779387
+    },
+    "aln-paired": {
+      "peak_rss_bytes": 8716288,
+      "wall_mean_s": 0.39462346236000007,
+      "wall_stddev_s": 0.0026262471740279058
+    },
+    "aln-stream": {
+      "peak_rss_bytes": 6242304,
+      "wall_mean_s": 0.42111742828,
+      "wall_stddev_s": 0.001126413602565414
+    },
+    "reads-coverage": {
+      "peak_rss_bytes": 13058048,
+      "wall_mean_s": 0.17606008646000001,
+      "wall_stddev_s": 0.00451791483244252
+    },
+    "reads-frac": {
+      "peak_rss_bytes": 11927552,
+      "wall_mean_s": 0.15787740088000002,
+      "wall_stddev_s": 0.0020511300034965936
+    },
+    "reads-num": {
+      "peak_rss_bytes": 13041664,
+      "wall_mean_s": 0.15763205008,
+      "wall_stddev_s": 0.0015971942069646179
+    },
+    "reads-paired": {
+      "peak_rss_bytes": 6406144,
+      "wall_mean_s": 0.07188619854000002,
+      "wall_stddev_s": 0.0012933027312806583
+    }
+  }
+}

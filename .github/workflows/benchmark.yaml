@@ -1,0 +1,99 @@
+name: Benchmark
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+  schedule:
+    # First of the month, 03:00 UTC - keeps the published numbers from going stale
+    # between releases.
+    - cron: "0 3 1 * *"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update-readme-benchmark:
+    name: Regenerate README benchmark tables
+    # Pinned (not `ubuntu-latest`) since the whole point of this job is producing
+    # numbers on a stable, known runner - a silent image bump shouldn't move them.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          # Needed so the commit-back step has a real branch to push to.
+          fetch-depth: 1
+
+      # Loop-guard: this workflow commits back to `main` with a tagged message. It isn't
+      # push-triggered, so it can't retrigger itself directly, but `workflow_dispatch`/
+      # `schedule` firing right after such a commit would otherwise just redo the same
+      # work - skip in that case.
+      - name: Check loop-guard
+        id: guard
+        run: |
+          if git log -1 --pretty=%B | grep -qF '[skip benchmark]'; then
+            echo "HEAD is a bench-refresh commit, skipping this run." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install toolchain
+        if: steps.guard.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v5
+        if: steps.guard.outputs.skip != 'true'
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache downloaded benchmark datasets
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/cache@v5
+        with:
+          path: data/download-cache
+          key: bench-datasets-v1
+
+      - name: Install hyperfine
+        if: steps.guard.outputs.skip != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: hyperfine
+
+      - name: Install filtlong, seqtk, fastaq (bioconda)
+        if: steps.guard.outputs.skip != 'true'
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: bench-tools
+          create-args: -c bioconda -c conda-forge filtlong seqtk fastaq
+          init-shell: bash
+
+      - name: Regenerate README benchmark tables
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash -leo pipefail {0}
+        run: benches/update_readme.sh
+
+      - name: Commit refreshed README
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "No benchmark changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "chore(bench): refresh README benchmark tables [skip benchmark]"
+          git push "https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git" HEAD:main
+        env:
+          GH_PAT: ${{ secrets.PAT }}

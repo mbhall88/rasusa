@@ -2,6 +2,7 @@
 **/*.rs.bk
 .idea/
 code_coverage_report.sh
-data
+/data
 benchmark
 .DS_Store
+benches/results/
