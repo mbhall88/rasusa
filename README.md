@@ -679,6 +679,13 @@ The data I used comes from
 > [!NOTE]
 > These benchmarks are for `reads` only as there is no other tool that replicates the functionality of `aln`.
 
+> [!NOTE]
+> The tables below are regenerated automatically on each release by
+> [`benches/update_readme.sh`](benches/update_readme.sh), run on a GitHub Actions
+> `ubuntu-latest` runner. Absolute numbers are therefore specific to that runner and will
+> vary run to run - the meaningful figure is the **relative** speedup, not the raw
+> timings.
+
 ### Single long read input
 
 Download and rename the FASTQ
@@ -704,12 +711,14 @@ hyperfine --warmup 3 --runs 10 --export-markdown results-single.md \
 
 #### Results
 
+<!-- BENCH:single:START -->
 | Command                                      |       Mean [s] | Min [s] | Max [s] |     Relative |
 |:---------------------------------------------|---------------:|--------:|--------:|-------------:|
 | `filtlong --target_bases 220576600 tb.fq`    | 21.685 ± 0.055 |  21.622 |  21.787 | 21.77 ± 0.29 |
 | `rasusa reads tb.fq -c 50 -g 4411532 -s 1` | 0.996 ±  0.013 |   0.983 |   1.023 |         1.00 |
 
 **Summary**: `rasusa` ran 21.77 ± 0.29 times faster than `filtlong`.
+<!-- BENCH:single:END -->
 
 ### Paired-end input
 
@@ -735,6 +744,7 @@ hyperfine --warmup 10 --runs 100 --export-markdown results-paired.md \
 
 #### Results
 
+<!-- BENCH:paired:START -->
 | Command                                                                                           |     Mean [ms] | Min [ms] | Max [ms] |    Relative |
 |:--------------------------------------------------------------------------------------------------|--------------:|---------:|---------:|------------:|
 | `seqtk sample -s 1 r1.fq 140000 > /tmp/r1.fq; seqtk sample -s 1 r2.fq 140000 > /tmp/r2.fq;`       |  907.7 ± 23.6 |    875.4 |    997.8 | 1.84 ± 0.62 |
@@ -743,6 +753,7 @@ hyperfine --warmup 10 --runs 100 --export-markdown results-paired.md \
 
 **Summary**: `rasusa reads` ran 1.84 times faster than `seqtk` (1-pass) and 1.77 times faster
 than `seqtk` (2-pass)
+<!-- BENCH:paired:END -->
 
 So, `rasusa reads` is faster than `seqtk` but doesn't require a fixed number of reads -
 allowing you to avoid doing maths to determine how many reads you need to downsample to
