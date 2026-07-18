@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, error, info, warn};
 use niffler::compression;
-use std::io::stdout;
+use std::io::{stdout, BufWriter};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
@@ -201,7 +201,7 @@ impl Runner for Reads {
 
         let mut output_handle = match self.output.len() {
             0 => match self.compress_type {
-                None => Box::new(stdout()) as Box<dyn std::io::Write>,
+                None => Box::new(BufWriter::new(stdout().lock())) as Box<dyn std::io::Write>,
                 Some(fmt) => {
                     let lvl = match fmt {
                         compression::Format::Gzip => compression::Level::Six,
@@ -210,7 +210,7 @@ impl Runner for Reads {
                         compression::Format::Zstd => compression::Level::Three,
                         _ => compression::Level::Zero,
                     };
-                    niffler::basic::get_writer(Box::new(stdout()), fmt, lvl)?
+                    niffler::basic::get_writer(Box::new(BufWriter::new(stdout().lock())), fmt, lvl)?
                 }
             },
             _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
@@ -256,10 +256,11 @@ impl Runner for Reads {
         }
         info!("{} reads detected", read_lengths.len());
 
+        let total_input_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
+
         // calculate the depth of coverage if using coverage-based subsampling
         if let Some(size) = self.genome_size {
-            let number_of_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
-            let depth_of_covg = (number_of_bases as f64) / f64::from(size);
+            let depth_of_covg = (total_input_bases as f64) / f64::from(size);
             info!("Input coverage is {:.2}x", depth_of_covg);
 
             if self.strict
@@ -275,13 +276,12 @@ impl Runner for Reads {
         }
 
         if let Some(req_bases) = self.bases {
-            let total_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
             let req_bases = u64::from(req_bases);
-            if self.strict && req_bases > total_bases {
+            if self.strict && req_bases > total_input_bases {
                 return Err(anyhow::anyhow!(
                     "Requested number of bases ({}) is more than the input ({})",
                     req_bases,
-                    total_bases
+                    total_input_bases
                 ));
             }
         }
@@ -333,7 +333,16 @@ impl Runner for Reads {
         } else {
             info!("Keeping {} reads", nb_reads_to_keep);
         }
-        debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
+        const DEBUG_MAX_LOGGED_INDICES: usize = 10_000;
+        if reads_to_keep.len() <= DEBUG_MAX_LOGGED_INDICES {
+            debug!("Indices of reads being kept:\n{:?}", reads_to_keep);
+        } else {
+            debug!(
+                "Indices of reads being kept: omitted ({} reads exceeds debug print cap of {})",
+                reads_to_keep.len(),
+                DEBUG_MAX_LOGGED_INDICES
+            );
+        }
 
         let output_format_1 = match &self.output_format {
             Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
