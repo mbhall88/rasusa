@@ -60,6 +60,8 @@ impl Fastx {
     /// # Example
     ///
     /// ```rust
+    /// use rasusa::fastx::Fastx;
+    ///
     /// let path = std::path::Path::new("input.fa.gz");
     /// let fastx = Fastx::from_path(path);
     /// ```
@@ -80,8 +82,8 @@ impl RecordSource for Fastx {
     /// # Example
     ///
     /// ```rust
-    /// use crate::fastx::Fastx;
-    /// use crate::source::RecordSource;
+    /// use rasusa::fastx::Fastx;
+    /// use rasusa::source::RecordSource;
     /// use std::io::Write;
     /// let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
     /// let mut file = tempfile::Builder::new().suffix(".fq").tempfile().unwrap();

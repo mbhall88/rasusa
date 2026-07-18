@@ -52,7 +52,7 @@ pub struct Cli {
     pub verbose: bool,
 
     #[command(subcommand)]
-    pub(crate) command: Commands,
+    pub command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
@@ -148,7 +148,10 @@ impl FromStr for MetricSuffix {
     /// Parses a string into a `MetricSuffix`.
     ///
     /// # Example
-    /// ```rust
+    // TODO(S9): stale doctest - `MetricSuffix` is private, so it isn't reachable from
+    // an external doctest, and `metric_suffix` is a `Result` here, not a bare
+    // `MetricSuffix`. Fix or rewrite as a unit test in the S9 doctest/test cleanup pass.
+    /// ```rust,ignore
     /// let s = "5.5mb";
     /// let metric_suffix = MetricSuffix::from_str(s);
     ///
@@ -174,7 +177,10 @@ impl FromStr for MetricSuffix {
 ///
 /// # Example
 ///
-/// ```rust
+// TODO(S9): stale doctest - `MetricSuffix` is private, so it isn't reachable from an
+// external doctest, and the result is an `f64` compared against an integer literal.
+// Fix or rewrite as a unit test in the S9 doctest/test cleanup pass.
+/// ```rust,ignore
 /// let metric_suffix = MetricSuffix::Mega;
 /// let x: f64 = 5.5;
 ///
@@ -203,7 +209,10 @@ pub struct GenomeSize(u64);
 ///
 /// # Example
 ///
-/// ```rust
+// TODO(S9): stale doctest - `GenomeSize`'s inner field is private, so it can't be
+// constructed from an external doctest. Fix or rewrite as a unit test in the S9
+// doctest/test cleanup pass.
+/// ```rust,ignore
 /// assert!(GenomeSize(10) == 10)
 /// ```
 impl PartialEq<u64> for GenomeSize {
@@ -231,7 +240,10 @@ impl FromStr for GenomeSize {
     /// Parses a string into a `GenomeSize`.
     ///
     /// # Example
-    /// ```rust
+    // TODO(S9): stale doctest - `GenomeSize`'s inner field is private (can't construct
+    // it from an external doctest), and `genome_size` is a `Result` here, not a bare
+    // `GenomeSize`. Fix or rewrite as a unit test in the S9 doctest/test cleanup pass.
+    /// ```rust,ignore
     /// let s = "5.5mb";
     /// let genome_size = GenomeSize::from_str(s);
     ///
@@ -286,7 +298,10 @@ impl GenomeSize {
 ///
 /// # Example
 ///
-/// ```rust
+// TODO(S9): stale doctest - `GenomeSize`'s inner field is private, so it can't be
+// constructed from an external doctest. Fix or rewrite as a unit test in the S9
+// doctest/test cleanup pass.
+/// ```rust,ignore
 /// let genome_size = GenomeSize(100);
 /// let covg = Coverage(5);
 ///
@@ -304,7 +319,10 @@ impl Mul<Coverage> for GenomeSize {
 ///
 /// # Example
 ///
-/// ```rust
+// TODO(S9): stale doctest - `GenomeSize`'s inner field is private, so it can't be
+// constructed from an external doctest. Fix or rewrite as a unit test in the S9
+// doctest/test cleanup pass.
+/// ```rust,ignore
 /// let x: u64 = 210;
 /// let size = GenomeSize(200);
 ///
@@ -331,7 +349,9 @@ pub struct Coverage(pub f32);
 /// # Example
 ///
 /// ```rust
-/// assert!(Coverage(10) == 10.0)
+/// use rasusa::cli::Coverage;
+///
+/// assert!(Coverage(10.0) == 10.0)
 /// ```
 impl PartialEq<f32> for Coverage {
     fn eq(&self, other: &f32) -> bool {
@@ -346,10 +366,13 @@ impl FromStr for Coverage {
     ///
     /// # Example
     /// ```rust
-    /// let s = "100x";
-    /// let covg = Coverage::from_str(s);
+    /// use rasusa::cli::Coverage;
+    /// use std::str::FromStr;
     ///
-    /// assert_eq!(covg, Coverage(100))
+    /// let s = "100x";
+    /// let covg = Coverage::from_str(s).unwrap();
+    ///
+    /// assert_eq!(covg, Coverage(100.0))
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let re = Regex::new(r"^(?P<covg>[0-9]*\.?[0-9]+)(?i)x?$")
@@ -375,7 +398,10 @@ impl FromStr for Coverage {
 ///
 /// # Example
 ///
-/// ```rust
+// TODO(S9): stale doctest - `GenomeSize`'s inner field is private, so it can't be
+// constructed from an external doctest. Fix or rewrite as a unit test in the S9
+// doctest/test cleanup pass.
+/// ```rust,ignore
 /// let covg = Coverage(5);
 /// let genome_size = GenomeSize(100);
 ///

@@ -1,27 +1,10 @@
-#![allow(clippy::redundant_clone)]
-
-extern crate core;
-
 use anyhow::Result;
 use clap::Parser;
 use env_logger::Builder;
 use log::{debug, LevelFilter};
 
-pub use crate::cli::Cli;
-use crate::cli::Commands;
-pub use crate::fastx::Fastx;
-pub use crate::subsampler::SubSampler;
-
-mod alignment;
-mod cli;
-mod fastx;
-mod reads;
-mod source;
-mod subsampler;
-
-pub trait Runner {
-    fn run(&mut self) -> Result<()>;
-}
+use rasusa::cli::{Cli, Commands};
+use rasusa::Runner;
 
 fn main() -> Result<()> {
     let args: Cli = Cli::parse();

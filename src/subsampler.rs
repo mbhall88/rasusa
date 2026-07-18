@@ -22,7 +22,10 @@ impl SubSampler {
     ///
     /// # Example
     ///
-    /// ```rust
+    // TODO(S9): stale doctest - `shuffled_indices` is private (can't be called from an
+    // external doctest) and the struct literal is missing `num_reads`. Fix or rewrite
+    // as a unit test in the S9 doctest/test cleanup pass.
+    /// ```rust,ignore
     /// let v: Vec<u64> = vec![55, 1];
     /// let sampler = SubSampler {
     ///     target_total_bases: 100,
@@ -60,7 +63,10 @@ impl SubSampler {
     ///
     /// # Example
     ///
-    /// ```rust
+    // TODO(S9): stale doctest - struct literal is missing `num_reads`, and `indices`
+    // returns `(Vec<bool>, usize)`, not a directly-indexable collection. Fix or rewrite
+    // as a unit test in the S9 doctest/test cleanup pass.
+    /// ```rust,ignore
     /// let v: Vec<u32> = vec![50, 50, 50];
     /// let sampler = SubSampler {
     ///     target_total_bases: 100,
