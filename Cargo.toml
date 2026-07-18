@@ -38,6 +38,11 @@ noodles-bgzf = { version = "0.46.0", features = ["libdeflate"] }
 assert_cmd = "2.2.0"
 predicates = "3.1.4"
 tempfile = "3.27.0"
+criterion = "0.7"
+
+[[bench]]
+name = "subsample"
+harness = false
 
 [profile.release]
 strip = true   # https://github.com/johnthagen/min-sized-rust?tab=readme-ov-file#strip-symbols-from-binary
