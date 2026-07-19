@@ -72,6 +72,26 @@ impl Fastx {
     }
 }
 
+impl Fastx {
+    /// Opens the underlying (possibly compressed) file as a FASTA/Q record reader.
+    ///
+    /// Returns `Ok(None)` for a too-short/empty file, matching the pre-existing
+    /// "no records" handling shared by [`RecordSource::read_lengths`] and
+    /// [`RecordSource::count`].
+    fn open_reader(&self) -> Result<Option<Box<dyn needletail::parser::FastxReader>>, FastxError> {
+        let reader = match niffler::send::from_path(&self.path) {
+            Ok((rdr, _)) => rdr,
+            Err(niffler::error::Error::FileTooShort) => return Ok(None),
+            Err(source) => return Err(FastxError::CompressOutputError(source)),
+        };
+        match needletail::parse_fastx_reader(reader) {
+            Ok(rdr) => Ok(Some(rdr)),
+            Err(e) if e.kind == EmptyFile => Ok(None),
+            Err(source) => Err(FastxError::ReadError { source }),
+        }
+    }
+}
+
 impl RecordSource for Fastx {
     /// Returns a vector containing the lengths of all the reads in the file.
     ///
@@ -96,17 +116,9 @@ impl RecordSource for Fastx {
     fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
         let mut read_lengths: Vec<u32> = vec![];
 
-        let reader = match niffler::send::from_path(&self.path) {
-            Ok((rdr, _)) => rdr,
-            Err(source) => match source {
-                niffler::error::Error::FileTooShort => return Ok(read_lengths),
-                _ => return Err(FastxError::CompressOutputError(source)),
-            },
-        };
-        let mut reader = match needletail::parse_fastx_reader(reader) {
-            Ok(rdr) => rdr,
-            Err(e) if e.kind == EmptyFile => return Ok(read_lengths),
-            Err(source) => return Err(FastxError::ReadError { source }),
+        let mut reader = match self.open_reader()? {
+            Some(rdr) => rdr,
+            None => return Ok(read_lengths),
         };
 
         while let Some(record) = reader.next() {
@@ -116,6 +128,37 @@ impl RecordSource for Fastx {
             }
         }
         Ok(read_lengths)
+    }
+
+    /// Returns the number of records in the file, without materializing their lengths.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use rasusa::fastx::Fastx;
+    /// use rasusa::source::RecordSource;
+    /// use std::io::Write;
+    /// let text = "@read1\nACGT\n+\n!!!!\n@read2\nG\n+\n!";
+    /// let mut file = tempfile::Builder::new().suffix(".fq").tempfile().unwrap();
+    /// file.write_all(text.as_bytes()).unwrap();
+    /// let fastx = Fastx::from_path(file.path());
+    /// assert_eq!(fastx.count().unwrap(), 2)
+    /// ```
+    fn count(&self) -> Result<usize, FastxError> {
+        let mut count: usize = 0;
+
+        let mut reader = match self.open_reader()? {
+            Some(rdr) => rdr,
+            None => return Ok(count),
+        };
+
+        while let Some(record) = reader.next() {
+            match record {
+                Ok(_) => count += 1,
+                Err(err) => return Err(FastxError::ParseError { source: err }),
+            }
+        }
+        Ok(count)
     }
 
     /// Writes reads, with indices contained within `reads_to_keep`, to the specified handle
@@ -148,7 +191,7 @@ impl RecordSource for Fastx {
         while let Some(record) = reader.next() {
             match record {
                 Err(source) => return Err(FastxError::ParseError { source }),
-                Ok(rec) if reads_to_keep[read_idx] => {
+                Ok(rec) if read_idx < reads_to_keep.len() && reads_to_keep[read_idx] => {
                     total_len += rec.num_bases();
                     if is_fasta {
                         write_to

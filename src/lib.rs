@@ -13,7 +13,7 @@ pub mod subsampler;
 
 pub use crate::cli::Cli;
 pub use crate::fastx::Fastx;
-pub use crate::subsampler::SubSampler;
+pub use crate::subsampler::{SubSampler, SubsampleMode};
 
 pub trait Runner {
     fn run(&mut self) -> Result<()>;

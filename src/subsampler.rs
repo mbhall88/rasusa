@@ -2,48 +2,35 @@ use log::info;
 use rand::prelude::*;
 use rand::random;
 
+/// The target used to decide how many reads to keep.
+///
+/// Modelling this as an enum (rather than two `Option<u64>` fields) makes the "both
+/// set"/"neither set" states unrepresentable - callers must pick exactly one mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubsampleMode {
+    /// Keep reads (in shuffled order) until this many total bases have been kept.
+    ByBases(u64),
+    /// Keep exactly this many reads (or all of them, if fewer are available).
+    ByReads(u64),
+}
+
 /// A `Struct` for dealing with the randomised part of sub-sampling.
 pub struct SubSampler {
-    /// Number of bases to sub-sample down to.    
-    pub target_total_bases: Option<u64>,
+    /// The target to sub-sample down to.
+    pub mode: SubsampleMode,
     /// Random seed to use for sub-sampling. If `None` is used, then the random number generator
     /// will be seeded by the operating system.
     pub seed: Option<u64>,
-    /// Number of reads to subsample down to
-    pub num_reads: Option<u64>,
 }
 
 impl SubSampler {
-    /// Returns a vector of indices for elements in `v`, but shuffled.
+    /// Returns a vector of `0..n`, but shuffled.
     ///
     /// # Note
     ///
     /// If the file has more than 4,294,967,296 reads, this function's behaviour is undefined.
-    ///
-    /// # Example
-    ///
-    // TODO(S9): stale doctest - `shuffled_indices` is private (can't be called from an
-    // external doctest) and the struct literal is missing `num_reads`. Fix or rewrite
-    // as a unit test in the S9 doctest/test cleanup pass.
-    /// ```rust,ignore
-    /// let v: Vec<u64> = vec![55, 1];
-    /// let sampler = SubSampler {
-    ///     target_total_bases: 100,
-    ///     seed: None,
-    /// };
-    /// let mut num_times_shuffled = 0;
-    /// let iterations = 500;
-    /// for _ in 0..iterations {
-    ///     let idxs = sampler.shuffled_indices(&v);
-    ///     if idxs == vec![1, 0] {
-    ///         num_times_shuffled += 1;
-    ///     }
-    /// }
-    /// // chances of shuffling the same way 100 times in a row is 3.054936363499605e-151
-    /// assert!(num_times_shuffled > 0 && num_times_shuffled < iterations)
-    /// ```
-    fn shuffled_indices<T>(&self, v: &[T]) -> Vec<u32> {
-        let mut indices: Vec<u32> = (0..v.len() as u32).collect();
+    fn shuffled_indices(&self, n: usize) -> Vec<u32> {
+        let mut indices: Vec<u32> = (0..n as u32).collect();
 
         let mut rng = match self.seed {
             Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
@@ -58,46 +45,35 @@ impl SubSampler {
         indices
     }
 
-    /// Sub-samples `lengths` to the desired `target_total_bases` specified in the `SubSampler` and
-    /// returns the indices for the reads that were selected.
+    /// Sub-samples `total_reads` reads down to the target specified in `self.mode` and returns,
+    /// for each read index, whether it was selected.
     ///
-    /// # Example
+    /// `lengths` is only consulted in [`SubsampleMode::ByBases`] mode - callers using
+    /// [`SubsampleMode::ByReads`] may pass an empty slice, since selection there only depends on
+    /// `total_reads`.
     ///
-    // TODO(S9): stale doctest - struct literal is missing `num_reads`, and `indices`
-    // returns `(Vec<bool>, usize)`, not a directly-indexable collection. Fix or rewrite
-    // as a unit test in the S9 doctest/test cleanup pass.
-    /// ```rust,ignore
-    /// let v: Vec<u32> = vec![50, 50, 50];
-    /// let sampler = SubSampler {
-    ///     target_total_bases: 100,
-    ///     seed: Some(1),
-    /// };
-    /// let actual = sampler.indices(&v);
-    ///
-    /// assert_eq!(actual.len(), 3);
-    /// assert!(actual[1]);
-    /// assert!(actual[2]);
-    /// assert!(actual[3]);
-    /// ```
-    pub fn indices(&self, lengths: &[u32]) -> (Vec<bool>, usize) {
-        let mut indices = self.shuffled_indices(lengths).into_iter();
-        let mut to_keep: Vec<bool> = vec![false; lengths.len()];
-        let mut total_bases_kept: u64 = 0;
-
+    /// # Panics
+    /// Panics (via an out-of-bounds index) if `mode` is `ByBases` and `lengths.len() !=
+    /// total_reads`.
+    pub fn indices(&self, total_reads: usize, lengths: &[u32]) -> (Vec<bool>, usize) {
+        let mut indices = self.shuffled_indices(total_reads).into_iter();
+        let mut to_keep: Vec<bool> = vec![false; total_reads];
         let mut nb_reads_to_keep = 0;
-        match (self.target_total_bases, self.num_reads) {
-            (Some(ttb), None) => {
-                while total_bases_kept < ttb {
+
+        match self.mode {
+            SubsampleMode::ByBases(target_total_bases) => {
+                let mut total_bases_kept: u64 = 0;
+                while total_bases_kept < target_total_bases {
                     let idx = match indices.next() {
                         Some(i) => i as usize,
                         None => break,
                     };
                     to_keep[idx] = true;
-                    total_bases_kept += u64::from(lengths[idx.to_owned()]);
+                    total_bases_kept += u64::from(lengths[idx]);
                     nb_reads_to_keep += 1;
                 }
             }
-            (None, Some(n_reads)) => {
+            SubsampleMode::ByReads(n_reads) => {
                 nb_reads_to_keep = (n_reads as usize).min(indices.len());
                 if nb_reads_to_keep == indices.len() {
                     to_keep.fill(true);
@@ -107,7 +83,6 @@ impl SubSampler {
                     }
                 }
             }
-            _ => panic!("Subsampler::inices got an unexpected combination. Please report this bug"),
         }
 
         (to_keep, nb_reads_to_keep)
@@ -119,47 +94,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shuffled_indices_for_empty_vector_returns_empty() {
-        let v: Vec<u64> = Vec::new();
+    fn shuffled_indices_for_zero_returns_empty() {
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let actual = sampler.shuffled_indices(&v);
+        let actual = sampler.shuffled_indices(0);
 
         assert!(actual.is_empty())
     }
 
     #[test]
-    fn shuffled_indices_for_vector_len_one_returns_zero() {
-        let v: Vec<u64> = vec![55];
+    fn shuffled_indices_for_one_returns_zero() {
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let actual = sampler.shuffled_indices(&v);
+        let actual = sampler.shuffled_indices(1);
         let expected: Vec<u32> = vec![0];
 
         assert_eq!(actual, expected)
     }
 
     #[test]
-    fn shuffled_indices_for_vector_len_two_does_shuffle() {
-        let v: Vec<u64> = vec![55, 1];
+    fn shuffled_indices_for_two_does_shuffle() {
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
         let mut num_times_shuffled = 0;
         let iterations = 500;
         for _ in 0..iterations {
-            let idxs = sampler.shuffled_indices(&v);
+            let idxs = sampler.shuffled_indices(2);
             if idxs == vec![1, 0] {
                 num_times_shuffled += 1;
             }
@@ -171,20 +140,17 @@ mod tests {
 
     #[test]
     fn shuffled_indices_with_seed_produces_same_ordering() {
-        let v: Vec<u64> = vec![55, 1, 8];
         let sampler1 = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: Some(1),
-            num_reads: None,
         };
 
         let sampler2 = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: Some(1),
-            num_reads: None,
         };
-        let idxs1 = sampler1.shuffled_indices(&v);
-        let idxs2 = sampler2.shuffled_indices(&v);
+        let idxs1 = sampler1.shuffled_indices(3);
+        let idxs2 = sampler2.shuffled_indices(3);
 
         for i in 0..idxs1.len() {
             assert_eq!(idxs1[i], idxs2[i])
@@ -193,42 +159,36 @@ mod tests {
 
     #[test]
     fn subsample_empty_lengths_returns_empty() {
-        let v: Vec<u32> = Vec::new();
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let (_, nb_select) = sampler.indices(&v);
+        let (_, nb_select) = sampler.indices(0, &[]);
 
         assert_eq!(nb_select, 0)
     }
 
     #[test]
     fn subsample_one_length_target_zero_returns_empty() {
-        let v: Vec<u32> = Vec::new();
         let sampler = SubSampler {
-            target_total_bases: Some(0),
+            mode: SubsampleMode::ByBases(0),
             seed: None,
-            num_reads: None,
         };
 
-        let (_, nb_select) = sampler.indices(&v);
+        let (_, nb_select) = sampler.indices(0, &[]);
 
         assert_eq!(nb_select, 0);
     }
 
     #[test]
     fn subsample_one_read_target_zero_returns_empty() {
-        let v: Vec<u32> = Vec::new();
         let sampler = SubSampler {
-            target_total_bases: None,
+            mode: SubsampleMode::ByReads(5),
             seed: None,
-            num_reads: Some(5),
         };
 
-        let (_, nb_select) = sampler.indices(&v);
+        let (_, nb_select) = sampler.indices(0, &[]);
 
         assert_eq!(nb_select, 0);
     }
@@ -237,12 +197,11 @@ mod tests {
     fn subsample_one_length_less_than_target_returns_zero() {
         let v: Vec<u32> = vec![5];
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(v.len(), &v);
 
         assert_eq!(nb_select, 1);
         assert!(actual[0])
@@ -250,14 +209,12 @@ mod tests {
 
     #[test]
     fn subsample_more_reads_than_available_takes_all() {
-        let v: Vec<u32> = vec![5];
         let sampler = SubSampler {
-            target_total_bases: None,
+            mode: SubsampleMode::ByReads(10),
             seed: None,
-            num_reads: Some(10),
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(1, &[]);
 
         assert_eq!(nb_select, 1);
         assert!(actual[0])
@@ -265,14 +222,12 @@ mod tests {
 
     #[test]
     fn subsample_num_reads_and_available_equal_takes_all() {
-        let v: Vec<u32> = vec![5, 5, 66];
         let sampler = SubSampler {
-            target_total_bases: None,
+            mode: SubsampleMode::ByReads(3),
             seed: None,
-            num_reads: Some(3),
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(3, &[]);
 
         assert_eq!(nb_select, 3);
         assert!(actual.iter().all(|e| *e))
@@ -280,14 +235,12 @@ mod tests {
 
     #[test]
     fn subsample_num_reads_less_than_available_takes_subset() {
-        let v: Vec<u32> = vec![5, 5, 66];
         let sampler = SubSampler {
-            target_total_bases: None,
+            mode: SubsampleMode::ByReads(2),
             seed: None,
-            num_reads: Some(2),
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(3, &[]);
 
         assert_eq!(nb_select, 2);
 
@@ -299,12 +252,11 @@ mod tests {
     fn subsample_one_length_greater_than_target_returns_zero() {
         let v: Vec<u32> = vec![500];
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(v.len(), &v);
 
         assert_eq!(nb_select, 1);
         assert!(actual[0])
@@ -314,12 +266,11 @@ mod tests {
     fn subsample_three_lengths_sum_greater_than_target_returns_two() {
         let v: Vec<u32> = vec![50, 50, 50];
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: Some(1),
-            num_reads: None,
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(v.len(), &v);
 
         assert_eq!(nb_select, 2);
         assert!(!actual[0]);
@@ -331,12 +282,11 @@ mod tests {
     fn subsample_three_lengths_sum_less_than_target_returns_three() {
         let v: Vec<u32> = vec![5, 5, 5];
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let (actual, _) = sampler.indices(&v);
+        let (actual, _) = sampler.indices(v.len(), &v);
         let expected = vec![true; 3];
 
         assert_eq!(actual, expected);
@@ -346,12 +296,11 @@ mod tests {
     fn subsample_three_lengths_sum_equal_target_returns_three() {
         let v: Vec<u32> = vec![25, 25, 50];
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: None,
-            num_reads: None,
         };
 
-        let (actual, _) = sampler.indices(&v);
+        let (actual, _) = sampler.indices(v.len(), &v);
         let expected = vec![true; 3];
 
         assert_eq!(actual, expected);
@@ -361,12 +310,11 @@ mod tests {
     fn subsample_three_lengths_all_greater_than_target_returns_two() {
         let v: Vec<u32> = vec![500, 500, 500];
         let sampler = SubSampler {
-            target_total_bases: Some(100),
+            mode: SubsampleMode::ByBases(100),
             seed: Some(1),
-            num_reads: None,
         };
 
-        let (actual, nb_select) = sampler.indices(&v);
+        let (actual, nb_select) = sampler.indices(v.len(), &v);
         println!("{actual:?}");
 
         assert_eq!(nb_select, 1);

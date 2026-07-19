@@ -3,11 +3,11 @@ use crate::cli::{
     GenomeSize,
 };
 use crate::fastx::create_output_writer;
-use crate::source::determine_record_source;
-use crate::{Runner, SubSampler};
+use crate::source::{determine_record_source, RecordSource};
+use crate::{Runner, SubSampler, SubsampleMode};
 use anyhow::{Context, Result};
 use clap::Parser;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use niffler::compression;
 use std::io::{stdout, BufWriter};
 use std::path::{Path, PathBuf};
@@ -217,6 +217,37 @@ impl Runner for Reads {
                 .context("unable to create the first output file")?,
         };
 
+        let second_input_source = if is_paired {
+            Some(determine_record_source(&self.input[1]))
+        } else {
+            None
+        };
+
+        self.subsample(
+            input_source.as_ref(),
+            second_input_source.as_deref(),
+            &mut *output_handle,
+        )
+    }
+}
+
+impl Reads {
+    /// Runs the core subsampling orchestration against already-constructed sources and sinks.
+    ///
+    /// This is the in-process seam used by both [`Runner::run`] (which builds the first
+    /// source/sink from `self.input[0]`/`self.output`) and unit tests (which can inject a source
+    /// backed by a temp file and an in-memory `Vec<u8>` sink, without spawning the CLI as a
+    /// subprocess). The second (paired-mode) output is always file-backed - as it was before this
+    /// seam existed - so it's still constructed from `self.output[1]` here rather than injected.
+    fn subsample(
+        &self,
+        input_source: &dyn RecordSource,
+        second_input_source: Option<&dyn RecordSource>,
+        output_handle: &mut dyn std::io::Write,
+    ) -> Result<()> {
+        let is_paired = second_input_source.is_some();
+        let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
+
         let target_total_bases: Option<u64> = match (self.genome_size, self.coverage, self.bases) {
             (_, _, Some(bases)) => Some(u64::from(bases)),
             (Some(gsize), Some(cov), _) => Some(gsize * cov),
@@ -227,107 +258,122 @@ impl Runner for Reads {
             info!("Target number of bases to subsample to is: {bases}",);
         }
 
-        info!("Gathering read lengths...");
-        let mut read_lengths = input_source
-            .read_lengths()
-            .context("unable to gather read lengths for the first input file")?;
-
-        if is_paired {
-            let second_input_source = determine_record_source(&self.input[1]);
-            let expected_num_reads = read_lengths.len();
-            info!("Gathering read lengths for second input file...");
-            let mate_lengths = second_input_source
+        let (mode, total_reads, read_lengths) = if let Some(ttb) = target_total_bases {
+            info!("Gathering read lengths...");
+            let mut lengths = input_source
                 .read_lengths()
-                .context("unable to gather read lengths for the second input file")?;
+                .context("unable to gather read lengths for the first input file")?;
 
-            if mate_lengths.len() != expected_num_reads {
-                error!("First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads. The results of this subsample may not be as expected now.", expected_num_reads, read_lengths.len());
-                std::process::exit(1);
-            } else {
-                info!(
-                    "Both input files have the same number of reads ({}) 👍",
-                    expected_num_reads
-                );
-            }
-            // add the paired read lengths to the existing lengths
-            for (i, len) in mate_lengths.iter().enumerate() {
-                read_lengths[i] += len;
-            }
-        }
-        info!("{} reads detected", read_lengths.len());
+            if let Some(second_source) = second_input_source {
+                let expected_num_reads = lengths.len();
+                info!("Gathering read lengths for second input file...");
+                let mate_lengths = second_source
+                    .read_lengths()
+                    .context("unable to gather read lengths for the second input file")?;
 
-        let total_input_bases: u64 = read_lengths.iter().map(|&x| x as u64).sum();
-
-        // calculate the depth of coverage if using coverage-based subsampling
-        if let Some(size) = self.genome_size {
-            let depth_of_covg = (total_input_bases as f64) / f64::from(size);
-            info!("Input coverage is {:.2}x", depth_of_covg);
-
-            if self.strict
-                && target_total_bases.is_some()
-                && Coverage(depth_of_covg as f32) < self.coverage.unwrap()
-            {
-                return Err(anyhow::anyhow!(
-                    "Requested coverage ({:.2}x) is not possible as the actual coverage is {:.2}x",
-                    self.coverage.unwrap().0,
-                    depth_of_covg
-                ));
-            }
-        }
-
-        if let Some(req_bases) = self.bases {
-            let req_bases = u64::from(req_bases);
-            if self.strict && req_bases > total_input_bases {
-                return Err(anyhow::anyhow!(
-                    "Requested number of bases ({}) is more than the input ({})",
-                    req_bases,
-                    total_input_bases
-                ));
-            }
-        }
-
-        let num_reads = match (self.num, self.frac) {
-            (Some(n), None) => Some(u64::from(n)),
-            (None, Some(f)) => {
-                let n = ((f as f64) * (read_lengths.len() as f64)).round() as u64;
-                if n == 0 {
-                    if !self.strict {
-                        warn!(
-                            "Requested fraction of reads ({} * {}) was rounded to 0",
-                            f,
-                            read_lengths.len()
-                        );
-                    } else {
-                        return Err(anyhow::anyhow!(
-                            "Requested fraction of reads ({} * {}) was rounded to 0",
-                            f,
-                            read_lengths.len()
-                        ));
-                    }
+                check_paired_counts(expected_num_reads, mate_lengths.len())?;
+                // add the paired read lengths to the existing lengths
+                for (i, len) in mate_lengths.iter().enumerate() {
+                    lengths[i] += len;
                 }
-                Some(n)
             }
-            _ => None,
-        };
+            info!("{} reads detected", lengths.len());
 
-        if let Some(n) = num_reads {
-            if self.strict && n as usize > read_lengths.len() {
+            let total_input_bases: u64 = lengths.iter().map(|&x| x as u64).sum();
+
+            // calculate the depth of coverage if using coverage-based subsampling
+            if let Some(size) = self.genome_size {
+                let depth_of_covg = (total_input_bases as f64) / f64::from(size);
+                info!("Input coverage is {:.2}x", depth_of_covg);
+
+                if self.strict && Coverage(depth_of_covg as f32) < self.coverage.unwrap() {
+                    return Err(anyhow::anyhow!(
+                        "Requested coverage ({:.2}x) is not possible as the actual coverage is {:.2}x",
+                        self.coverage.unwrap().0,
+                        depth_of_covg
+                    ));
+                }
+            }
+
+            if let Some(req_bases) = self.bases {
+                let req_bases = u64::from(req_bases);
+                if self.strict && req_bases > total_input_bases {
+                    return Err(anyhow::anyhow!(
+                        "Requested number of bases ({}) is more than the input ({})",
+                        req_bases,
+                        total_input_bases
+                    ));
+                }
+            }
+
+            let total_reads = lengths.len();
+            (SubsampleMode::ByBases(ttb), total_reads, lengths)
+        } else {
+            // in this mode, selection only depends on the read *count* - avoid gathering the
+            // (unused) per-read lengths vector.
+            info!("Counting reads...");
+            let first_count = input_source
+                .count()
+                .context("unable to count reads in the first input file")?;
+
+            let total_reads = if let Some(second_source) = second_input_source {
+                info!("Counting reads in second input file...");
+                let second_count = second_source
+                    .count()
+                    .context("unable to count reads in the second input file")?;
+
+                check_paired_counts(first_count, second_count)?;
+                first_count
+            } else {
+                first_count
+            };
+            info!("{} reads detected", total_reads);
+
+            let n = match (self.num, self.frac) {
+                (Some(n), None) => u64::from(n),
+                (None, Some(f)) => {
+                    let n = ((f as f64) * (total_reads as f64)).round() as u64;
+                    if n == 0 {
+                        if !self.strict {
+                            warn!(
+                                "Requested fraction of reads ({} * {}) was rounded to 0",
+                                f, total_reads
+                            );
+                        } else {
+                            return Err(anyhow::anyhow!(
+                                "Requested fraction of reads ({} * {}) was rounded to 0",
+                                f,
+                                total_reads
+                            ));
+                        }
+                    }
+                    n
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Either --num or --frac must be given when not subsampling by --bases/--coverage"
+                    ));
+                }
+            };
+
+            if self.strict && n as usize > total_reads {
                 return Err(anyhow::anyhow!(
                     "Requested number of reads ({}) is more than the input ({})",
                     n,
-                    read_lengths.len()
+                    total_reads
                 ));
             }
             info!("Target number of reads to subsample to is: {}", n);
-        }
 
-        let subsampler = SubSampler {
-            target_total_bases,
-            seed: self.seed,
-            num_reads,
+            (SubsampleMode::ByReads(n), total_reads, Vec::new())
         };
 
-        let (reads_to_keep, nb_reads_to_keep) = subsampler.indices(&read_lengths);
+        let subsampler = SubSampler {
+            mode,
+            seed: self.seed,
+        };
+
+        let (reads_to_keep, nb_reads_to_keep) = subsampler.indices(total_reads, &read_lengths);
         if is_paired {
             info!("Keeping {} reads from each input", nb_reads_to_keep);
         } else {
@@ -373,14 +419,13 @@ impl Runner for Reads {
         let mut total_kept_bases = input_source.filter_reads_into(
             &reads_to_keep,
             nb_reads_to_keep,
-            &mut output_handle,
+            output_handle,
             output_format_1,
             is_fasta_1,
         )? as u64;
 
         // repeat the same process for the second input (if illumina)
-        if is_paired {
-            let second_input_source = determine_record_source(&self.input[1]);
+        if let Some(second_input_source) = second_input_source {
             let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
 
             let mut second_output_handle =
@@ -452,6 +497,25 @@ impl Runner for Reads {
     }
 }
 
+/// Checks that a paired input's two files report the same number of reads, logging a success
+/// message on match. Both "by bases" (per-file `read_lengths().len()`) and "by reads"
+/// (per-file `count()`) branches of [`Reads::subsample`] hit the same mismatch condition and
+/// want the same error/log wording.
+fn check_paired_counts(first_count: usize, second_count: usize) -> Result<()> {
+    if second_count != first_count {
+        return Err(anyhow::anyhow!(
+            "First input has {} reads, but the second has {} reads. Paired Illumina files are assumed to have the same number of reads.",
+            first_count,
+            second_count
+        ));
+    }
+    info!(
+        "Both input files have the same number of reads ({}) 👍",
+        first_count
+    );
+    Ok(())
+}
+
 fn is_fasta_path(path: &Path) -> bool {
     let mut p = path.to_path_buf();
     if let Some(ext) = p.extension().map(|e| e.to_string_lossy().to_lowercase()) {
@@ -467,9 +531,173 @@ fn is_fasta_path(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::fastx::Fastx;
     use assert_cmd::Command;
+    use std::io::Write as _;
+    use std::str::FromStr;
+    use tempfile::NamedTempFile;
 
     const SUB: &str = "reads";
+
+    /// Builds a temp FASTQ file with `n` reads, each `len` bases long, for use with the
+    /// in-process `subsample` seam (mirrors the pattern `alignment.rs` uses for its own
+    /// in-process tests, but for the reads path).
+    fn write_fastq(n: usize, len: usize) -> NamedTempFile {
+        let mut file = NamedTempFile::with_suffix(".fq").unwrap();
+        let seq = "A".repeat(len);
+        let qual = "I".repeat(len);
+        for i in 0..n {
+            writeln!(file, "@read{i}\n{seq}\n+\n{qual}").unwrap();
+        }
+        file.flush().unwrap();
+        file
+    }
+
+    fn default_reads(input: Vec<PathBuf>) -> Reads {
+        Reads {
+            input,
+            output: vec![],
+            genome_size: None,
+            coverage: None,
+            bases: None,
+            num: None,
+            frac: None,
+            strict: false,
+            seed: Some(1),
+            verbose: false,
+            compress_type: None,
+            output_format: None,
+            compress_level: None,
+        }
+    }
+
+    #[test]
+    fn frac_rounds_to_zero_without_strict_warns_and_keeps_nothing() {
+        let input = write_fastq(2, 10);
+        let source = Fastx::from_path(input.path());
+        let mut reads = default_reads(vec![input.path().to_path_buf()]);
+        reads.frac = Some(0.01); // 0.01 * 2 rounds to 0
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source, None, &mut output);
+
+        assert!(result.is_ok());
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn frac_rounds_to_zero_with_strict_returns_err() {
+        let input = write_fastq(2, 10);
+        let source = Fastx::from_path(input.path());
+        let mut reads = default_reads(vec![input.path().to_path_buf()]);
+        reads.frac = Some(0.01);
+        reads.strict = true;
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source, None, &mut output);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn num_more_than_available_with_strict_returns_err() {
+        let input = write_fastq(2, 10);
+        let source = Fastx::from_path(input.path());
+        let mut reads = default_reads(vec![input.path().to_path_buf()]);
+        reads.num = Some(GenomeSize::from_str("10").unwrap());
+        reads.strict = true;
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source, None, &mut output);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn num_more_than_available_without_strict_keeps_all() {
+        let input = write_fastq(2, 10);
+        let source = Fastx::from_path(input.path());
+        let mut reads = default_reads(vec![input.path().to_path_buf()]);
+        reads.num = Some(GenomeSize::from_str("10").unwrap());
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source, None, &mut output);
+
+        assert!(result.is_ok());
+        assert_eq!(output.iter().filter(|&&b| b == b'@').count(), 2);
+    }
+
+    #[test]
+    fn insufficient_coverage_without_strict_warns_instead_of_erroring() {
+        // 2 reads * 10 bases = 20 bases total, requesting 5000x coverage of a 1000bp genome
+        // (5,000,000 bases) is unattainable - this should warn, not error, when not strict.
+        let input = write_fastq(2, 10);
+        let source = Fastx::from_path(input.path());
+        let mut reads = default_reads(vec![input.path().to_path_buf()]);
+        reads.genome_size = Some(GenomeSize::from_str("1000").unwrap());
+        reads.coverage = Some(Coverage(5000.0));
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source, None, &mut output);
+
+        // all reads get kept (can never reach the target), but this is not an error
+        assert!(result.is_ok());
+        assert_eq!(output.iter().filter(|&&b| b == b'@').count(), 2);
+    }
+
+    #[test]
+    fn insufficient_coverage_with_strict_returns_err() {
+        let input = write_fastq(2, 10);
+        let source = Fastx::from_path(input.path());
+        let mut reads = default_reads(vec![input.path().to_path_buf()]);
+        reads.genome_size = Some(GenomeSize::from_str("1000").unwrap());
+        reads.coverage = Some(Coverage(5000.0));
+        reads.strict = true;
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source, None, &mut output);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn paired_read_count_mismatch_returns_err_instead_of_exiting() {
+        let input1 = write_fastq(3, 10);
+        let input2 = write_fastq(2, 10);
+        let source1 = Fastx::from_path(input1.path());
+        let source2 = Fastx::from_path(input2.path());
+        let mut reads = default_reads(vec![
+            input1.path().to_path_buf(),
+            input2.path().to_path_buf(),
+        ]);
+        reads.num = Some(GenomeSize::from_str("1").unwrap());
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source1, Some(&source2), &mut output);
+
+        let err = result.expect_err("mismatched paired read counts should be an error");
+        assert!(err.to_string().contains("First input has"));
+    }
+
+    #[test]
+    fn paired_read_count_mismatch_by_bases_returns_err_instead_of_exiting() {
+        let input1 = write_fastq(3, 10);
+        let input2 = write_fastq(2, 10);
+        let source1 = Fastx::from_path(input1.path());
+        let source2 = Fastx::from_path(input2.path());
+        let mut reads = default_reads(vec![
+            input1.path().to_path_buf(),
+            input2.path().to_path_buf(),
+        ]);
+        reads.bases = Some(GenomeSize::from_str("10").unwrap());
+
+        let mut output = Vec::new();
+        let result = reads.subsample(&source1, Some(&source2), &mut output);
+
+        let err = result.expect_err("mismatched paired read counts should be an error");
+        assert!(err.to_string().contains("First input has"));
+    }
 
     #[test]
     fn no_args_given_raises_error() {
