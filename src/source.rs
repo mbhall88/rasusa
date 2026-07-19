@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 
 pub trait RecordSource {
     fn read_lengths(&self) -> Result<Vec<u32>, FastxError>;
+    /// Returns the number of reads (or read templates, for paired alignment data) in the source,
+    /// without materializing their individual lengths.
+    fn count(&self) -> Result<usize, FastxError>;
     fn filter_reads_into(
         &self,
         reads_to_keep: &[bool],
@@ -92,6 +95,44 @@ impl RecordSource for AlignmentSource {
         }
 
         Ok(read_lengths)
+    }
+
+    fn count(&self) -> Result<usize, FastxError> {
+        let mut reader = noodles_util::alignment::io::reader::Builder::default()
+            .build_from_path(&self.path)
+            .map_err(|source| FastxError::AlignmentReadError { source })?;
+
+        let header = reader
+            .read_header()
+            .map_err(|source| FastxError::AlignmentReadError { source })?;
+
+        let mut count: usize = 0;
+        let mut qname_seen: HashSet<Vec<u8>> = HashSet::new();
+
+        for result in reader.records(&header) {
+            let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
+            let flags = record
+                .flags()
+                .unwrap_or(noodles::sam::alignment::record::Flags::empty());
+
+            if !flags.is_unmapped() {
+                return Err(FastxError::MappedReadDetected);
+            }
+
+            if flags.is_segmented() {
+                let name = record
+                    .name()
+                    .map(|n| (n.as_ref() as &[u8]).to_vec())
+                    .unwrap_or_default();
+                if qname_seen.insert(name) {
+                    count += 1;
+                }
+            } else {
+                count += 1;
+            }
+        }
+
+        Ok(count)
     }
 
     fn filter_reads_into(
@@ -364,6 +405,27 @@ mod tests {
         assert_eq!(actual.len(), 2);
         assert_eq!(actual[0], 20);
         assert_eq!(actual[1], 20);
+    }
+
+    #[test]
+    fn test_alignment_source_count() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("test.sam");
+        create_test_sam(&path);
+
+        let source = AlignmentSource::new(&path);
+        assert_eq!(source.count().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_alignment_source_count_paired_dedups_by_template() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("test_paired.sam");
+        create_test_paired_sam(&path);
+
+        let source = AlignmentSource::new(&path);
+        // 4 records but 2 templates (read pairs)
+        assert_eq!(source.count().unwrap(), 2);
     }
 
     #[test]

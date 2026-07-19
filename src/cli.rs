@@ -287,7 +287,10 @@ impl GenomeSize {
             let line =
                 result.map_err(|_| CliError::FaidxError(path.to_string_lossy().to_string()))?;
             let fields: Vec<&str> = line.split('\t').collect();
-            size += u64::from_str(fields[1])
+            let length_field = fields
+                .get(1)
+                .ok_or_else(|| CliError::FaidxError(path.to_string_lossy().to_string()))?;
+            size += u64::from_str(length_field)
                 .map_err(|_| CliError::FaidxError(path.to_string_lossy().to_string()))?;
         }
         Ok(GenomeSize(size))
@@ -725,6 +728,19 @@ pub(crate) mod tests {
         let expected = GenomeSize(10050);
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn genome_size_from_faidx_with_missing_length_field_errors_instead_of_panicking() {
+        use std::io::Write;
+
+        let mut file = tempfile::Builder::new().suffix(".fai").tempfile().unwrap();
+        // a faidx line with no length (2nd) field
+        file.write_all(b"chr1\n").unwrap();
+
+        let actual = GenomeSize::from_faidx(file.path());
+
+        assert!(matches!(actual, Err(CliError::FaidxError(_))));
     }
 
     #[test]
