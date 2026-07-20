@@ -72,7 +72,7 @@ jobs:
 
       - name: Install filtlong, seqtk, fastaq (bioconda)
         if: steps.guard.outputs.skip != 'true'
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: bench-tools
           create-args: -c bioconda -c conda-forge filtlong seqtk fastaq
