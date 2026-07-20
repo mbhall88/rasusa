@@ -1,18 +1,19 @@
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::BinaryHeap;
 
 use anyhow::{anyhow, Context, Result};
 use log::{info, warn};
 use rand::prelude::*;
 
 use noodles::core::{Position, Region};
-use noodles::sam::alignment::RecordBuf;
+use noodles::sam::alignment::Record;
 use noodles::sam::Header;
 use noodles_util::alignment::io::indexed_reader;
 
 use super::args::Alignment;
 use super::io::AlignmentWriter;
-use super::util::{extract_name, shuffle_records_by_position};
+use super::util::{alignment_start, extract_name, shuffle_grouped_by_position};
+use super::NameSet;
 
 impl Alignment {
     pub(super) fn run_fetch(&self) -> Result<()> {
@@ -29,7 +30,8 @@ impl Alignment {
         let is_paired = self.check_pair()?;
 
         let target_depth = self.get_target_depth(is_paired); // no memory allocation, do not need to convert into usize
-        let mut survivor_names: HashSet<Vec<u8>> = HashSet::new();
+        let mut survivor_names: NameSet =
+            NameSet::with_capacity_and_hasher(target_depth as usize, Default::default());
 
         if is_paired {
             info!("Detected Paired-End data");
@@ -58,7 +60,7 @@ impl Alignment {
         &self,
         target_depth: u32,
         paired_mode: bool,
-        survivor_names: &mut HashSet<Vec<u8>>,
+        survivor_names: &mut NameSet,
         header: &Header,
         writer: &mut AlignmentWriter,
         rng: &mut rand_pcg::Pcg64,
@@ -69,8 +71,11 @@ impl Alignment {
 
         let _ = reader.read_header()?;
 
-        // to hold batch of reads inside batch size query
-        let mut batch_cache: Vec<RecordBuf> = Vec::new();
+        // to hold batch of reads inside batch size query. Kept as the boxed record the reader
+        // already owns rather than eagerly parsed into a `RecordBuf` -- most cached reads are
+        // never selected, so paying for a full parse of every field of every read in the batch
+        // would be wasted work.
+        let mut batch_cache: Vec<Box<dyn Record>> = Vec::new();
 
         // how big of a chunk to grab at once
         let batch_size = self.batch_size as usize;
@@ -111,7 +116,7 @@ impl Alignment {
             let start_pos = next_pos;
 
             let mut n_reads_needed = target_depth;
-            let mut current_reads = HashSet::new();
+            let mut current_reads: NameSet = NameSet::default();
             let mut heap: BinaryHeap<Reverse<(usize, Vec<u8>)>> = BinaryHeap::new();
             let mut regions_below_coverage = false;
 
@@ -143,12 +148,12 @@ impl Alignment {
                     // query reads that intersect the region
                     let query = reader.query(header, &region)?;
 
-                    // put them in the cache
+                    // put them in the cache. The reader already hands back owned records, so no
+                    // conversion is needed here -- only the ones actually selected below get
+                    // written out.
                     for result in query {
                         let record = result?;
-                        // convert to owned Record, because we want shuffle these reads
-                        let recordbuf = RecordBuf::try_from_alignment_record(header, &record)?;
-                        batch_cache.push(recordbuf);
+                        batch_cache.push(record);
                     }
                 }
 
@@ -156,19 +161,21 @@ impl Alignment {
                 // similar as `reader.query(next_pos)`
 
                 // reads that overlaps at a certain position
-                let mut candidates: Vec<&RecordBuf> = Vec::new();
-                // ignore recordbuf that start after next_pos, https://doc.rust-lang.org/std/primitive.slice.html#method.partition_point
+                let mut candidates: Vec<&Box<dyn Record>> = Vec::new();
+                // ignore records that start after next_pos, https://doc.rust-lang.org/std/primitive.slice.html#method.partition_point
                 // i assume the input is sorted, because it requires the index
                 let partition_idx = batch_cache.partition_point(|r| {
-                    usize::from(r.alignment_start().unwrap_or(Position::MIN)) <= next_pos
+                    let start = alignment_start(r).unwrap_or(Position::MIN);
+                    usize::from(start) <= next_pos
                 });
 
                 for record in &batch_cache[..partition_idx] {
-                    if paired_mode && record.flags().is_last_segment() {
+                    if paired_mode && record.flags()?.is_last_segment() {
                         continue;
                     }
 
-                    let end = usize::from(record.alignment_end().unwrap_or(Position::MIN));
+                    let end =
+                        usize::from(record.alignment_end().transpose()?.unwrap_or(Position::MIN));
 
                     // just check if next_pos "inside" the reads
                     if end >= next_pos {
@@ -179,7 +186,9 @@ impl Alignment {
                 if next_pos == start_pos {
                     candidates.shuffle(rng);
                 } else {
-                    shuffle_records_by_position(&mut candidates, rng);
+                    // the batch is already sorted by position (it came straight from an indexed
+                    // query), so we only need to group-shuffle, not re-sort it first
+                    shuffle_grouped_by_position(&mut candidates, rng);
                 }
 
                 let mut num_output = 0;
@@ -197,7 +206,11 @@ impl Alignment {
                         continue;
                     }
 
-                    let end = record.alignment_end().map(usize::from).unwrap_or(next_pos);
+                    let end = record
+                        .alignment_end()
+                        .transpose()?
+                        .map(usize::from)
+                        .unwrap_or(next_pos);
 
                     current_reads.insert(qname.clone());
                     heap.push(Reverse((end, qname.clone())));

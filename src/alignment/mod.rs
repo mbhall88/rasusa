@@ -16,10 +16,15 @@ use anyhow::{Context, Result};
 use log::info;
 use noodles::sam::Header;
 use noodles_util::alignment;
+use rustc_hash::FxBuildHasher;
 
 use crate::Runner;
 use io::AlignmentWriter;
 use util::extract_name;
+
+/// Set of read (QNAME) bytes, keyed with a fast non-cryptographic hasher since these are
+/// populated/queried heavily in paired-end mate recovery and offer no adversarial-input risk.
+pub(super) type NameSet = HashSet<Vec<u8>, FxBuildHasher>;
 
 impl Runner for Alignment {
     fn run(&mut self) -> Result<()> {
@@ -63,7 +68,7 @@ impl Alignment {
     // a helper function to scan the file linearly to find mates, only relevent on paired end illumina data
     fn recover_mates(
         &self,
-        survivor_names: &mut HashSet<Vec<u8>>,
+        survivor_names: &mut NameSet,
         header: &Header,
         writer: &mut AlignmentWriter,
     ) -> Result<()> {
