@@ -36,7 +36,7 @@ rustc-hash = "2.1"
 assert_cmd = "2.2.0"
 predicates = "3.1.4"
 tempfile = "3.27.0"
-criterion = "0.7"
+criterion = "0.8"
 
 [[bench]]
 name = "subsample"
