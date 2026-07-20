@@ -1,20 +1,25 @@
-use noodles::sam::alignment::{Record, RecordBuf};
+use noodles::sam::alignment::Record;
 use rand::prelude::*;
 use rand::Rng;
 
-/// Sorts records by position and shuffles those with the same position
-pub(super) fn shuffle_records_by_position(records: &mut [&RecordBuf], rng: &mut impl Rng) {
-    // First sort by position
-    records.sort_by_key(|record| record.alignment_start());
+// treats a record with no start position the same as one whose start position failed to parse.
+// Used only from contexts (e.g. `partition_point`'s predicate) that can't propagate a `Result`;
+// callers that can propagate errors should prefer `record.alignment_start().transpose()?`.
+pub(super) fn alignment_start<R: Record>(record: &R) -> Option<noodles::core::Position> {
+    record.alignment_start().and_then(Result::ok)
+}
 
-    // Then shuffle groups with the same position
+/// Shuffles groups of records with the same position. Assumes `records` is already sorted by
+/// position (true of every caller: it's either a fresh position-sorted index query, or an
+/// already-sorted batch cache), so there's no need to pay for a redundant sort here.
+pub(super) fn shuffle_grouped_by_position<R: Record>(records: &mut [&R], rng: &mut impl Rng) {
     let mut start = 0;
     while start < records.len() {
-        let pos = records[start].alignment_start();
+        let pos = alignment_start(records[start]);
         let mut end = start + 1;
 
         // Find the end of the group with the same position
-        while end < records.len() && records[end].alignment_start() == pos {
+        while end < records.len() && alignment_start(records[end]) == pos {
             end += 1;
         }
 
@@ -42,6 +47,7 @@ pub(super) fn extract_name<R: Record>(record: &R) -> Vec<u8> {
 mod tests {
     use super::*;
     use noodles::core::Position;
+    use noodles::sam::alignment::RecordBuf;
     use rand::prelude::StdRng;
     use rand::RngExt;
 
@@ -50,7 +56,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1234);
         let mut empty_records: Vec<&RecordBuf> = vec![];
 
-        shuffle_records_by_position(&mut empty_records, &mut rng);
+        shuffle_grouped_by_position(&mut empty_records, &mut rng);
 
         assert_eq!(empty_records.len(), 0);
     }
@@ -64,7 +70,7 @@ mod tests {
         *record.alignment_start_mut() = Position::new(100);
         let mut records: Vec<&RecordBuf> = vec![&record];
 
-        shuffle_records_by_position(&mut records, &mut rng);
+        shuffle_grouped_by_position(&mut records, &mut rng);
 
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].alignment_start(), Position::new(100));
@@ -74,19 +80,19 @@ mod tests {
     fn test_shuffle_records_by_position_maintains_sort_order() {
         let mut rng = StdRng::seed_from_u64(1234);
 
-        // Create records with different positions
+        // Create records with different positions, pre-sorted (as callers guarantee)
         let mut record1 = RecordBuf::default();
-        *record1.alignment_start_mut() = Position::new(300);
+        *record1.alignment_start_mut() = Position::new(100);
         let mut record2 = RecordBuf::default();
-        *record2.alignment_start_mut() = Position::new(100);
+        *record2.alignment_start_mut() = Position::new(200);
         let mut record3 = RecordBuf::default();
-        *record3.alignment_start_mut() = Position::new(200);
+        *record3.alignment_start_mut() = Position::new(300);
 
         let mut records = vec![&record1, &record2, &record3];
 
-        shuffle_records_by_position(&mut records, &mut rng);
+        shuffle_grouped_by_position(&mut records, &mut rng);
 
-        // Should be sorted by position
+        // Should still be sorted by position (single-element groups are untouched)
         assert_eq!(records.len(), 3);
         assert_eq!(records[0].alignment_start(), Position::new(100));
         assert_eq!(records[1].alignment_start(), Position::new(200));
@@ -120,7 +126,7 @@ mod tests {
         let mut different_orders = 0;
         for _ in 0..10 {
             let mut test_records = records.clone();
-            shuffle_records_by_position(&mut test_records, &mut rng);
+            shuffle_grouped_by_position(&mut test_records, &mut rng);
 
             // All should still be at position 100
             assert!(records
@@ -148,30 +154,31 @@ mod tests {
     fn test_shuffle_records_by_position_mixed_positions() {
         let mut rng = StdRng::seed_from_u64(1234);
 
-        // Create records with mixed positions - some same, some different
+        // Create records with mixed positions - some same, some different, pre-sorted (as callers
+        // guarantee)
         let mut record1 = RecordBuf::default();
         *record1.alignment_start_mut() = Position::new(100);
         *record1.name_mut() = Some("read1_pos100".parse().unwrap());
-
-        let mut record2 = RecordBuf::default();
-        *record2.alignment_start_mut() = Position::new(200);
-        *record2.name_mut() = Some("read2_pos200".parse().unwrap());
 
         let mut record3 = RecordBuf::default();
         *record3.alignment_start_mut() = Position::new(100);
         *record3.name_mut() = Some("read3_pos100".parse().unwrap());
 
-        let mut record4 = RecordBuf::default();
-        *record4.alignment_start_mut() = Position::new(150);
-        *record4.name_mut() = Some("read4_pos150".parse().unwrap());
-
         let mut record5 = RecordBuf::default();
         *record5.alignment_start_mut() = Position::new(100);
         *record5.name_mut() = Some("read5_pos100".parse().unwrap());
 
-        let mut records = vec![&record1, &record2, &record3, &record4, &record5];
+        let mut record4 = RecordBuf::default();
+        *record4.alignment_start_mut() = Position::new(150);
+        *record4.name_mut() = Some("read4_pos150".parse().unwrap());
 
-        shuffle_records_by_position(&mut records, &mut rng);
+        let mut record2 = RecordBuf::default();
+        *record2.alignment_start_mut() = Position::new(200);
+        *record2.name_mut() = Some("read2_pos200".parse().unwrap());
+
+        let mut records = vec![&record1, &record3, &record5, &record4, &record2];
+
+        shuffle_grouped_by_position(&mut records, &mut rng);
 
         // Should be sorted by position
         let positions: Vec<Position> = records
@@ -285,7 +292,7 @@ mod tests {
         let mut new_same_order_count = 0;
         for _ in 0..20 {
             let mut test_records = records.clone();
-            shuffle_records_by_position(&mut test_records, &mut rng);
+            shuffle_grouped_by_position(&mut test_records, &mut rng);
 
             let new_order: Vec<Vec<u8>> = test_records
                 .iter()

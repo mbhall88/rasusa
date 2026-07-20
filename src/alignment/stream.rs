@@ -1,17 +1,34 @@
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::BinaryHeap;
 
 use anyhow::{Context, Result};
 use log::{info, warn};
 
-use noodles::sam::alignment::RecordBuf;
 use noodles::sam::Header;
 use noodles_util::alignment;
 use rand::Rng;
 
 use super::args::Alignment;
 use super::io::AlignmentWriter;
-use super::model::ScoredRead;
-use super::util::extract_name;
+use super::model::MappedRead;
+use super::NameSet;
+
+/// Whether an active read has fully expired at the current scan position, meaning it can leave
+/// the active heap and be written out (its end lies at or before the current start).
+fn has_expired(mapped_read: &MappedRead, current_pos: i64) -> bool {
+    mapped_read.end <= current_pos
+}
+
+/// Whether a new candidate should evict the current worst (highest-key) read in a full heap: the
+/// candidate needs a better (lower) priority key, and must lie within the allowed swap distance
+/// of the read it would replace.
+fn should_swap(
+    worst: &MappedRead,
+    candidate_key: u64,
+    candidate_pos: i64,
+    swap_distance: i64,
+) -> bool {
+    candidate_key < worst.key && candidate_pos.saturating_sub(worst.start) <= swap_distance
+}
 
 impl Alignment {
     pub(super) fn run_stream(&self) -> Result<()> {
@@ -29,7 +46,8 @@ impl Alignment {
         let is_paired = self.check_pair()?;
         let target_depth = self.get_target_depth(is_paired) as usize;
 
-        let mut survivor_names: HashSet<Vec<u8>> = HashSet::new();
+        let mut survivor_names: NameSet =
+            NameSet::with_capacity_and_hasher(target_depth, Default::default());
 
         if is_paired {
             info!("Detected Paired-End data");
@@ -58,7 +76,7 @@ impl Alignment {
         &self,
         target_depth: usize,
         paired_mode: bool,
-        survivor_names: &mut HashSet<Vec<u8>>,
+        survivor_names: &mut NameSet,
         header: &Header,
         writer: &mut AlignmentWriter,
         rng: &mut rand_pcg::Pcg64,
@@ -71,10 +89,10 @@ impl Alignment {
 
         // the active set to store reads that currently in the scan
         // using max heap, it keeps the read with the highest key (worst priority) at the top.
-        let mut active_reads: BinaryHeap<ScoredRead> = BinaryHeap::with_capacity(target_depth);
+        let mut active_reads: BinaryHeap<MappedRead> = BinaryHeap::with_capacity(target_depth);
 
         // we also pre alocated a vector here, and will be reused
-        let mut survivors: Vec<ScoredRead> = Vec::with_capacity(target_depth);
+        let mut survivors: Vec<MappedRead> = Vec::with_capacity(target_depth);
 
         let mut current_tid: Option<usize> = None;
         let mut max_observed_depth: usize = 0;
@@ -155,15 +173,13 @@ impl Alignment {
                 // we still have survived reads from the previous chromosome in the heap,
                 // we need to write them
                 if current_tid.is_some() {
-                    for scored_read in &active_reads {
+                    for mapped_read in &active_reads {
                         // before we write into the result, we need to extract the read name
                         if paired_mode {
-                            let qname: Vec<u8> = extract_name(&scored_read.record);
-
-                            survivor_names.insert(qname);
+                            survivor_names.insert(mapped_read.name.clone());
                         }
                         writer
-                            .write_record(header, &scored_read.record)
+                            .write_record(header, &mapped_read.record)
                             .context("Failed to write record")?;
                     }
                 }
@@ -184,73 +200,49 @@ impl Alignment {
             // i use drain method: https://doc.rust-lang.org/std/collections/struct.BinaryHeap.html#method.drain
             survivors.extend(active_reads.drain());
 
-            for scored_read in survivors.drain(..) {
-                // inclusive end
-                if scored_read.end <= start {
+            for mapped_read in survivors.drain(..) {
+                if has_expired(&mapped_read, start) {
                     // the reads survived!
 
                     // before we write into the result, we need to extract the read name
                     if paired_mode {
-                        let qname: Vec<u8> = extract_name(&scored_read.record);
-
-                        survivor_names.insert(qname);
+                        survivor_names.insert(mapped_read.name.clone());
                     }
                     // and we write it into the result
                     writer
-                        .write_record(header, &scored_read.record)
+                        .write_record(header, &mapped_read.record)
                         .context("Failed to write record")?;
                 } else {
                     // still active,
                     // put it back in heap
-                    active_reads.push(scored_read);
+                    active_reads.push(mapped_read);
                 }
             }
 
             // note: survivors.drain(..) automatically clears the vector items but keeps the capacity.
             // with target depth usually 50 - 100 maybe, i think this operation is not very expensive.
 
-            if active_reads.len() < target_depth {
-                // calculate the end position only once here:
-                let end = record
-                    .alignment_end()
-                    .transpose()?
-                    .map(|e| usize::from(e) as i64)
-                    .unwrap_or(pos);
+            // calculate the end position only once here, regardless of whether the read is accepted:
+            let end = record
+                .alignment_end()
+                .transpose()?
+                .map(|e| usize::from(e) as i64)
+                .unwrap_or(pos);
 
-                // we convert to Recordbuf here before we want to push it to the heap
-                let record = RecordBuf::try_from_alignment_record(header, &record)?;
-                let new_read = ScoredRead::new(record, key, end);
+            if active_reads.len() < target_depth {
+                // the record is already owned (boxed by the reader), so no extra parsing is
+                // needed before it enters the heap
+                let new_read = MappedRead::new(record, key, start, end);
 
                 // if the heap has records fewer than N reads, just accept it.
                 active_reads.push(new_read);
             } else {
                 // if the heap is full, we only consider the new read if it has a better (lower) key
-                // than the current worst read in the haep
+                // than the current worst read in the heap, and lies within the swap distance
                 if let Some(mut worst) = active_reads.peek_mut() {
-                    // does the new record has better key?
-                    if key < worst.key {
-                        // calculate the distance between these two reads
-                        let worst_start = worst.record.alignment_start();
-                        let worst_pos = worst_start.map(|p| usize::from(p) as i64 - 1).unwrap_or(0);
-
-                        let distance = pos.saturating_sub(worst_pos);
-
-                        // are we allowed to swap these two reads given a specified swap distance?
-                        if distance <= self.swap_distance {
-                            // we swap the records
-                            // calculate the end position only once here:
-                            let end = record
-                                .alignment_end()
-                                .transpose()?
-                                .map(|e| usize::from(e) as i64)
-                                .unwrap_or(pos);
-
-                            // we convert to Recordbuf here before we want to swap it to the heap
-                            let record = RecordBuf::try_from_alignment_record(header, &record)?;
-                            let new_read = ScoredRead::new(record, key, end);
-                            // we swap the records
-                            *worst = new_read;
-                        }
+                    if should_swap(&worst, key, pos, self.swap_distance) {
+                        let new_read = MappedRead::new(record, key, start, end);
+                        *worst = new_read;
                     }
                 }
             }
@@ -267,15 +259,13 @@ impl Alignment {
 
         // any remaining read in the heap survive
         // write into the subsampled result.
-        for scored_read in active_reads {
+        for mapped_read in active_reads {
             // before we write into the result, we need to extract the read name
             if paired_mode {
-                let qname: Vec<u8> = extract_name(&scored_read.record);
-
-                survivor_names.insert(qname);
+                survivor_names.insert(mapped_read.name.clone());
             }
             writer
-                .write_record(header, &scored_read.record)
+                .write_record(header, &mapped_read.record)
                 .context("Failed to write record")?;
         }
 
@@ -287,9 +277,58 @@ impl Alignment {
 mod tests {
     use super::super::args::SubsamplingStrategy;
     use super::*;
+    use noodles::sam::alignment::{Record, RecordBuf};
     use noodles_util::alignment::io::Format;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
+
+    fn mapped_read(key: u64, start: i64, end: i64) -> MappedRead {
+        let record: Box<dyn Record> = Box::new(RecordBuf::default());
+        MappedRead::new(record, key, start, end)
+    }
+
+    #[test]
+    fn test_has_expired_when_end_before_current_pos() {
+        let read = mapped_read(1, 0, 100);
+        assert!(has_expired(&read, 150));
+    }
+
+    #[test]
+    fn test_has_expired_when_end_equals_current_pos() {
+        // end is inclusive, so a read ending exactly at the scan position has expired
+        let read = mapped_read(1, 0, 100);
+        assert!(has_expired(&read, 100));
+    }
+
+    #[test]
+    fn test_not_expired_when_end_after_current_pos() {
+        let read = mapped_read(1, 0, 100);
+        assert!(!has_expired(&read, 99));
+    }
+
+    #[test]
+    fn test_should_swap_with_better_key_within_distance() {
+        let worst = mapped_read(50, 10, 100);
+        assert!(should_swap(&worst, 5, 12, 5));
+    }
+
+    #[test]
+    fn test_should_not_swap_with_worse_key() {
+        let worst = mapped_read(5, 10, 100);
+        assert!(!should_swap(&worst, 50, 12, 5));
+    }
+
+    #[test]
+    fn test_should_not_swap_beyond_swap_distance() {
+        let worst = mapped_read(50, 10, 100);
+        assert!(!should_swap(&worst, 5, 20, 5));
+    }
+
+    #[test]
+    fn test_should_swap_at_exact_swap_distance_boundary() {
+        let worst = mapped_read(50, 10, 100);
+        assert!(should_swap(&worst, 5, 15, 5));
+    }
 
     #[test]
     fn test_output_never_exceeds_target_depth() {
