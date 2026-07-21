@@ -1,0 +1,69 @@
+on:
+  pull_request:
+    branches: [ main ]
+
+name: Benchmark PR
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  bench-compare:
+    name: Compare wall time / peak RSS vs main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+            ${{ runner.os }}-cargo-
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: hyperfine
+
+      - name: Install GNU time (peak RSS measurement)
+        run: sudo apt-get update && sudo apt-get install -y time
+
+      # This is a non-blocking, informational check: `bench.sh compare` exits non-zero
+      # when a scenario regresses past its threshold, but `continue-on-error` keeps that
+      # from failing the PR - see benches/README.md for why this is intentionally
+      # advisory rather than a hard gate.
+      - name: Compare current branch against main
+        id: bench
+        continue-on-error: true
+        run: benches/bench.sh compare origin/main | tee bench-compare.txt
+
+      - name: Add comparison to job summary
+        if: always()
+        env:
+          README_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/benches/README.md
+        run: |
+          {
+            echo "### Benchmark comparison vs \`origin/main\`"
+            echo
+            echo "Wall time / peak RSS, ratio = head / base. Informational only - see [benches/README.md]($README_URL)."
+            echo
+            echo '```'
+            cat bench-compare.txt 2>/dev/null || echo "(no output captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
