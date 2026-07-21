@@ -4,9 +4,11 @@ Two independent things live here:
 
 1. **`bench.sh`** - an internal A/B regression harness. Compares two git refs (or the
    current working tree) on wall time and peak RSS, for a fixed set of scenarios. Run it
-   locally to prove a change didn't regress performance before opening a PR. (No CI job
-   runs this automatically yet - `compare origin/main` is intended to be wired into a
-   non-blocking PR check in future, but that workflow doesn't exist yet.)
+   locally to prove a change didn't regress performance before opening a PR. It also runs
+   automatically on every PR via `.github/workflows/benchmark-pr.yaml`
+   (`compare origin/main`), which posts the comparison table to the job summary. That
+   check is intentionally non-blocking (advisory only) - a noisy shared CI runner isn't a
+   reliable enough signal to gate merges on.
 2. **`update_readme.sh`** - regenerates the tool-comparison tables in the top-level
    `README.md` (`rasusa` vs `filtlong`/`seqtk`). This downloads real public datasets and
    is run from a release-triggered GitHub Actions workflow
