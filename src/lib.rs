@@ -7,6 +7,7 @@ use anyhow::Result;
 pub mod alignment;
 pub mod cli;
 pub mod fastx;
+pub mod format;
 pub mod reads;
 pub mod source;
 pub mod subsampler;

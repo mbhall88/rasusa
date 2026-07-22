@@ -7,8 +7,7 @@ mod stream;
 mod util;
 
 pub use args::{Alignment, SubsamplingStrategy};
-pub use header::make_program_id_unique;
-pub use io::{infer_format_from_char, infer_format_from_path};
+pub use header::{make_program_id_unique, program_entry};
 
 use std::collections::HashSet;
 

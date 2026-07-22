@@ -418,24 +418,6 @@ impl Mul<GenomeSize> for Coverage {
     }
 }
 
-pub trait CompressionExt {
-    fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self;
-}
-
-impl CompressionExt for niffler::compression::Format {
-    /// Attempts to infer the compression type from the file extension. If the extension is not
-    /// known, then Uncompressed is returned.
-    fn from_path<S: AsRef<OsStr> + ?Sized>(p: &S) -> Self {
-        let path = Path::new(p);
-        match path.extension().map(|s| s.to_str()) {
-            Some(Some("gz")) => Self::Gzip,
-            Some(Some("bz") | Some("bz2")) => Self::Bzip,
-            Some(Some("lzma")) => Self::Lzma,
-            _ => Self::No,
-        }
-    }
-}
-
 pub(crate) fn parse_compression_format(s: &str) -> Result<niffler::compression::Format, CliError> {
     match s {
         "b" | "B" => Ok(niffler::Format::Bzip),
@@ -925,28 +907,5 @@ pub(crate) mod tests {
         assert!(parse_level("f").is_err());
         assert!(parse_level("5.5").is_err());
         assert!(parse_level("-3").is_err());
-    }
-
-    #[test]
-    fn compression_format_from_path() {
-        assert_eq!(niffler::Format::from_path("foo.gz"), niffler::Format::Gzip);
-        assert_eq!(
-            niffler::Format::from_path(Path::new("foo.gz")),
-            niffler::Format::Gzip
-        );
-        assert_eq!(niffler::Format::from_path("baz"), niffler::Format::No);
-        assert_eq!(niffler::Format::from_path("baz.fq"), niffler::Format::No);
-        assert_eq!(
-            niffler::Format::from_path("baz.fq.bz2"),
-            niffler::Format::Bzip
-        );
-        assert_eq!(
-            niffler::Format::from_path("baz.fq.bz"),
-            niffler::Format::Bzip
-        );
-        assert_eq!(
-            niffler::Format::from_path("baz.fq.lzma"),
-            niffler::Format::Lzma
-        );
     }
 }
