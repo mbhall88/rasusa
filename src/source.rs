@@ -1,9 +1,9 @@
-use crate::alignment::make_program_id_unique;
+use crate::alignment::program_entry;
 use crate::fastx::{Fastx, FastxError};
+use crate::format::OutputEncoding;
 use anyhow::Result;
-use noodles::sam::header::record::value::map::{program::tag, Program};
-use noodles::sam::header::record::value::Map;
-use noodles_util::alignment::io::Format;
+use noodles::sam::alignment::record::Flags;
+use noodles::sam::alignment::Record;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -18,8 +18,7 @@ pub trait RecordSource {
         reads_to_keep: &[bool],
         nb_reads_keep: usize,
         write_to: &mut dyn Write,
-        output_format: Option<Format>,
-        is_fasta: bool,
+        encoding: OutputEncoding,
     ) -> Result<usize, FastxError>;
 }
 
@@ -33,23 +32,41 @@ impl AlignmentSource {
             path: path.to_path_buf(),
         }
     }
+}
 
-    fn program_entry(&self, header: &noodles::sam::Header) -> (String, Map<Program>) {
-        let (program_id, previous_pgid) = make_program_id_unique(header, "rasusa");
+/// Assigns a stable per-template index to alignment records, coalescing segmented (paired)
+/// records that share a QNAME onto the same index the way SAM template grouping expects.
+/// Indices are handed out sequentially (`0, 1, 2, ...`) in first-seen order, so `next_idx` at any
+/// point also equals the number of distinct templates seen so far.
+///
+/// Every alignment-format scan in this module (`read_lengths`, `count`, `filter_reads_into`)
+/// needs exactly this grouping, so it's centralised here rather than reimplemented per scan.
+#[derive(Default)]
+struct TemplateIndexer {
+    next_idx: usize,
+    qname_to_idx: HashMap<Vec<u8>, usize>,
+}
 
-        let mut record = Map::<Program>::builder();
-        record = record.insert(tag::NAME, "rasusa");
-        record = record.insert(tag::VERSION, env!("CARGO_PKG_VERSION"));
+impl TemplateIndexer {
+    fn index_for(&mut self, record: &dyn Record, flags: Flags) -> usize {
+        if !flags.is_segmented() {
+            let idx = self.next_idx;
+            self.next_idx += 1;
+            return idx;
+        }
 
-        let cl = std::env::args().collect::<Vec<String>>().join(" ");
-        record = record.insert(tag::COMMAND_LINE, cl);
+        let name = record
+            .name()
+            .map(|n| (n.as_ref() as &[u8]).to_vec())
+            .unwrap_or_default();
 
-        if let Some(pp) = previous_pgid {
-            record = record.insert(tag::PREVIOUS_PROGRAM_ID, pp);
-        };
-
-        let program = record.build().expect("Failed to build program record");
-        (program_id.into_owned(), program)
+        if let Some(&idx) = self.qname_to_idx.get(&name) {
+            return idx;
+        }
+        let idx = self.next_idx;
+        self.next_idx += 1;
+        self.qname_to_idx.insert(name, idx);
+        idx
     }
 }
 
@@ -64,7 +81,7 @@ impl RecordSource for AlignmentSource {
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let mut read_lengths: Vec<u32> = vec![];
-        let mut qname_to_idx: HashMap<Vec<u8>, usize> = HashMap::new();
+        let mut indexer = TemplateIndexer::default();
 
         for result in reader.records(&header) {
             let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
@@ -77,20 +94,11 @@ impl RecordSource for AlignmentSource {
             }
 
             let rlen = record.sequence().len() as u32;
-
-            if flags.is_segmented() {
-                let name = record
-                    .name()
-                    .map(|n| (n.as_ref() as &[u8]).to_vec())
-                    .unwrap_or_default();
-                if let Some(&idx) = qname_to_idx.get(&name) {
-                    read_lengths[idx] += rlen;
-                } else {
-                    qname_to_idx.insert(name, read_lengths.len());
-                    read_lengths.push(rlen);
-                }
-            } else {
+            let idx = indexer.index_for(&*record, flags);
+            if idx == read_lengths.len() {
                 read_lengths.push(rlen);
+            } else {
+                read_lengths[idx] += rlen;
             }
         }
 
@@ -106,8 +114,7 @@ impl RecordSource for AlignmentSource {
             .read_header()
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-        let mut count: usize = 0;
-        let mut qname_seen: HashSet<Vec<u8>> = HashSet::new();
+        let mut indexer = TemplateIndexer::default();
 
         for result in reader.records(&header) {
             let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
@@ -119,20 +126,12 @@ impl RecordSource for AlignmentSource {
                 return Err(FastxError::MappedReadDetected);
             }
 
-            if flags.is_segmented() {
-                let name = record
-                    .name()
-                    .map(|n| (n.as_ref() as &[u8]).to_vec())
-                    .unwrap_or_default();
-                if qname_seen.insert(name) {
-                    count += 1;
-                }
-            } else {
-                count += 1;
-            }
+            indexer.index_for(&*record, flags);
         }
 
-        Ok(count)
+        // indices are assigned sequentially in first-seen order, so the number of templates seen
+        // equals the count of indices handed out.
+        Ok(indexer.next_idx)
     }
 
     fn filter_reads_into(
@@ -140,8 +139,7 @@ impl RecordSource for AlignmentSource {
         reads_to_keep: &[bool],
         nb_reads_keep: usize,
         write_to: &mut dyn Write,
-        output_format: Option<Format>,
-        is_fasta: bool,
+        encoding: OutputEncoding,
     ) -> Result<usize, FastxError> {
         let mut reader = noodles_util::alignment::io::reader::Builder::default()
             .build_from_path(&self.path)
@@ -151,16 +149,15 @@ impl RecordSource for AlignmentSource {
             .read_header()
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
-        let mut read_idx: usize = 0;
         let mut total_len = 0;
         let mut written_templates: HashSet<usize> = HashSet::new();
-        let mut qname_to_idx: HashMap<Vec<u8>, usize> = HashMap::new();
+        let mut indexer = TemplateIndexer::default();
 
         // If the output format is an alignment format (SAM/BAM/CRAM), we write alignment records
-        if let Some(format) = output_format {
+        if let OutputEncoding::Alignment(format) = encoding {
             {
                 // add rasusa program command line to header
-                let (pg_id, pg_map) = self.program_entry(&header);
+                let (pg_id, pg_map) = program_entry(&header);
                 header.programs_mut().as_mut().insert(pg_id.into(), pg_map);
 
                 let mut writer = noodles_util::alignment::io::writer::Builder::default()
@@ -178,25 +175,7 @@ impl RecordSource for AlignmentSource {
                     let flags = record
                         .flags()
                         .unwrap_or(noodles::sam::alignment::record::Flags::empty());
-
-                    let current_idx = if flags.is_segmented() {
-                        let name = record
-                            .name()
-                            .map(|n| (n.as_ref() as &[u8]).to_vec())
-                            .unwrap_or_default();
-                        if let Some(&idx) = qname_to_idx.get(&name) {
-                            idx
-                        } else {
-                            let idx = read_idx;
-                            qname_to_idx.insert(name, idx);
-                            read_idx += 1;
-                            idx
-                        }
-                    } else {
-                        let idx = read_idx;
-                        read_idx += 1;
-                        idx
-                    };
+                    let current_idx = indexer.index_for(&*record, flags);
 
                     if current_idx < reads_to_keep.len() && reads_to_keep[current_idx] {
                         total_len += record.sequence().len();
@@ -214,31 +193,14 @@ impl RecordSource for AlignmentSource {
                 source: anyhow::Error::from(source),
             })?;
         } else {
+            let is_fasta = matches!(encoding, OutputEncoding::Fastx { fasta: true });
             // Otherwise, we output as FASTQ (or FASTA)
             for result in reader.records(&header) {
                 let record = result.map_err(|source| FastxError::AlignmentReadError { source })?;
                 let flags = record
                     .flags()
                     .unwrap_or(noodles::sam::alignment::record::Flags::empty());
-
-                let current_idx = if flags.is_segmented() {
-                    let name = record
-                        .name()
-                        .map(|n| (n.as_ref() as &[u8]).to_vec())
-                        .unwrap_or_default();
-                    if let Some(&idx) = qname_to_idx.get(&name) {
-                        idx
-                    } else {
-                        let idx = read_idx;
-                        qname_to_idx.insert(name, idx);
-                        read_idx += 1;
-                        idx
-                    }
-                } else {
-                    let idx = read_idx;
-                    read_idx += 1;
-                    idx
-                };
+                let current_idx = indexer.index_for(&*record, flags);
 
                 if current_idx < reads_to_keep.len() && reads_to_keep[current_idx] {
                     total_len += record.sequence().len();
@@ -443,8 +405,7 @@ mod tests {
             &reads_to_keep,
             nb_reads_keep,
             &mut buffer,
-            Some(Format::Bam),
-            false,
+            OutputEncoding::Alignment(Format::Bam),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
@@ -474,8 +435,12 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
 
-        let result =
-            source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, true);
+        let result = source.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_keep,
+            &mut buffer,
+            OutputEncoding::Fastx { fasta: true },
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -496,8 +461,12 @@ mod tests {
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
 
-        let result =
-            source.filter_reads_into(&reads_to_keep, nb_reads_keep, &mut buffer, None, false);
+        let result = source.filter_reads_into(
+            &reads_to_keep,
+            nb_reads_keep,
+            &mut buffer,
+            OutputEncoding::Fastx { fasta: false },
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
 
@@ -525,8 +494,7 @@ mod tests {
             &reads_to_keep,
             nb_reads_keep,
             &mut buffer,
-            Some(Format::Sam),
-            false,
+            OutputEncoding::Alignment(Format::Sam),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 20);
@@ -557,7 +525,12 @@ mod tests {
             let source = AlignmentSource::new(&sam_path);
             let mut bam_file = File::create(&bam_path).unwrap();
             source
-                .filter_reads_into(&[true, true], 2, &mut bam_file, Some(Format::Bam), false)
+                .filter_reads_into(
+                    &[true, true],
+                    2,
+                    &mut bam_file,
+                    OutputEncoding::Alignment(Format::Bam),
+                )
                 .unwrap();
         }
 
@@ -570,8 +543,7 @@ mod tests {
             &reads_to_keep,
             nb_reads_keep,
             &mut buffer,
-            Some(Format::Sam),
-            false,
+            OutputEncoding::Alignment(Format::Sam),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);

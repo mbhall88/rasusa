@@ -3,14 +3,17 @@ use crate::cli::{
     GenomeSize,
 };
 use crate::fastx::create_output_writer;
+use crate::format::{
+    default_compression_level, infer_format_from_path, is_fasta_output, output_alignment_format,
+    OutputEncoding,
+};
 use crate::source::{determine_record_source, RecordSource};
 use crate::{Runner, SubSampler, SubsampleMode};
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, info, warn};
-use niffler::compression;
 use std::io::{stdout, BufWriter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -157,33 +160,18 @@ impl Runner for Reads {
         }
 
         let input_source = determine_record_source(&self.input[0]);
-        let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
+        let input_format = infer_format_from_path(&self.input[0]);
 
         let check_conversion = |in_fmt: Option<noodles_util::alignment::io::Format>,
                                 out_path: Option<&std::path::PathBuf>|
          -> Result<()> {
             if in_fmt.is_none() {
-                let has_alignment_output = match &self.output_format {
-                    Some(crate::cli::OutputFormat::Sam)
-                    | Some(crate::cli::OutputFormat::Bam)
-                    | Some(crate::cli::OutputFormat::Cram) => true,
-                    _ => out_path
-                        .map(|p| crate::alignment::infer_format_from_path(p).is_some())
-                        .unwrap_or(false),
-                };
+                let explicit_out_fmt = output_alignment_format(self.output_format.as_ref());
+                let inferred_out_fmt = out_path.and_then(|p| infer_format_from_path(p));
+                let has_alignment_output = explicit_out_fmt.is_some() || inferred_out_fmt.is_some();
+
                 if has_alignment_output {
-                    let out_fmt = match &self.output_format {
-                        Some(crate::cli::OutputFormat::Sam) => {
-                            noodles_util::alignment::io::Format::Sam
-                        }
-                        Some(crate::cli::OutputFormat::Bam) => {
-                            noodles_util::alignment::io::Format::Bam
-                        }
-                        Some(crate::cli::OutputFormat::Cram) => {
-                            noodles_util::alignment::io::Format::Cram
-                        }
-                        _ => crate::alignment::infer_format_from_path(out_path.unwrap()).unwrap(),
-                    };
+                    let out_fmt = explicit_out_fmt.or(inferred_out_fmt).unwrap();
                     return Err(anyhow::anyhow!(
                         "Conversion from FASTA/FASTQ to {:?} is not supported. Please use FASTA/FASTQ output for FASTA/FASTQ input.",
                         out_fmt
@@ -195,7 +183,7 @@ impl Runner for Reads {
 
         check_conversion(input_format, self.output.first())?;
         if is_paired {
-            let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
+            let second_input_format = infer_format_from_path(&self.input[1]);
             check_conversion(second_input_format, self.output.get(1))?;
         }
 
@@ -203,13 +191,7 @@ impl Runner for Reads {
             0 => match self.compress_type {
                 None => Box::new(BufWriter::new(stdout().lock())) as Box<dyn std::io::Write>,
                 Some(fmt) => {
-                    let lvl = match fmt {
-                        compression::Format::Gzip => compression::Level::Six,
-                        compression::Format::Bzip => compression::Level::Nine,
-                        compression::Format::Lzma => compression::Level::Six,
-                        compression::Format::Zstd => compression::Level::Three,
-                        _ => compression::Level::Zero,
-                    };
+                    let lvl = default_compression_level(fmt);
                     niffler::basic::get_writer(Box::new(BufWriter::new(stdout().lock())), fmt, lvl)?
                 }
             },
@@ -246,7 +228,7 @@ impl Reads {
         output_handle: &mut dyn std::io::Write,
     ) -> Result<()> {
         let is_paired = second_input_source.is_some();
-        let input_format = crate::alignment::infer_format_from_path(&self.input[0]);
+        let input_format = infer_format_from_path(&self.input[0]);
 
         let target_total_bases: Option<u64> = match (self.genome_size, self.coverage, self.bases) {
             (_, _, Some(bases)) => Some(u64::from(bases)),
@@ -390,28 +372,24 @@ impl Reads {
             );
         }
 
-        let output_format_1 = match &self.output_format {
-            Some(crate::cli::OutputFormat::Sam) => Some(noodles_util::alignment::io::Format::Sam),
-            Some(crate::cli::OutputFormat::Bam) => Some(noodles_util::alignment::io::Format::Bam),
-            Some(crate::cli::OutputFormat::Cram) => Some(noodles_util::alignment::io::Format::Cram),
-            Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => None,
-            None => {
-                if self.output.is_empty() {
-                    input_format
-                } else {
-                    crate::alignment::infer_format_from_path(&self.output[0])
-                }
+        let output_format_1 = output_alignment_format(self.output_format.as_ref()).or_else(|| {
+            if self.output.is_empty() {
+                input_format
+            } else {
+                infer_format_from_path(&self.output[0])
             }
-        };
+        });
 
-        let is_fasta_1 = match self.output_format {
-            Some(crate::cli::OutputFormat::Fasta) => true,
-            Some(crate::cli::OutputFormat::Fastq) => false,
-            _ => {
-                if self.output.is_empty() {
-                    is_fasta_path(&self.input[0])
+        let encoding_1 = match output_format_1 {
+            Some(fmt) => OutputEncoding::Alignment(fmt),
+            None => {
+                let fallback_path = if self.output.is_empty() {
+                    &self.input[0]
                 } else {
-                    is_fasta_path(&self.output[0])
+                    &self.output[0]
+                };
+                OutputEncoding::Fastx {
+                    fasta: is_fasta_output(self.output_format.as_ref(), fallback_path),
                 }
             }
         };
@@ -420,48 +398,36 @@ impl Reads {
             &reads_to_keep,
             nb_reads_to_keep,
             output_handle,
-            output_format_1,
-            is_fasta_1,
+            encoding_1,
         )? as u64;
 
         // repeat the same process for the second input (if illumina)
         if let Some(second_input_source) = second_input_source {
-            let second_input_format = crate::alignment::infer_format_from_path(&self.input[1]);
+            let second_input_format = infer_format_from_path(&self.input[1]);
 
             let mut second_output_handle =
                 create_output_writer(&self.output[1], self.compress_level, self.compress_type)
                     .context("unable to create the second output file")?;
 
-            let output_format_2 = match &self.output_format {
-                Some(crate::cli::OutputFormat::Sam) => {
-                    Some(noodles_util::alignment::io::Format::Sam)
-                }
-                Some(crate::cli::OutputFormat::Bam) => {
-                    Some(noodles_util::alignment::io::Format::Bam)
-                }
-                Some(crate::cli::OutputFormat::Cram) => {
-                    Some(noodles_util::alignment::io::Format::Cram)
-                }
-                Some(crate::cli::OutputFormat::Fasta) | Some(crate::cli::OutputFormat::Fastq) => {
-                    None
-                }
-                None => {
+            let output_format_2 =
+                output_alignment_format(self.output_format.as_ref()).or_else(|| {
                     if self.output.len() < 2 {
                         second_input_format
                     } else {
-                        crate::alignment::infer_format_from_path(&self.output[1])
+                        infer_format_from_path(&self.output[1])
                     }
-                }
-            };
+                });
 
-            let is_fasta_2 = match self.output_format {
-                Some(crate::cli::OutputFormat::Fasta) => true,
-                Some(crate::cli::OutputFormat::Fastq) => false,
-                _ => {
-                    if self.output.len() < 2 {
-                        is_fasta_path(&self.input[1])
+            let encoding_2 = match output_format_2 {
+                Some(fmt) => OutputEncoding::Alignment(fmt),
+                None => {
+                    let fallback_path = if self.output.len() < 2 {
+                        &self.input[1]
                     } else {
-                        is_fasta_path(&self.output[1])
+                        &self.output[1]
+                    };
+                    OutputEncoding::Fastx {
+                        fasta: is_fasta_output(self.output_format.as_ref(), fallback_path),
                     }
                 }
             };
@@ -470,8 +436,7 @@ impl Reads {
                 &reads_to_keep,
                 nb_reads_to_keep,
                 &mut second_output_handle,
-                output_format_2,
-                is_fasta_2,
+                encoding_2,
             )? as u64;
         }
 
@@ -514,19 +479,6 @@ fn check_paired_counts(first_count: usize, second_count: usize) -> Result<()> {
         first_count
     );
     Ok(())
-}
-
-fn is_fasta_path(path: &Path) -> bool {
-    let mut p = path.to_path_buf();
-    if let Some(ext) = p.extension().map(|e| e.to_string_lossy().to_lowercase()) {
-        if ["gz", "bz2", "xz", "zst", "bz"].contains(&ext.as_str()) {
-            p = p.with_extension("");
-        }
-    }
-    if let Some(ext) = p.extension().map(|e| e.to_string_lossy().to_lowercase()) {
-        return ext == "fasta" || ext == "fa";
-    }
-    false
 }
 
 #[cfg(test)]

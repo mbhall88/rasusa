@@ -1,7 +1,6 @@
-use crate::cli::CompressionExt;
+use crate::format::OutputEncoding;
 use crate::source::RecordSource;
 use needletail::errors::ParseErrorKind::EmptyFile;
-use niffler::compression;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -177,9 +176,18 @@ impl RecordSource for Fastx {
         reads_to_keep: &[bool],
         nb_reads_keep: usize,
         write_to: &mut dyn Write,
-        _output_format: Option<noodles_util::alignment::io::Format>,
-        is_fasta: bool,
+        encoding: OutputEncoding,
     ) -> Result<usize, FastxError> {
+        // Callers never ask a FASTA/Q source for alignment-format output (`Reads::run` rejects
+        // that combination before any `RecordSource` is touched), so this is the only branch
+        // this impl needs to handle.
+        let is_fasta = match encoding {
+            OutputEncoding::Fastx { fasta } => fasta,
+            OutputEncoding::Alignment(_) => {
+                unreachable!("fastx sources never receive alignment output encoding")
+            }
+        };
+
         let mut total_len = 0;
 
         let (reader, _) = niffler::send::from_path(&self.path)?;
@@ -256,14 +264,9 @@ pub fn create_output_writer(
 ) -> Result<Box<dyn Write>, FastxError> {
     let file = File::create(path).map_err(|source| FastxError::CreateError { source })?;
     let file_handle = Box::new(BufWriter::new(file));
-    let fmt = compression_fmt.unwrap_or_else(|| niffler::Format::from_path(path));
-    let compression_lvl = compression_lvl.unwrap_or(match fmt {
-        compression::Format::Gzip => compression::Level::Six,
-        compression::Format::Bzip => compression::Level::Nine,
-        compression::Format::Lzma => compression::Level::Six,
-        compression::Format::Zstd => compression::Level::Three,
-        _ => compression::Level::Zero,
-    });
+    let fmt = compression_fmt.unwrap_or_else(|| crate::format::infer_compression_format(path));
+    let compression_lvl =
+        compression_lvl.unwrap_or_else(|| crate::format::default_compression_level(fmt));
     niffler::get_writer(file_handle, fmt, compression_lvl).map_err(FastxError::CompressOutputError)
 }
 
@@ -371,7 +374,12 @@ mod tests {
         let reads_to_keep: Vec<bool> = vec![false];
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-        let filter_result = fastx.filter_reads_into(&reads_to_keep, 0, &mut out_fh, None, false);
+        let filter_result = fastx.filter_reads_into(
+            &reads_to_keep,
+            0,
+            &mut out_fh,
+            OutputEncoding::Fastx { fasta: false },
+        );
 
         assert!(filter_result.is_ok());
 
@@ -392,8 +400,12 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result =
-                fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
+            let filter_result = fastx.filter_reads_into(
+                &reads_to_keep,
+                1,
+                &mut out_fh,
+                OutputEncoding::Fastx { fasta: false },
+            );
             assert!(filter_result.is_ok());
         }
 
@@ -413,7 +425,12 @@ mod tests {
         let output = Builder::new().suffix(".fa").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, true);
+            let filter_result = fastx.filter_reads_into(
+                &reads_to_keep,
+                1,
+                &mut out_fh,
+                OutputEncoding::Fastx { fasta: true },
+            );
             assert!(filter_result.is_ok());
         }
 
@@ -433,8 +450,12 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result =
-                fastx.filter_reads_into(&reads_to_keep, 1, &mut out_fh, None, false);
+            let filter_result = fastx.filter_reads_into(
+                &reads_to_keep,
+                1,
+                &mut out_fh,
+                OutputEncoding::Fastx { fasta: false },
+            );
             assert!(filter_result.is_ok());
         }
 
@@ -454,8 +475,12 @@ mod tests {
         let output = Builder::new().suffix(".fastq").tempfile().unwrap();
         {
             let mut out_fh = create_output_writer(output.path(), None, None).unwrap();
-            let filter_result =
-                fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
+            let filter_result = fastx.filter_reads_into(
+                &reads_to_keep,
+                2,
+                &mut out_fh,
+                OutputEncoding::Fastx { fasta: false },
+            );
             assert!(filter_result.is_ok());
         }
 
@@ -476,7 +501,12 @@ mod tests {
         {
             let mut out_fh =
                 create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
-            let filter_result = fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, true);
+            let filter_result = fastx.filter_reads_into(
+                &reads_to_keep,
+                2,
+                &mut out_fh,
+                OutputEncoding::Fastx { fasta: true },
+            );
             assert!(filter_result.is_err());
         }
 
@@ -497,8 +527,12 @@ mod tests {
         {
             let mut out_fh =
                 create_output_writer(output.path(), Some(niffler::Level::Four), None).unwrap();
-            let filter_result =
-                fastx.filter_reads_into(&reads_to_keep, 2, &mut out_fh, None, false);
+            let filter_result = fastx.filter_reads_into(
+                &reads_to_keep,
+                2,
+                &mut out_fh,
+                OutputEncoding::Fastx { fasta: false },
+            );
             assert!(filter_result.is_err());
         }
 

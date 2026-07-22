@@ -6,33 +6,31 @@ use noodles::sam::header::record::value::{
 };
 use noodles::sam::Header;
 
-use super::args::Alignment;
-
 const RASUSA: &str = "rasusa";
 
-impl Alignment {
-    /// Generates a rasusa program entry from a SAM header
-    pub fn program_entry(&self, header: &Header) -> (String, Map<Program>) {
-        let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
+/// Generates a rasusa program entry from a SAM header. Shared by every code path that writes an
+/// alignment header (the `aln` subcommand and `reads`' [`crate::source::AlignmentSource`]), so
+/// the program-record shape only lives in one place.
+pub fn program_entry(header: &Header) -> (String, Map<Program>) {
+    let (program_id, previous_pgid) = make_program_id_unique(header, RASUSA);
 
-        // Creates a SAM header record map value
-        let mut record = Map::<Program>::builder();
+    // Creates a SAM header record map value
+    let mut record = Map::<Program>::builder();
 
-        record = record.insert(tag::NAME, RASUSA);
-        record = record.insert(tag::VERSION, env!("CARGO_PKG_VERSION"));
+    record = record.insert(tag::NAME, RASUSA);
+    record = record.insert(tag::VERSION, env!("CARGO_PKG_VERSION"));
 
-        let cl = std::env::args().collect::<Vec<String>>().join(" ");
-        record = record.insert(tag::COMMAND_LINE, cl);
+    let cl = std::env::args().collect::<Vec<String>>().join(" ");
+    record = record.insert(tag::COMMAND_LINE, cl);
 
-        // Link to previous program
-        if let Some(pp) = previous_pgid {
-            record = record.insert(tag::PREVIOUS_PROGRAM_ID, pp);
-        };
+    // Link to previous program
+    if let Some(pp) = previous_pgid {
+        record = record.insert(tag::PREVIOUS_PROGRAM_ID, pp);
+    };
 
-        let program = record.build().expect("Failed to build program record");
+    let program = record.build().expect("Failed to build program record");
 
-        (program_id.into_owned(), program)
-    }
+    (program_id.into_owned(), program)
 }
 
 /// Makes a program ID unique by looking for existing program records with the same ID and adding

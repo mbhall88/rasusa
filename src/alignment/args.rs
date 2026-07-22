@@ -4,8 +4,7 @@ use clap::{Parser, ValueEnum};
 use noodles_util::alignment::io::Format;
 
 use crate::cli::check_path_exists;
-
-use super::io::infer_format_from_char;
+use crate::format::infer_format_from_char;
 
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum SubsamplingStrategy {
