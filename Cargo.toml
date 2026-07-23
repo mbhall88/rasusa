@@ -29,7 +29,7 @@ niffler = "2.5"
 env_logger = "0.11.9"
 noodles-util = { version = "0.78.0", features = ["alignment"] }
 noodles = { version = "0.109.0", features = ["bam", "cram", "core", "sam"] }
-noodles-bgzf = { version = "0.46.0", features = ["libdeflate"] }
+noodles-bgzf = { version = "0.48.0", features = ["libdeflate"] }
 rustc-hash = "2.1"
 
 [dev-dependencies]
