@@ -10,13 +10,14 @@ pub use args::{Alignment, SubsamplingStrategy};
 pub use header::{make_program_id_unique, program_entry};
 
 use std::collections::HashSet;
+use std::num::NonZeroUsize;
 
 use anyhow::{Context, Result};
 use log::info;
 use noodles::sam::Header;
-use noodles_util::alignment;
 use rustc_hash::FxBuildHasher;
 
+use crate::threading::build_alignment_reader;
 use crate::Runner;
 use io::AlignmentWriter;
 use util::extract_name;
@@ -37,10 +38,9 @@ impl Runner for Alignment {
 impl Alignment {
     // a function which infers data type (paired and or single end) by looking at the first 10 records
     fn check_pair(&self) -> Result<bool> {
-        // set up reader
-        let mut reader = alignment::io::reader::Builder::default()
-            .build_from_path(&self.aln)
-            .context("Failed to read alignment file")?;
+        // set up reader. Only the first 10 records are read below, so multithreaded BGZF
+        // decoding would pay worker-pool spin-up costs for no benefit - always use 1 thread here.
+        let mut reader = build_alignment_reader(&self.aln, NonZeroUsize::new(1).unwrap())?;
 
         let header = reader.read_header()?;
 
@@ -72,9 +72,7 @@ impl Alignment {
         writer: &mut AlignmentWriter,
     ) -> Result<()> {
         info!("Recovering mates (last segment records)");
-        let mut reader = alignment::io::reader::Builder::default()
-            .build_from_path(&self.aln)
-            .context("Failed to read alignment file")?;
+        let mut reader = build_alignment_reader(&self.aln, self.threads)?;
 
         let _ = reader.read_header()?; // skip header
 
@@ -102,6 +100,7 @@ impl Alignment {
 mod tests {
     use super::*;
     use assert_cmd::Command;
+    use noodles_util::alignment;
     use noodles_util::alignment::io::Format;
     use std::path::{Path, PathBuf};
     use tempfile::NamedTempFile;
@@ -223,6 +222,17 @@ mod tests {
         seed: Option<u64>,
         strategy: SubsamplingStrategy,
     ) -> Vec<String> {
+        run_aln_get_reads_result_with_threads(input, seed, strategy, NonZeroUsize::new(1).unwrap())
+    }
+
+    // as above, but with a configurable thread count - used to check that `--threads` doesn't
+    // change which records get selected, only how the BAM is (de)compressed.
+    fn run_aln_get_reads_result_with_threads(
+        input: &Path,
+        seed: Option<u64>,
+        strategy: SubsamplingStrategy,
+        threads: NonZeroUsize,
+    ) -> Vec<String> {
         let target_depth = 3;
         let out = NamedTempFile::new().unwrap();
 
@@ -236,6 +246,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100,
             batch_size: 10_000,
+            threads,
         };
 
         aln1.run().expect("Subsampling failed");
@@ -266,6 +277,32 @@ mod tests {
         // comapre the length and the read names
         assert_eq!(names1.len(), names2.len(), "Different read count");
         assert_eq!(names1, names2, "Different reads selected")
+    }
+
+    #[test]
+    fn threads_4_and_threads_1_yield_identical_decoded_records_stream() {
+        let input_path = Path::new("tests/cases/test.bam");
+        let seed = Some(2109);
+
+        let mut names1 = run_aln_get_reads_result_with_threads(
+            input_path,
+            seed,
+            SubsamplingStrategy::Stream,
+            NonZeroUsize::new(1).unwrap(),
+        );
+        let mut names4 = run_aln_get_reads_result_with_threads(
+            input_path,
+            seed,
+            SubsamplingStrategy::Stream,
+            NonZeroUsize::new(4).unwrap(),
+        );
+
+        // compare the sorted read set, not raw bytes - multithreaded BGZF reframes blocks
+        // differently, so the compressed bytes legitimately differ even though the decoded
+        // records don't.
+        names1.sort();
+        names4.sort();
+        assert_eq!(names1, names4);
     }
 
     #[test]
@@ -321,6 +358,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100, // not used
             batch_size: 10_000,
+            threads: NonZeroUsize::new(1).unwrap(),
         };
         assert!(aln.run().is_err());
     }
@@ -340,6 +378,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100, // not used
             batch_size: 10_000,
+            threads: NonZeroUsize::new(1).unwrap(),
         };
         assert!(aln.run().is_err());
     }
@@ -362,6 +401,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100,
             batch_size: 1000,
+            threads: NonZeroUsize::new(1).unwrap(),
         };
 
         align.run().expect("Subsampling failed");
@@ -412,6 +452,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100,
             batch_size: 10000,
+            threads: NonZeroUsize::new(1).unwrap(),
         };
 
         align.run().expect("Subsampling failed");

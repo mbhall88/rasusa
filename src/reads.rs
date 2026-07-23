@@ -13,6 +13,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, info, warn};
 use std::io::{stdout, BufWriter};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -118,6 +119,15 @@ pub struct Reads {
     /// not specified.
     #[clap(short = 'l', long, value_parser = parse_level, value_name = "1-21")]
     pub compress_level: Option<niffler::Level>,
+
+    /// Number of threads to use for BAM (de)compression
+    ///
+    /// Only relevant for BAM input/output - SAM is uncompressed and CRAM has no multithreaded
+    /// codec, so this is a no-op for those formats and for FASTA/FASTQ. `--threads 1` is
+    /// identical to not passing this option. Only BAM *reading* benefits here; writing BAM
+    /// output remains single-threaded.
+    #[arg(short = '@', long = "threads", default_value_t = NonZeroUsize::new(1).unwrap(), value_name = "INT")]
+    pub threads: NonZeroUsize,
 }
 
 impl Reads {
@@ -159,7 +169,7 @@ impl Runner for Reads {
             info!("Two input files given. Assuming paired Illumina...")
         }
 
-        let input_source = determine_record_source(&self.input[0]);
+        let input_source = determine_record_source(&self.input[0], self.threads);
         let input_format = infer_format_from_path(&self.input[0]);
 
         let check_conversion = |in_fmt: Option<noodles_util::alignment::io::Format>,
@@ -200,7 +210,7 @@ impl Runner for Reads {
         };
 
         let second_input_source = if is_paired {
-            Some(determine_record_source(&self.input[1]))
+            Some(determine_record_source(&self.input[1], self.threads))
         } else {
             None
         };
@@ -521,6 +531,7 @@ mod tests {
             compress_type: None,
             output_format: None,
             compress_level: None,
+            threads: NonZeroUsize::new(1).unwrap(),
         }
     }
 

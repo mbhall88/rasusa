@@ -16,9 +16,6 @@ exclude = ["tests/cases/*"]
 [badges]
 maintenance = { status = "actively-developed" }
 
-[package.metadata.cargo-shear]
-ignored = ["noodles-bgzf"] # it is used by noodles to handle decompression, but not used in the code
-
 [dependencies]
 clap = { version = "4.5.60", features = ["derive"] }
 regex = "1.12.3"

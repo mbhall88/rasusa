@@ -4,8 +4,9 @@ use anyhow::{Context, Result};
 use log::{info, warn};
 
 use noodles::sam::Header;
-use noodles_util::alignment;
 use rand::Rng;
+
+use crate::threading::build_alignment_reader;
 
 use super::args::Alignment;
 use super::io::AlignmentWriter;
@@ -34,9 +35,7 @@ impl Alignment {
     pub(super) fn run_stream(&self) -> Result<()> {
         info!("Subsampling alignment file (Stream): {:?}", self.aln);
 
-        let mut reader = alignment::io::reader::Builder::default()
-            .build_from_path(&self.aln)
-            .context("Failed to read alignment file")?;
+        let mut reader = build_alignment_reader(&self.aln, self.threads)?;
 
         let header = reader.read_header()?;
 
@@ -82,9 +81,7 @@ impl Alignment {
         rng: &mut rand_pcg::Pcg64,
     ) -> Result<()> {
         // set up reader
-        let mut reader = alignment::io::reader::Builder::default()
-            .build_from_path(&self.aln)
-            .context("Failed to read alignment file")?;
+        let mut reader = build_alignment_reader(&self.aln, self.threads)?;
         let _ = reader.read_header()?; // skip header
 
         // the active set to store reads that currently in the scan
@@ -278,7 +275,9 @@ mod tests {
     use super::super::args::SubsamplingStrategy;
     use super::*;
     use noodles::sam::alignment::{Record, RecordBuf};
+    use noodles_util::alignment;
     use noodles_util::alignment::io::Format;
+    use std::num::NonZeroUsize;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
 
@@ -348,6 +347,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100, // it is not used
             batch_size: 10_000,
+            threads: NonZeroUsize::new(1).unwrap(),
         };
 
         // run the sweep line algorithm
@@ -431,6 +431,7 @@ mod tests {
             swap_distance: 5,
             step_size: 100, // not used
             batch_size: 10_000,
+            threads: NonZeroUsize::new(1).unwrap(),
         };
         align.run_stream().expect("Subsampling failed");
 
