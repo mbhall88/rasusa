@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
@@ -70,4 +71,11 @@ pub struct Alignment {
     /// The minimum value is 1,000 bp to avoid small region queries.
     #[arg(long, default_value_t = 10_000, value_name = "INT", value_parser = clap::value_parser!(u64).range(1000..))]
     pub batch_size: u64,
+
+    /// Number of threads to use for BAM (de)compression
+    ///
+    /// Only BAM benefits from this - SAM is uncompressed and CRAM has no multithreaded codec, so
+    /// this is a no-op for those formats. `--threads 1` is identical to not passing this option.
+    #[arg(short = '@', long = "threads", default_value_t = NonZeroUsize::new(1).unwrap(), value_name = "INT")]
+    pub threads: NonZeroUsize,
 }

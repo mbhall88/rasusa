@@ -11,6 +11,7 @@ pub mod format;
 pub mod reads;
 pub mod source;
 pub mod subsampler;
+pub mod threading;
 
 pub use crate::cli::Cli;
 pub use crate::fastx::Fastx;

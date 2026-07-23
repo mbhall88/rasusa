@@ -1,11 +1,13 @@
 use crate::alignment::program_entry;
 use crate::fastx::{Fastx, FastxError};
 use crate::format::OutputEncoding;
+use crate::threading::build_alignment_reader;
 use anyhow::Result;
 use noodles::sam::alignment::record::Flags;
 use noodles::sam::alignment::Record;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 pub trait RecordSource {
@@ -24,12 +26,14 @@ pub trait RecordSource {
 
 pub struct AlignmentSource {
     path: PathBuf,
+    threads: NonZeroUsize,
 }
 
 impl AlignmentSource {
-    pub fn new(path: &Path) -> Self {
+    pub fn new(path: &Path, threads: NonZeroUsize) -> Self {
         Self {
             path: path.to_path_buf(),
+            threads,
         }
     }
 }
@@ -72,8 +76,7 @@ impl TemplateIndexer {
 
 impl RecordSource for AlignmentSource {
     fn read_lengths(&self) -> Result<Vec<u32>, FastxError> {
-        let mut reader = noodles_util::alignment::io::reader::Builder::default()
-            .build_from_path(&self.path)
+        let mut reader = build_alignment_reader(&self.path, self.threads)
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let header = reader
@@ -106,8 +109,7 @@ impl RecordSource for AlignmentSource {
     }
 
     fn count(&self) -> Result<usize, FastxError> {
-        let mut reader = noodles_util::alignment::io::reader::Builder::default()
-            .build_from_path(&self.path)
+        let mut reader = build_alignment_reader(&self.path, self.threads)
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let header = reader
@@ -141,8 +143,7 @@ impl RecordSource for AlignmentSource {
         write_to: &mut dyn Write,
         encoding: OutputEncoding,
     ) -> Result<usize, FastxError> {
-        let mut reader = noodles_util::alignment::io::reader::Builder::default()
-            .build_from_path(&self.path)
+        let mut reader = build_alignment_reader(&self.path, self.threads)
             .map_err(|source| FastxError::AlignmentReadError { source })?;
 
         let mut header = reader
@@ -160,6 +161,11 @@ impl RecordSource for AlignmentSource {
                 let (pg_id, pg_map) = program_entry(&header);
                 header.programs_mut().as_mut().insert(pg_id.into(), pg_map);
 
+                // `write_to` is a borrowed `&mut dyn Write`, not an owned `Send` sink, so it can't
+                // be wrapped in the multithreaded BGZF encoder from `crate::threading` (that
+                // needs to own the writer for its background compression threads). BAM output
+                // written through `reads` is therefore always single-threaded; `--threads` only
+                // speeds up BAM *reading* here.
                 let mut writer = noodles_util::alignment::io::writer::Builder::default()
                     .set_format(format)
                     .build_from_writer(&mut *write_to)
@@ -293,9 +299,9 @@ impl RecordSource for AlignmentSource {
     }
 }
 
-pub fn determine_record_source(path: &Path) -> Box<dyn RecordSource> {
+pub fn determine_record_source(path: &Path, threads: NonZeroUsize) -> Box<dyn RecordSource> {
     match path.extension().and_then(|ext| ext.to_str()) {
-        Some("sam") | Some("bam") | Some("cram") => Box::new(AlignmentSource::new(path)),
+        Some("sam") | Some("bam") | Some("cram") => Box::new(AlignmentSource::new(path, threads)),
         _ => Box::new(Fastx::from_path(path)),
     }
 }
@@ -339,7 +345,7 @@ mod tests {
     #[test]
     fn test_determine_record_source_alignment() {
         let path = Path::new("test.bam");
-        let _source = determine_record_source(path);
+        let _source = determine_record_source(path, NonZeroUsize::new(1).unwrap());
     }
 
     #[test]
@@ -348,7 +354,7 @@ mod tests {
         let path = temp_dir.path().join("test.sam");
         create_test_sam(&path);
 
-        let source = AlignmentSource::new(&path);
+        let source = AlignmentSource::new(&path, NonZeroUsize::new(1).unwrap());
         let actual = source.read_lengths().unwrap();
         assert_eq!(actual.len(), 2);
         assert_eq!(actual[0], 10);
@@ -361,7 +367,7 @@ mod tests {
         let path = temp_dir.path().join("test_paired.sam");
         create_test_paired_sam(&path);
 
-        let source = AlignmentSource::new(&path);
+        let source = AlignmentSource::new(&path, NonZeroUsize::new(1).unwrap());
         let actual = source.read_lengths().unwrap();
         // 2 templates, each length 10 + 10 = 20.
         assert_eq!(actual.len(), 2);
@@ -375,7 +381,7 @@ mod tests {
         let path = temp_dir.path().join("test.sam");
         create_test_sam(&path);
 
-        let source = AlignmentSource::new(&path);
+        let source = AlignmentSource::new(&path, NonZeroUsize::new(1).unwrap());
         assert_eq!(source.count().unwrap(), 2);
     }
 
@@ -385,7 +391,7 @@ mod tests {
         let path = temp_dir.path().join("test_paired.sam");
         create_test_paired_sam(&path);
 
-        let source = AlignmentSource::new(&path);
+        let source = AlignmentSource::new(&path, NonZeroUsize::new(1).unwrap());
         // 4 records but 2 templates (read pairs)
         assert_eq!(source.count().unwrap(), 2);
     }
@@ -396,7 +402,7 @@ mod tests {
         let input_path = temp_dir.path().join("test.sam");
         create_test_sam(&input_path);
 
-        let source = AlignmentSource::new(&input_path);
+        let source = AlignmentSource::new(&input_path, NonZeroUsize::new(1).unwrap());
         let reads_to_keep = vec![true, false];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
@@ -430,7 +436,7 @@ mod tests {
         let input_path = temp_dir.path().join("test.sam");
         create_test_sam(&input_path);
 
-        let source = AlignmentSource::new(&input_path);
+        let source = AlignmentSource::new(&input_path, NonZeroUsize::new(1).unwrap());
         let reads_to_keep = vec![false, true];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
@@ -456,7 +462,7 @@ mod tests {
         let input_path = temp_dir.path().join("test_qual.sam");
         create_test_sam_with_quality(&input_path);
 
-        let source = AlignmentSource::new(&input_path);
+        let source = AlignmentSource::new(&input_path, NonZeroUsize::new(1).unwrap());
         let reads_to_keep = vec![false, true];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
@@ -484,7 +490,7 @@ mod tests {
         let input_path = temp_dir.path().join("test_paired.sam");
         create_test_paired_sam(&input_path);
 
-        let source = AlignmentSource::new(&input_path);
+        let source = AlignmentSource::new(&input_path, NonZeroUsize::new(1).unwrap());
         // 2 templates. Keep first.
         let reads_to_keep = vec![true, false];
         let nb_reads_keep = 1;
@@ -522,7 +528,7 @@ mod tests {
         // Convert SAM to BAM first
         let bam_path = temp_dir.path().join("input.bam");
         {
-            let source = AlignmentSource::new(&sam_path);
+            let source = AlignmentSource::new(&sam_path, NonZeroUsize::new(1).unwrap());
             let mut bam_file = File::create(&bam_path).unwrap();
             source
                 .filter_reads_into(
@@ -534,7 +540,7 @@ mod tests {
                 .unwrap();
         }
 
-        let source = AlignmentSource::new(&bam_path);
+        let source = AlignmentSource::new(&bam_path, NonZeroUsize::new(1).unwrap());
         let reads_to_keep = vec![false, true];
         let nb_reads_keep = 1;
         let mut buffer = Vec::new();
