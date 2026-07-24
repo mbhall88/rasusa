@@ -1,7 +1,7 @@
 [package]
 name = "rasusa"
 description = "Randomly subsample reads or alignments"
-version = "5.0.0"
+version = "5.0.1"
 authors = ["Michael Hall <michael@mbh.sh>"]
 edition = "2018"
 repository = "https://github.com/mbhall88/rasusa"
