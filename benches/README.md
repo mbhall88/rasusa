@@ -74,33 +74,50 @@ called automatically by `bench.sh run`/`compare` and caches its output
 BENCH_READS=1000000 benches/gen_fixtures.sh   # default: 1,000,000 single-end reads
 ```
 
+It also generates a separate, larger single-end fixture (`data/reads_sparse.fq`,
+default 10,000,000 reads) for the `reads-num-sparse` scenario - see below for why that
+needs its own fixture. Since that scenario only cares about record count/I-O, not
+sequence content, it's built from one repeated template read rather than the per-base
+PRNG above, which keeps generation fast at that scale.
+
 Alignment scenarios use the small, already-committed BAM fixtures under
 `tests/cases/` (`test.bam`, `test.paired.bam`) rather than generated data.
 
 ### Scenarios
 
-| Scenario         | Command                                                         |
-|-------------------|------------------------------------------------------------------|
-| `reads-num`       | `reads` on generated single-end FASTQ, `-n <count>`               |
-| `reads-frac`      | `reads` on generated single-end FASTQ, `-f 0.25`                  |
-| `reads-coverage`  | `reads` on generated single-end FASTQ, `-c 30 -g <genome size>`   |
-| `reads-paired`    | `reads` on generated paired-end FASTQ, `-n <count>`                |
-| `aln-stream`      | `aln` on `tests/cases/test.bam`, `--strategy stream`               |
-| `aln-fetch`       | `aln` on `tests/cases/test.bam`, `--strategy fetch`                 |
-| `aln-paired`      | `aln` on `tests/cases/test.paired.bam` (paired-end alignment)       |
+| Scenario           | Command                                                           |
+|---------------------|--------------------------------------------------------------------|
+| `reads-num`         | `reads` on generated single-end FASTQ, `-n <count>`                 |
+| `reads-frac`        | `reads` on generated single-end FASTQ, `-f 0.25`                    |
+| `reads-coverage`    | `reads` on generated single-end FASTQ, `-c 30 -g <genome size>`     |
+| `reads-paired`      | `reads` on generated paired-end FASTQ, `-n <count>`                  |
+| `reads-num-sparse`  | `reads` on a larger generated single-end FASTQ, `-n <small count>`   |
+| `aln-stream`        | `aln` on `tests/cases/test.bam`, `--strategy stream`                 |
+| `aln-fetch`         | `aln` on `tests/cases/test.bam`, `--strategy fetch`                   |
+| `aln-paired`        | `aln` on `tests/cases/test.paired.bam` (paired-end alignment)         |
+
+`reads-num-sparse` exists specifically to exercise `SubsampleMode::ByReads`'s `O(k)`
+selection (`rand::seq::index::sample`, see the S10 PR) in the regime it targets: a much
+larger read count (`BENCH_SPARSE_READS`, default 10M) with a tiny, fixed number kept
+(`BENCH_SPARSE_K`, default 1000). The other `reads-*` scenarios use `BENCH_READS`
+(default 1M) with `k` a sizeable fraction of `n` (25-50%) - realistic for everyday use,
+but too small/too high a keep-fraction for the `O(n)` vs `O(k)` difference to be
+visible against I/O noise.
 
 All scenarios use a fixed `--seed 42` (or `142857` internally for paired fixture
 generation) so results are reproducible run-to-run modulo real timing/memory noise.
 
 ### Env vars
 
-| Var                     | Default   | Meaning                                      |
-|--------------------------|-----------|-----------------------------------------------|
-| `BENCH_READS`            | `1000000` | Reads generated for the `reads-*` scenarios   |
-| `BENCH_WARMUP`           | `3`       | Warmup runs before measurement                |
-| `BENCH_RUNS`             | `10`      | Measured runs                                 |
-| `BENCH_WALL_THRESHOLD`   | `1.15`    | `compare` fails if wall-time ratio exceeds this |
-| `BENCH_RSS_THRESHOLD`    | `1.15`    | `compare` fails if peak-RSS ratio exceeds this  |
+| Var                     | Default    | Meaning                                       |
+|--------------------------|------------|-------------------------------------------------|
+| `BENCH_READS`            | `1000000`  | Reads generated for the `reads-*` scenarios     |
+| `BENCH_SPARSE_READS`     | `10000000` | Reads generated for `reads-num-sparse`          |
+| `BENCH_SPARSE_K`         | `1000`     | Reads kept (`-n`) in `reads-num-sparse`         |
+| `BENCH_WARMUP`           | `3`        | Warmup runs before measurement                  |
+| `BENCH_RUNS`             | `10`       | Measured runs                                   |
+| `BENCH_WALL_THRESHOLD`   | `1.15`     | `compare` fails if wall-time ratio exceeds this |
+| `BENCH_RSS_THRESHOLD`    | `1.15`     | `compare` fails if peak-RSS ratio exceeds this  |
 
 ### Result JSON schema
 
