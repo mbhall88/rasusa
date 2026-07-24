@@ -766,6 +766,36 @@ So, `rasusa reads` is faster than `seqtk` but doesn't require a fixed number of 
 allowing you to avoid doing maths to determine how many reads you need to downsample to
 a specific coverage. 🤓
 
+### v4.1.0 → v5.0.0 runtime/memory improvements
+
+<!-- INTERNAL-BENCH:START -->
+> [!NOTE]
+> This block is hand-written, not auto-regenerated - see [`benches/README.md`](benches/README.md)
+> if you want to reproduce these numbers yourself with `benches/bench.sh compare 4.1.0 5.0.0`.
+
+Between v4.1.0 and v5.0.0, `rasusa` went through a runtime/memory optimisation pass
+(tracked in [#170](https://github.com/mbhall88/rasusa/issues/170)). The internal
+benchmark harness (`benches/bench.sh`, distinct from the `filtlong`/`seqtk` comparisons
+above) shows the gains per scenario, comparing `bench.sh run` on the `4.1.0` and `5.0.0`
+tags:
+
+| Scenario                                    | Wall time |    Peak RSS | Notes                                            |
+|----------------------------------------------|----------:|------------:|---------------------------------------------------|
+| `reads` `--num`/`--frac` (1M reads, keep 25%) |     ~-8%  |   ~-31/-34% | O(k) selection ([#180](https://github.com/mbhall88/rasusa/issues/180)) |
+| `reads` `--num` (10M reads, keep 1,000)       |     ~-8%  |       ~-74% | same change, extreme n≫k case (54 MB → 14 MB)      |
+| `reads` paired `--num`                        |     ~-7%  |       ~-25% | O(k) selection applies to paired mode too         |
+| `reads` `--coverage`/`--bases`                |     ~-8%  |    unchanged | selection algorithm here is deliberately untouched |
+| `aln` (stream/fetch/paired)                   |  ~-16/-21% |      mixed  | from other S1-S9 work (buffered I/O, lighter alignment domain types); RSS deltas here are within measurement noise on these tiny test fixtures |
+
+The standout is `--num`/`--frac`'s peak memory: selection used to shuffle a full
+`n`-length index vector regardless of how few reads were being kept, so memory scaled
+with input size, not output size. It now scales with `k` (reads kept) instead - the
+gap widens the larger the input gets relative to what you're keeping, which is exactly
+the "downsample a huge run to a small target set" use case this tool exists for. See
+[PR #199](https://github.com/mbhall88/rasusa/pull/199) for the full investigation and a
+scaling chart across input sizes.
+<!-- INTERNAL-BENCH:END -->
+
 ## Contributing
 
 If you would like to help improve `rasusa` you are very welcome!
