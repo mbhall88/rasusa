@@ -31,6 +31,7 @@ noodles-util = { version = "0.81.0", features = ["alignment"] }
 noodles = { version = "0.112.0", features = ["bam", "cram", "core", "sam"] }
 noodles-bgzf = { version = "0.48.0", features = ["libdeflate"] }
 rustc-hash = "2.1"
+rayon = "1.10"
 
 [dev-dependencies]
 assert_cmd = "2.2.0"
