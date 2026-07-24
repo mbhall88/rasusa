@@ -8,6 +8,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -53,7 +57,7 @@ jobs:
         continue-on-error: true
         run: benches/bench.sh compare origin/main | tee bench-compare.txt
 
-      - name: Add comparison to job summary
+      - name: Render comparison markdown
         if: always()
         env:
           README_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/benches/README.md
@@ -66,4 +70,11 @@ jobs:
             echo '```'
             cat bench-compare.txt 2>/dev/null || echo "(no output captured)"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee bench-comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post comparison as PR comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmark-comparison
+          path: bench-comment.md
