@@ -10,11 +10,30 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::path::Path;
+use std::sync::Once;
 
 use noodles_bgzf as bgzf;
 use noodles_util::alignment::{self, io::Format};
 
 use crate::format::infer_format_from_path;
+
+/// `noodles_bgzf`'s multithreaded reader/writer now pull workers from rayon's global thread
+/// pool instead of taking a worker count directly, and that pool can only be built once per
+/// process - so this is called (at most once, via `Once`) right before the first multithreaded
+/// reader/writer is constructed, sized to that first caller's `threads`. In the `rasusa` binary
+/// there's a single `--threads` value for the whole run, so this is exact; in tests, where
+/// multiple thread counts are exercised in one process, later calls just run on a pool sized by
+/// whichever call happened to initialize it first - harmless, since pool size only affects
+/// parallelism, not decode/encode correctness.
+static INIT_THREAD_POOL: Once = Once::new();
+
+fn ensure_global_thread_pool(threads: NonZeroUsize) {
+    INIT_THREAD_POOL.call_once(|| {
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads.get())
+            .build_global();
+    });
+}
 
 pub type AlignmentReader = alignment::io::Reader<Box<dyn Read>>;
 pub type AlignmentWriter = alignment::io::Writer<Box<dyn Write + Send>>;
@@ -49,7 +68,8 @@ pub fn build_alignment_reader(path: &Path, threads: NonZeroUsize) -> io::Result<
         && looks_bgzf_compressed(&mut file)?;
 
     if use_multithreaded_bam {
-        let decoder = bgzf::io::MultithreadedReader::with_worker_count(threads, file);
+        ensure_global_thread_pool(threads);
+        let decoder = bgzf::io::MultithreadedReader::new(file);
         alignment::io::reader::Builder::default()
             .set_format(Format::Bam)
             .set_compression_method(None) // already decompressed by `decoder`
@@ -67,7 +87,8 @@ pub fn build_alignment_writer(
     threads: NonZeroUsize,
 ) -> io::Result<AlignmentWriter> {
     if threads.get() > 1 && format == Format::Bam {
-        let encoder = bgzf::io::MultithreadedWriter::with_worker_count(threads, sink);
+        ensure_global_thread_pool(threads);
+        let encoder = bgzf::io::MultithreadedWriter::new(sink);
         alignment::io::writer::Builder::default()
             .set_format(Format::Bam)
             .set_compression_method(None) // already compressed by `encoder`
