@@ -8,6 +8,7 @@ pre_bump_hooks = [
 [commit_types]
 bench = { changelog_title = "Benchmarks", omit_from_changelog = false }
 chore = { changelog_title = "Chores", omit_from_changelog = false }
+deps = { changelog_title = "Dependencies", omit_from_changelog = false }
 feat = { changelog_title = "Features", omit_from_changelog = false }
 fix = { changelog_title = "Bug Fixes", omit_from_changelog = false }
 perf = { changelog_title = "Performance Improvements", omit_from_changelog = false }
