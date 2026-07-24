@@ -70,12 +70,12 @@ jobs:
         with:
           tool: hyperfine
 
-      - name: Install filtlong, seqtk, pyfastaq (bioconda)
+      - name: Install filtlong, seqtk (bioconda)
         if: steps.guard.outputs.skip != 'true'
         uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: bench-tools
-          create-args: -c bioconda -c conda-forge filtlong seqtk pyfastaq
+          create-args: -c bioconda -c conda-forge filtlong seqtk
           init-shell: bash
 
       - name: Regenerate README benchmark tables

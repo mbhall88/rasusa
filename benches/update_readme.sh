@@ -6,9 +6,11 @@
 # them under data/download-cache/ (override with BENCH_DOWNLOAD_CACHE). Intended to run
 # from .github/workflows/benchmark.yaml on release; not routine local use.
 #
-# Requires on PATH: hyperfine, filtlong, seqtk, fastaq, wget, python3, cargo (unless
-# RASUSA_BIN is set to a prebuilt binary). filtlong/seqtk/fastaq are available via
-# bioconda: `conda install -c bioconda filtlong seqtk fastaq`.
+# Requires on PATH: hyperfine, filtlong, seqtk, wget, python3, cargo (unless
+# RASUSA_BIN is set to a prebuilt binary). filtlong/seqtk are available via bioconda:
+# `conda install -c bioconda filtlong seqtk`. The paired-end dataset is interleaved -
+# deinterleaving it is a one-off data-prep step, done with a plain awk split below
+# rather than pulling in a tool dependency for it (see the comment at that step for why).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,7 +30,6 @@ require() {
 require hyperfine
 require filtlong
 require seqtk
-require fastaq
 require wget
 require python3
 
@@ -75,7 +76,14 @@ R2_FQ="$CACHE_DIR/r2.fq"
 if [[ ! -f "$R1_FQ" || ! -f "$R2_FQ" ]]; then
     echo "[update_readme] downloading paired-end dataset..." >&2
     URL="ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR648/008/SRR6488968/SRR6488968.fastq.gz"
-    wget -q "$URL" -O - | gzip -d -c - | fastaq deinterleave - "$R1_FQ" "$R2_FQ"
+    # Deinterleave (alternating 4-line R1/R2 records) with awk rather than a tool
+    # dependency (e.g. pyfastaq's `fastaq deinterleave`) - this is a one-off data-prep
+    # step, not part of what's being benchmarked, so it doesn't need to match any
+    # particular tool's implementation.
+    wget -q "$URL" -O - | gzip -d -c - | awk -v r1="$R1_FQ" -v r2="$R2_FQ" '{
+        if (((NR - 1) % 8) < 4) print > r1
+        else print > r2
+    }'
 else
     echo "[update_readme] using cached $R1_FQ / $R2_FQ" >&2
 fi
