@@ -20,6 +20,17 @@ def _load_results(json_path):
         return json.load(f)["results"]
 
 
+# Matches the rasusa invocation specifically (executable named "rasusa" followed by a
+# subcommand), not just any command whose *arguments* happen to contain the substring
+# "rasusa" - which they always do in CI, since the repo (and so the checkout path,
+# e.g. /home/runner/work/rasusa/rasusa/...) is named "rasusa" too.
+_RASUSA_CMD_RE = re.compile(r"(?:^|/)rasusa (reads|aln)\b")
+
+
+def _is_rasusa_cmd(command):
+    return _RASUSA_CMD_RE.search(command) is not None
+
+
 def _read_table(md_path):
     with open(md_path) as f:
         return f.read().rstrip("\n")
@@ -28,7 +39,7 @@ def _read_table(md_path):
 def cmd_single_block(args):
     md_path, json_path = args
     results = _load_results(json_path)
-    rasusa = next(r for r in results if "rasusa" in r["command"])
+    rasusa = next(r for r in results if _is_rasusa_cmd(r["command"]))
     other = next(r for r in results if r is not rasusa)
 
     table = _read_table(md_path)
@@ -41,7 +52,7 @@ def cmd_single_block(args):
 def cmd_paired_block(args):
     md_path, json_path = args
     results = _load_results(json_path)
-    rasusa = next(r for r in results if "rasusa" in r["command"])
+    rasusa = next(r for r in results if _is_rasusa_cmd(r["command"]))
     others = [r for r in results if r is not rasusa]
     # Order: 1-pass seqtk, 2-pass seqtk, matching the hyperfine invocation order.
     ratio1 = _relative_str(others[0]["mean"], others[0]["stddev"], rasusa["mean"], rasusa["stddev"], with_stddev=False)
