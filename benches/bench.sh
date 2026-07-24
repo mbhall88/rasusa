@@ -15,6 +15,8 @@
 #
 # Env vars:
 #   BENCH_READS         Forwarded to gen_fixtures.sh (default: 1000000)
+#   BENCH_SPARSE_READS  Forwarded to gen_fixtures.sh - reads for reads-num-sparse (default: 10000000)
+#   BENCH_SPARSE_K      Reads kept (-n) in the reads-num-sparse scenario (default: 1000)
 #   BENCH_WARMUP        hyperfine/time-loop warmup runs (default: 3)
 #   BENCH_RUNS          hyperfine/time-loop measured runs (default: 10)
 #   BENCH_WALL_THRESHOLD  Regression threshold for wall time ratio (default: 1.15)
@@ -30,6 +32,9 @@ WARMUP="${BENCH_WARMUP:-3}"
 RUNS="${BENCH_RUNS:-10}"
 WALL_THRESHOLD="${BENCH_WALL_THRESHOLD:-1.15}"
 RSS_THRESHOLD="${BENCH_RSS_THRESHOLD:-1.15}"
+BENCH_SPARSE_READS="${BENCH_SPARSE_READS:-10000000}"
+BENCH_SPARSE_K="${BENCH_SPARSE_K:-1000}"
+export BENCH_SPARSE_READS
 
 usage() {
     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -133,6 +138,9 @@ scenario_cmd_str() {
     reads-paired)
         printf '%q ' "$bin" reads "$DATA_DIR/r1.fq" "$DATA_DIR/r2.fq" -n "$p" -s 42 -o /dev/null -o /dev/null
         ;;
+    reads-num-sparse)
+        printf '%q ' "$bin" reads "$DATA_DIR/reads_sparse.fq" -n "$BENCH_SPARSE_K" -s 42 -o /dev/null
+        ;;
     aln-stream)
         printf '%q ' "$bin" aln "$REPO_ROOT/tests/cases/test.bam" -c 5 -s 42 --strategy stream -O bam -o /dev/null
         ;;
@@ -150,7 +158,7 @@ scenario_cmd_str() {
 }
 
 scenario_names() {
-    echo "reads-num reads-frac reads-coverage reads-paired aln-stream aln-fetch aln-paired"
+    echo "reads-num reads-frac reads-coverage reads-paired reads-num-sparse aln-stream aln-fetch aln-paired"
 }
 
 run_one_scenario() {

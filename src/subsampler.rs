@@ -1,6 +1,7 @@
 use log::info;
 use rand::prelude::*;
 use rand::random;
+use rand::seq::index;
 
 /// The target used to decide how many reads to keep.
 ///
@@ -24,6 +25,19 @@ pub struct SubSampler {
 }
 
 impl SubSampler {
+    /// Builds the RNG for this sampler, seeding from `self.seed` if set, or from the OS
+    /// (logging the chosen seed for reproducibility) otherwise.
+    fn rng(&self) -> rand_pcg::Pcg64 {
+        match self.seed {
+            Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
+            None => {
+                let seed = random();
+                info!("Using seed: {}", seed);
+                rand_pcg::Pcg64::seed_from_u64(seed)
+            }
+        }
+    }
+
     /// Returns a vector of `0..n`, but shuffled.
     ///
     /// # Note
@@ -31,17 +45,7 @@ impl SubSampler {
     /// If the file has more than 4,294,967,296 reads, this function's behaviour is undefined.
     fn shuffled_indices(&self, n: usize) -> Vec<u32> {
         let mut indices: Vec<u32> = (0..n as u32).collect();
-
-        let mut rng = match self.seed {
-            Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
-            None => {
-                let seed = random();
-                info!("Using seed: {}", seed);
-                rand_pcg::Pcg64::seed_from_u64(seed)
-            }
-        };
-
-        indices.shuffle(&mut rng);
+        indices.shuffle(&mut self.rng());
         indices
     }
 
@@ -52,17 +56,21 @@ impl SubSampler {
     /// [`SubsampleMode::ByReads`] may pass an empty slice, since selection there only depends on
     /// `total_reads`.
     ///
+    /// [`SubsampleMode::ByReads`] selects its `k` indices directly (`O(k)` time/memory) rather
+    /// than shuffling all `total_reads` indices, so the specific subset chosen for a given seed
+    /// differs from [`SubsampleMode::ByBases`]'s full-shuffle approach.
+    ///
     /// # Panics
     /// Panics (via an out-of-bounds index) if `mode` is `ByBases` and `lengths.len() !=
     /// total_reads`.
     pub fn indices(&self, total_reads: usize, lengths: &[u32]) -> (Vec<bool>, usize) {
-        let mut indices = self.shuffled_indices(total_reads).into_iter();
         let mut to_keep: Vec<bool> = vec![false; total_reads];
-        let mut nb_reads_to_keep = 0;
 
-        match self.mode {
+        let nb_reads_to_keep = match self.mode {
             SubsampleMode::ByBases(target_total_bases) => {
+                let mut indices = self.shuffled_indices(total_reads).into_iter();
                 let mut total_bases_kept: u64 = 0;
+                let mut nb_reads_to_keep = 0;
                 while total_bases_kept < target_total_bases {
                     let idx = match indices.next() {
                         Some(i) => i as usize,
@@ -72,18 +80,20 @@ impl SubSampler {
                     total_bases_kept += u64::from(lengths[idx]);
                     nb_reads_to_keep += 1;
                 }
+                nb_reads_to_keep
             }
             SubsampleMode::ByReads(n_reads) => {
-                nb_reads_to_keep = (n_reads as usize).min(indices.len());
-                if nb_reads_to_keep == indices.len() {
+                let nb_reads_to_keep = (n_reads as usize).min(total_reads);
+                if nb_reads_to_keep == total_reads {
                     to_keep.fill(true);
                 } else {
-                    for i in &indices.as_slice()[0..nb_reads_to_keep] {
-                        to_keep[*i as usize] = true;
+                    for i in index::sample(&mut self.rng(), total_reads, nb_reads_to_keep) {
+                        to_keep[i] = true;
                     }
                 }
+                nb_reads_to_keep
             }
-        }
+        };
 
         (to_keep, nb_reads_to_keep)
     }
