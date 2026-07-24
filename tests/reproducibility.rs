@@ -8,35 +8,35 @@ fn reproducibility_reads_seeds_1_to_5() -> Result<(), Box<dyn std::error::Error>
         (
             1,
             vec![
-                "@read1", "@read2", "@read6", "@read7", "@read9", "@read10", "@read11", "@read12",
-                "@read13", "@read14",
+                "@read1", "@read2", "@read3", "@read5", "@read7", "@read9", "@read11", "@read12",
+                "@read14", "@read15",
             ],
         ),
         (
             2,
             vec![
-                "@read3", "@read4", "@read5", "@read6", "@read7", "@read9", "@read10", "@read11",
-                "@read12", "@read15",
+                "@read1", "@read4", "@read7", "@read8", "@read9", "@read10", "@read11", "@read13",
+                "@read14", "@read15",
             ],
         ),
         (
             3,
             vec![
-                "@read1", "@read2", "@read3", "@read4", "@read8", "@read10", "@read11", "@read13",
-                "@read14", "@read15",
+                "@read2", "@read4", "@read5", "@read6", "@read8", "@read9", "@read10", "@read12",
+                "@read13", "@read14",
             ],
         ),
         (
             4,
             vec![
-                "@read1", "@read2", "@read3", "@read4", "@read5", "@read6", "@read11", "@read13",
-                "@read15", "@read16",
+                "@read1", "@read2", "@read3", "@read4", "@read5", "@read7", "@read10", "@read11",
+                "@read13", "@read16",
             ],
         ),
         (
             5,
             vec![
-                "@read2", "@read5", "@read7", "@read8", "@read9", "@read10", "@read12", "@read13",
+                "@read4", "@read5", "@read6", "@read7", "@read8", "@read9", "@read10", "@read11",
                 "@read14", "@read15",
             ],
         ),

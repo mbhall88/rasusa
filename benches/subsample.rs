@@ -1,7 +1,7 @@
-//! Micro-benchmark for `SubSampler::indices` in `--num`/`--frac` (num_reads) mode -
-//! the selection algorithm S10 replaces with an O(k) approach. This guards against
-//! algorithmic regressions independent of I/O, unlike `benches/bench.sh`'s end-to-end
-//! scenarios.
+//! Micro-benchmark for `SubSampler::indices` in `--num`/`--frac` (num_reads) mode, which
+//! selects its `k` indices via `rand::seq::index::sample` in `O(k)` time/memory rather
+//! than shuffling all `n` indices. This guards against algorithmic regressions
+//! independent of I/O, unlike `benches/bench.sh`'s end-to-end scenarios.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rasusa::{SubSampler, SubsampleMode};
 use std::hint::black_box;
@@ -21,6 +21,19 @@ fn bench_indices_num_reads(c: &mut Criterion) {
             });
         }
     }
+
+    // A large-n/small-k scenario (e.g. picking 1k reads out of 100M) is where the O(k)
+    // selection wins hardest over a full shuffle - keep it separate so the table above
+    // stays readable across the full n/frac grid.
+    let n = 100_000_000usize;
+    let k = 1_000u64;
+    let sampler = SubSampler {
+        mode: SubsampleMode::ByReads(k),
+        seed: Some(42),
+    };
+    group.bench_function(BenchmarkId::new(format!("n={n}"), k), |b| {
+        b.iter(|| black_box(&sampler).indices(black_box(n), black_box(&[])));
+    });
 
     group.finish();
 }
