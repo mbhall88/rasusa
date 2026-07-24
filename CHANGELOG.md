@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1](https://github.com/mbhall88/rasusa/compare/5.0.0...5.0.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **bench:** correctly identify the rasusa command in README tables ([#206](https://github.com/mbhall88/rasusa/issues/206)) ([50e455a](https://github.com/mbhall88/rasusa/commit/50e455a2034079cb58ad6dfcda091ce07721d67b))
+
 ## [5.0.0](https://github.com/mbhall88/rasusa/compare/4.1.0...5.0.0) (2026-07-24)
 
 
