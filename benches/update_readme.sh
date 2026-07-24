@@ -44,6 +44,11 @@ fi
     exit 1
 }
 
+# Run benchmarked commands from CACHE_DIR and reference input FASTQs by basename, so the
+# rendered README table shows readable commands (`rasusa reads tb.fq ...`) instead of the
+# CI runner's full checkout path.
+cd "$CACHE_DIR"
+
 ### Single long-read input (rasusa vs filtlong) ###
 
 TB_FQ="$CACHE_DIR/tb.fq"
@@ -58,8 +63,9 @@ fi
 TB_GENOME_SIZE=4411532
 COVG=50
 TARGET_BASES=$((TB_GENOME_SIZE * COVG))
-FILTLONG_CMD="filtlong --target_bases $TARGET_BASES $TB_FQ"
-RASUSA_CMD="$RASUSA_BIN reads $TB_FQ -c $COVG -g $TB_GENOME_SIZE -s 1 -o /dev/null"
+TB_FQ_BASENAME="$(basename "$TB_FQ")"
+FILTLONG_CMD="filtlong --target_bases $TARGET_BASES $TB_FQ_BASENAME"
+RASUSA_CMD="$RASUSA_BIN reads $TB_FQ_BASENAME -c $COVG -g $TB_GENOME_SIZE -s 1 -o /dev/null"
 
 echo "[update_readme] running single-input benchmark..." >&2
 hyperfine --warmup 3 --runs 10 \
@@ -89,9 +95,11 @@ else
 fi
 
 NUM_READS=140000
-SEQTK_CMD_1="seqtk sample -s 1 $R1_FQ $NUM_READS > $WORK_DIR/o1.fq; seqtk sample -s 1 $R2_FQ $NUM_READS > $WORK_DIR/o2.fq;"
-SEQTK_CMD_2="seqtk sample -2 -s 1 $R1_FQ $NUM_READS > $WORK_DIR/o1.fq; seqtk sample -2 -s 1 $R2_FQ $NUM_READS > $WORK_DIR/o2.fq;"
-RASUSA_CMD="$RASUSA_BIN reads $R1_FQ $R2_FQ -n $NUM_READS -s 1 -o $WORK_DIR/o1.fq -o $WORK_DIR/o2.fq"
+R1_FQ_BASENAME="$(basename "$R1_FQ")"
+R2_FQ_BASENAME="$(basename "$R2_FQ")"
+SEQTK_CMD_1="seqtk sample -s 1 $R1_FQ_BASENAME $NUM_READS > $WORK_DIR/o1.fq; seqtk sample -s 1 $R2_FQ_BASENAME $NUM_READS > $WORK_DIR/o2.fq;"
+SEQTK_CMD_2="seqtk sample -2 -s 1 $R1_FQ_BASENAME $NUM_READS > $WORK_DIR/o1.fq; seqtk sample -2 -s 1 $R2_FQ_BASENAME $NUM_READS > $WORK_DIR/o2.fq;"
+RASUSA_CMD="$RASUSA_BIN reads $R1_FQ_BASENAME $R2_FQ_BASENAME -n $NUM_READS -s 1 -o $WORK_DIR/o1.fq -o $WORK_DIR/o2.fq"
 
 echo "[update_readme] running paired-input benchmark..." >&2
 hyperfine --warmup 10 --runs 100 \
