@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0](https://github.com/mbhall88/rasusa/compare/4.1.0...5.0.0) (2026-07-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* seeded --num/--frac subsampling now selects a different subset of reads than v4.x for the same --seed, since selection no longer shuffles the full read-index list. --bases and --coverage subsampling are unaffected. See the README's "Random seed" section for details.
+
+### Features
+
+* O(k) sample-aware selection for --num/--frac ([7e52505](https://github.com/mbhall88/rasusa/commit/7e52505e7465156d937395077683a34ea400f92c)), closes [#180](https://github.com/mbhall88/rasusa/issues/180)
+* **threading:** add --threads/-@ for multithreaded BAM (de)compression ([e647de6](https://github.com/mbhall88/rasusa/commit/e647de6129127dde7041cce23e2baf33a3df9571))
+
+
+### Bug Fixes
+
+* **reads:** remove panic/exit hazards + add in-process test seam ([ecf1daf](https://github.com/mbhall88/rasusa/commit/ecf1daf14afefffa8debb774cf9c7903dab6d0ee)), closes [#174](https://github.com/mbhall88/rasusa/issues/174)
+
+
+### Performance Improvements
+
+* **alignment:** replace ScoredRead with lightweight MappedRead domain type ([27ad94d](https://github.com/mbhall88/rasusa/commit/27ad94df8dfe81196bdda717366dc2f02c505fbe)), closes [#176](https://github.com/mbhall88/rasusa/issues/176)
+* **reads:** buffer stdout output + dedupe base-length summation ([2907f25](https://github.com/mbhall88/rasusa/commit/2907f2584d3dfd64000696c767d19aeecb496081)), closes [#173](https://github.com/mbhall88/rasusa/issues/173)
+
 ## [4.1.0](https://github.com/mbhall88/rasusa/compare/4.0.0...4.1.0) (2026-04-28)
 
 

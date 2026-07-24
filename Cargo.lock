@@ -1186,7 +1186,7 @@ dependencies = [
 
 [[package]]
 name = "rasusa"
-version = "4.1.0"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
