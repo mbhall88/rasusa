@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="480" viewBox="0 0 1040 480" font-family="-apple-system,Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1040" height="480" fill="#fcfcfb"/>
+<text x="520.0" y="30" font-size="17" font-weight="700" fill="#0b0b0b" text-anchor="middle">rasusa --num selection: wall time &amp; peak RSS vs. total reads (k=1000 fixed)</text>
+<g transform="translate(375.0,62)">
+<line x1="0" y1="0" x2="18" y2="0" stroke="#2a78d6" stroke-width="3"/>
+<text x="24" y="4" font-size="12" fill="#0b0b0b">v4.x full shuffle (old)</text>
+<line x1="190" y1="0" x2="208" y2="0" stroke="#1baf7a" stroke-width="3"/>
+<text x="214" y="4" font-size="12" fill="#0b0b0b">v5.0 O(k) sample (new)</text>
+</g>
+<text x="70" y="96" font-size="15" font-weight="600" fill="#0b0b0b">Wall time</text>
+<line x1="70" y1="410.0" x2="480.0" y2="410.0" stroke="#e3e2dd" stroke-width="1"/>
+<text x="60" y="414.0" font-size="11" fill="#52514e" text-anchor="end">0.00s</text>
+<line x1="70" y1="337.5" x2="480.0" y2="337.5" stroke="#e3e2dd" stroke-width="1"/>
+<text x="60" y="341.5" font-size="11" fill="#52514e" text-anchor="end">0.40s</text>
+<line x1="70" y1="265.0" x2="480.0" y2="265.0" stroke="#e3e2dd" stroke-width="1"/>
+<text x="60" y="269.0" font-size="11" fill="#52514e" text-anchor="end">0.80s</text>
+<line x1="70" y1="192.5" x2="480.0" y2="192.5" stroke="#e3e2dd" stroke-width="1"/>
+<text x="60" y="196.5" font-size="11" fill="#52514e" text-anchor="end">1.20s</text>
+<line x1="70" y1="120.0" x2="480.0" y2="120.0" stroke="#e3e2dd" stroke-width="1"/>
+<text x="60" y="124.0" font-size="11" fill="#52514e" text-anchor="end">1.60s</text>
+<line x1="70" y1="410" x2="480.0" y2="410" stroke="#52514e" stroke-width="1"/>
+<text x="70.0" y="430" font-size="11" fill="#52514e" text-anchor="middle">100K</text>
+<text x="275.0" y="430" font-size="11" fill="#52514e" text-anchor="middle">1M</text>
+<text x="372.8" y="430" font-size="11" fill="#52514e" text-anchor="middle">3M</text>
+<text x="480.0" y="430" font-size="11" fill="#52514e" text-anchor="middle">10M</text>
+<text x="275.0" y="448" font-size="11" fill="#52514e" text-anchor="middle">total reads (n), k=1000 fixed</text>
+<path d="M 70.0 406.4 L 275.0 385.1 L 372.8 335.1 L 480.0 169.2" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="70.0" cy="406.4" r="3.5" fill="#2a78d6"/>
+<circle cx="275.0" cy="385.1" r="3.5" fill="#2a78d6"/>
+<circle cx="372.8" cy="335.1" r="3.5" fill="#2a78d6"/>
+<circle cx="480.0" cy="169.2" r="3.5" fill="#2a78d6"/>
+<text x="488.0" y="157.2" font-size="12" font-weight="600" fill="#0b0b0b">1.33s</text>
+<path d="M 70.0 406.5 L 275.0 384.5 L 372.8 337.8 L 480.0 183.9" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="70.0" cy="406.5" r="3.5" fill="#1baf7a"/>
+<circle cx="275.0" cy="384.5" r="3.5" fill="#1baf7a"/>
+<circle cx="372.8" cy="337.8" r="3.5" fill="#1baf7a"/>
+<circle cx="480.0" cy="183.9" r="3.5" fill="#1baf7a"/>
+<text x="488.0" y="199.9" font-size="12" font-weight="600" fill="#0b0b0b">1.25s</text>
+<text x="570.0" y="96" font-size="15" font-weight="600" fill="#0b0b0b">Peak RSS</text>
+<line x1="570.0" y1="410.0" x2="980.0" y2="410.0" stroke="#e3e2dd" stroke-width="1"/>
+<text x="560.0" y="414.0" font-size="11" fill="#52514e" text-anchor="end">0MB</text>
+<line x1="570.0" y1="337.5" x2="980.0" y2="337.5" stroke="#e3e2dd" stroke-width="1"/>
+<text x="560.0" y="341.5" font-size="11" fill="#52514e" text-anchor="end">15MB</text>
+<line x1="570.0" y1="265.0" x2="980.0" y2="265.0" stroke="#e3e2dd" stroke-width="1"/>
+<text x="560.0" y="269.0" font-size="11" fill="#52514e" text-anchor="end">30MB</text>
+<line x1="570.0" y1="192.5" x2="980.0" y2="192.5" stroke="#e3e2dd" stroke-width="1"/>
+<text x="560.0" y="196.5" font-size="11" fill="#52514e" text-anchor="end">45MB</text>
+<line x1="570.0" y1="120.0" x2="980.0" y2="120.0" stroke="#e3e2dd" stroke-width="1"/>
+<text x="560.0" y="124.0" font-size="11" fill="#52514e" text-anchor="end">60MB</text>
+<line x1="570.0" y1="410" x2="980.0" y2="410" stroke="#52514e" stroke-width="1"/>
+<text x="570.0" y="430" font-size="11" fill="#52514e" text-anchor="middle">100K</text>
+<text x="775.0" y="430" font-size="11" fill="#52514e" text-anchor="middle">1M</text>
+<text x="872.8" y="430" font-size="11" fill="#52514e" text-anchor="middle">3M</text>
+<text x="980.0" y="430" font-size="11" fill="#52514e" text-anchor="middle">10M</text>
+<text x="775.0" y="448" font-size="11" fill="#52514e" text-anchor="middle">total reads (n), k=1000 fixed</text>
+<path d="M 570.0 388.6 L 775.0 365.4 L 872.8 316.9 L 980.0 147.8" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="570.0" cy="388.6" r="3.5" fill="#2a78d6"/>
+<circle cx="775.0" cy="365.4" r="3.5" fill="#2a78d6"/>
+<circle cx="872.8" cy="316.9" r="3.5" fill="#2a78d6"/>
+<circle cx="980.0" cy="147.8" r="3.5" fill="#2a78d6"/>
+<text x="988.0" y="135.8" font-size="12" font-weight="600" fill="#0b0b0b">54MB</text>
+<path d="M 570.0 388.5 L 775.0 384.7 L 872.8 374.9 L 980.0 341.1" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="570.0" cy="388.5" r="3.5" fill="#1baf7a"/>
+<circle cx="775.0" cy="384.7" r="3.5" fill="#1baf7a"/>
+<circle cx="872.8" cy="374.9" r="3.5" fill="#1baf7a"/>
+<circle cx="980.0" cy="341.1" r="3.5" fill="#1baf7a"/>
+<text x="988.0" y="357.1" font-size="12" font-weight="600" fill="#0b0b0b">14MB</text>
+</svg>
