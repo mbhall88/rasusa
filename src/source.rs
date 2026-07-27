@@ -219,72 +219,13 @@ impl RecordSource for AlignmentSource {
                         .map(|q| q.map(|score| score + 33))
                         .collect::<Result<Vec<u8>, _>>()
                         .map_err(|source| FastxError::AlignmentReadError { source })?;
-
-                    if qual.is_empty() || is_fasta {
-                        // FASTA
-                        write_to
-                            .write_all(b">")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(name)
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(&seq)
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
+                    let qual = if qual.is_empty() {
+                        None
                     } else {
-                        // FASTQ
-                        write_to
-                            .write_all(b"@")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(name)
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(&seq)
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(b"\n+\n")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(&qual)
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                        write_to
-                            .write_all(b"\n")
-                            .map_err(|source| FastxError::WriteError {
-                                source: anyhow::Error::from(source),
-                            })?;
-                    }
+                        Some(&qual[..])
+                    };
+
+                    crate::record::write_fastx_record(write_to, name, &seq, qual, is_fasta, b"\n")?;
 
                     written_templates.insert(current_idx);
                 }

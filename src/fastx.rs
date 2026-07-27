@@ -201,38 +201,14 @@ impl RecordSource for Fastx {
                 Err(source) => return Err(FastxError::ParseError { source }),
                 Ok(rec) if read_idx < reads_to_keep.len() && reads_to_keep[read_idx] => {
                     total_len += rec.num_bases();
-                    if is_fasta {
-                        write_to
-                            .write_all(b">")
-                            .map_err(|err| FastxError::WriteError {
-                                source: anyhow::Error::from(err),
-                            })?;
-                        write_to
-                            .write_all(rec.id())
-                            .map_err(|err| FastxError::WriteError {
-                                source: anyhow::Error::from(err),
-                            })?;
-                        write_to
-                            .write_all(b"\n")
-                            .map_err(|err| FastxError::WriteError {
-                                source: anyhow::Error::from(err),
-                            })?;
-                        write_to
-                            .write_all(&rec.seq())
-                            .map_err(|err| FastxError::WriteError {
-                                source: anyhow::Error::from(err),
-                            })?;
-                        write_to
-                            .write_all(b"\n")
-                            .map_err(|err| FastxError::WriteError {
-                                source: anyhow::Error::from(err),
-                            })?;
-                    } else {
-                        rec.write(write_to, None)
-                            .map_err(|err| FastxError::WriteError {
-                                source: anyhow::Error::from(err),
-                            })?;
-                    }
+                    crate::record::write_fastx_record(
+                        write_to,
+                        rec.id(),
+                        &rec.seq(),
+                        rec.qual(),
+                        is_fasta,
+                        &rec.line_ending().to_bytes(),
+                    )?;
                     nb_reads_written += 1;
                     if nb_reads_keep == nb_reads_written {
                         break;
