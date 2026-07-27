@@ -74,7 +74,7 @@ jobs:
 
       - name: Post comparison as PR comment
         if: always()
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: benchmark-comparison
           path: bench-comment.md
