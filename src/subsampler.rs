@@ -24,18 +24,27 @@ pub struct SubSampler {
     pub seed: Option<u64>,
 }
 
+/// Builds an RNG seeded from `seed` if set, or from the OS (logging the chosen seed for
+/// reproducibility) otherwise.
+///
+/// Shared by [`SubSampler`]'s two-pass modes and any one-pass, streaming sampling that needs the
+/// same seed-or-log-and-seed-from-OS behaviour.
+pub fn seeded_rng(seed: Option<u64>) -> rand_pcg::Pcg64 {
+    match seed {
+        Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
+        None => {
+            let seed = random();
+            info!("Using seed: {}", seed);
+            rand_pcg::Pcg64::seed_from_u64(seed)
+        }
+    }
+}
+
 impl SubSampler {
     /// Builds the RNG for this sampler, seeding from `self.seed` if set, or from the OS
     /// (logging the chosen seed for reproducibility) otherwise.
     fn rng(&self) -> rand_pcg::Pcg64 {
-        match self.seed {
-            Some(s) => rand_pcg::Pcg64::seed_from_u64(s),
-            None => {
-                let seed = random();
-                info!("Using seed: {}", seed);
-                rand_pcg::Pcg64::seed_from_u64(seed)
-            }
-        }
+        seeded_rng(self.seed)
     }
 
     /// Returns a vector of `0..n`, but shuffled.

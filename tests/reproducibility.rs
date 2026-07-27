@@ -68,6 +68,67 @@ fn reproducibility_reads_seeds_1_to_5() -> Result<(), Box<dyn std::error::Error>
 }
 
 #[test]
+fn reproducibility_one_pass_seeds_1_to_5() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = vec![
+        (
+            1,
+            vec![
+                "@read2", "@read3", "@read6", "@read7", "@read8", "@read11", "@read14", "@read15",
+                "@read16",
+            ],
+        ),
+        (
+            2,
+            vec!["@read1", "@read2", "@read3", "@read5", "@read8", "@read10"],
+        ),
+        (
+            3,
+            vec![
+                "@read1", "@read2", "@read3", "@read9", "@read10", "@read12", "@read14", "@read16",
+            ],
+        ),
+        (
+            4,
+            vec![
+                "@read1", "@read2", "@read4", "@read13", "@read14", "@read16",
+            ],
+        ),
+        (
+            5,
+            vec![
+                "@read1", "@read3", "@read6", "@read7", "@read8", "@read11", "@read12", "@read13",
+                "@read14", "@read16",
+            ],
+        ),
+    ];
+
+    for (seed, expected_reads) in cases {
+        let mut cmd = Command::cargo_bin(BIN)?;
+        cmd.args(vec![
+            "reads",
+            "tests/cases/seed.fastq",
+            "-s",
+            &seed.to_string(),
+            "--one-pass",
+            "-f",
+            "0.5",
+        ]);
+
+        let output = cmd.output()?;
+        let stdout = String::from_utf8(output.stdout)?;
+        let actual_reads: Vec<&str> = stdout.lines().filter(|l| l.starts_with('@')).collect();
+
+        assert_eq!(
+            actual_reads, expected_reads,
+            "One-pass reproduction failed for seed {}",
+            seed
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn reproducibility_aln_seed_42() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![

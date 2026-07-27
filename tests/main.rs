@@ -579,3 +579,202 @@ fn reads_format_combinations() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn one_pass_without_frac_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-n",
+        "5",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("--one-pass requires --frac"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_bases_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-b",
+        "100",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("--one-pass requires --frac"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_strict_raises_explanatory_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "--strict",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--one-pass cannot be combined with --strict",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_paired_input_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/file1.fq.gz",
+        "tests/cases/r2.fq.gz",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-o",
+        "/tmp/one_pass_paired_out1.fq",
+        "-o",
+        "/tmp/one_pass_paired_out2.fq",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--one-pass only supports a single input file",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_bam_input_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_ubam.bam",
+        "--one-pass",
+        "-f",
+        "0.5",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--one-pass only supports FASTA/FASTQ input",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_keeping_zero_reads_warns_but_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0",
+        "-s",
+        "1",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Kept 0 reads"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_without_seed_logs_chosen_seed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Using seed:"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_reports_kept_seen_and_fractions() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.fastq");
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "1",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+
+    cmd.assert().success().stderr(
+        predicate::str::contains("reads seen")
+            .and(predicate::str::contains("requested fraction"))
+            .and(predicate::str::contains("realised fraction")),
+    );
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_preserves_input_order_at_cli_level() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.fastq");
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.6",
+        "-s",
+        "7",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+
+    let content = fs::read_to_string(&out).unwrap();
+    let kept_ids: Vec<&str> = content.lines().filter(|l| l.starts_with('@')).collect();
+
+    let input_content = fs::read_to_string("tests/cases/seed.fastq").unwrap();
+    let input_order: Vec<&str> = input_content
+        .lines()
+        .filter(|l| l.starts_with('@'))
+        .collect();
+    // The kept ids, in the order they were written, should be exactly the subsequence of the
+    // input's read order that was kept - not, say, a lexicographic sort of the ids.
+    let expected_order: Vec<&str> = input_order
+        .into_iter()
+        .filter(|id| kept_ids.contains(id))
+        .collect();
+
+    assert_eq!(kept_ids, expected_order);
+    assert!(!kept_ids.is_empty());
+
+    Ok(())
+}

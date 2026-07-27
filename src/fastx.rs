@@ -1,6 +1,8 @@
 use crate::format::OutputEncoding;
 use crate::source::RecordSource;
+use crate::subsampler::seeded_rng;
 use needletail::errors::ParseErrorKind::EmptyFile;
+use rand::prelude::*;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -87,6 +89,68 @@ impl Fastx {
             Ok(rdr) => Ok(Some(rdr)),
             Err(e) if e.kind == EmptyFile => Ok(None),
             Err(source) => Err(FastxError::ReadError { source }),
+        }
+    }
+
+    /// Reads the file once, writing each record to `write_to` independently with probability
+    /// `fraction`, and returns how many records were seen and kept.
+    ///
+    /// Unlike [`RecordSource::filter_reads_into`] (which needs a pre-computed keep/discard
+    /// decision per read, gathered by a prior pass), this makes each read's decision on the fly
+    /// as it's parsed, so memory use stays constant in the size of the input: nothing scales with
+    /// the number of reads. Output is written in input order, since each read is decided and
+    /// emitted before the next one is parsed.
+    pub fn subsample_one_pass(
+        &self,
+        fraction: f32,
+        seed: Option<u64>,
+        write_to: &mut dyn Write,
+        fasta: bool,
+    ) -> Result<OnePassStats, FastxError> {
+        let mut rng = seeded_rng(seed);
+
+        let mut reader = match self.open_reader()? {
+            Some(rdr) => rdr,
+            None => return Ok(OnePassStats::default()),
+        };
+
+        let mut stats = OnePassStats::default();
+
+        while let Some(record) = reader.next() {
+            let rec = record.map_err(|source| FastxError::ParseError { source })?;
+            stats.reads_seen += 1;
+            if rng.random_bool(fraction as f64) {
+                crate::record::write_fastx_record(
+                    write_to,
+                    rec.id(),
+                    &rec.seq(),
+                    rec.qual(),
+                    fasta,
+                    &rec.line_ending().to_bytes(),
+                )?;
+                stats.reads_kept += 1;
+            }
+        }
+
+        Ok(stats)
+    }
+}
+
+/// The outcome of a [`Fastx::subsample_one_pass`] run: how many reads were seen in the single
+/// pass over the input, and how many of those were kept.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct OnePassStats {
+    pub reads_seen: usize,
+    pub reads_kept: usize,
+}
+
+impl OnePassStats {
+    /// The realised fraction of reads kept - `0.0` for an empty input, rather than `NaN`.
+    pub fn realised_fraction(&self) -> f64 {
+        if self.reads_seen == 0 {
+            0.0
+        } else {
+            self.reads_kept as f64 / self.reads_seen as f64
         }
     }
 }
@@ -252,7 +316,17 @@ mod tests {
     use std::any::Any;
     use std::io::{Read, Write};
     use std::path::Path;
-    use tempfile::Builder;
+    use tempfile::{Builder, NamedTempFile};
+
+    /// Writes `text` to a temp `.fastq` file and wraps it in a `Fastx`. The returned
+    /// `NamedTempFile` must be kept alive (bound to a variable) for as long as the `Fastx` is
+    /// used, since dropping it deletes the underlying file.
+    fn temp_fastx(text: &str) -> (NamedTempFile, Fastx) {
+        let mut input = Builder::new().suffix(".fastq").tempfile().unwrap();
+        input.write_all(text.as_bytes()).unwrap();
+        let fastx = Fastx::from_path(input.path());
+        (input, fastx)
+    }
 
     #[test]
     fn fastx_from_fasta() {
@@ -516,5 +590,109 @@ mod tests {
         let expected = "@read1 length=4\nACGT\n+\n!!!!\n";
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn one_pass_fraction_one_keeps_every_read() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
+        let (_input, fastx) = temp_fastx(text);
+
+        let mut out: Vec<u8> = Vec::new();
+        let stats = fastx
+            .subsample_one_pass(1.0, Some(1), &mut out, false)
+            .unwrap();
+
+        assert_eq!(stats.reads_seen, 2);
+        assert_eq!(stats.reads_kept, 2);
+        assert_eq!(String::from_utf8(out).unwrap(), text);
+    }
+
+    #[test]
+    fn one_pass_fraction_zero_keeps_no_reads() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
+        let (_input, fastx) = temp_fastx(text);
+
+        let mut out: Vec<u8> = Vec::new();
+        let stats = fastx
+            .subsample_one_pass(0.0, Some(1), &mut out, false)
+            .unwrap();
+
+        assert_eq!(stats.reads_seen, 2);
+        assert_eq!(stats.reads_kept, 0);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn one_pass_empty_file_returns_zeroed_stats() {
+        let (_input, fastx) = temp_fastx("");
+
+        let mut out: Vec<u8> = Vec::new();
+        let stats = fastx
+            .subsample_one_pass(0.5, Some(1), &mut out, false)
+            .unwrap();
+
+        assert_eq!(stats, OnePassStats::default());
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn one_pass_same_seed_gives_same_result() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nGGGG\n+\n####\n@read4\nTTTT\n+\n^^^^\n";
+        let (_input, fastx) = temp_fastx(text);
+
+        let mut out1: Vec<u8> = Vec::new();
+        let stats1 = fastx
+            .subsample_one_pass(0.5, Some(42), &mut out1, false)
+            .unwrap();
+
+        let mut out2: Vec<u8> = Vec::new();
+        let stats2 = fastx
+            .subsample_one_pass(0.5, Some(42), &mut out2, false)
+            .unwrap();
+
+        assert_eq!(stats1, stats2);
+        assert_eq!(out1, out2);
+    }
+
+    #[test]
+    fn one_pass_preserves_input_order() {
+        let text = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nGGGG\n+\n####\n@read4\nTTTT\n+\n^^^^\n@read5\nAAAA\n+\n%%%%\n";
+        let (_input, fastx) = temp_fastx(text);
+
+        let mut out: Vec<u8> = Vec::new();
+        fastx
+            .subsample_one_pass(0.6, Some(7), &mut out, false)
+            .unwrap();
+
+        let output = String::from_utf8(out).unwrap();
+        let kept_ids: Vec<&str> = output.lines().filter(|l| l.starts_with('@')).collect();
+        let mut sorted_ids = kept_ids.clone();
+        sorted_ids.sort();
+
+        assert_eq!(kept_ids, sorted_ids);
+        assert!(!kept_ids.is_empty());
+    }
+
+    #[test]
+    fn one_pass_writes_fasta_when_requested() {
+        let (_input, fastx) = temp_fastx("@read1\nACGT\n+\n!!!!\n");
+
+        let mut out: Vec<u8> = Vec::new();
+        let stats = fastx
+            .subsample_one_pass(1.0, Some(1), &mut out, true)
+            .unwrap();
+
+        assert_eq!(stats.reads_kept, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), ">read1\nACGT\n");
+    }
+
+    #[test]
+    fn one_pass_stats_realised_fraction() {
+        let stats = OnePassStats {
+            reads_seen: 4,
+            reads_kept: 1,
+        };
+        assert_eq!(stats.realised_fraction(), 0.25);
+        assert_eq!(OnePassStats::default().realised_fraction(), 0.0);
     }
 }

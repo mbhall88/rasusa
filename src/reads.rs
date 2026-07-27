@@ -2,7 +2,7 @@ use crate::cli::{
     check_path_exists, parse_compression_format, parse_fraction, parse_level, CliError, Coverage,
     GenomeSize,
 };
-use crate::fastx::create_output_writer;
+use crate::fastx::{create_output_writer, Fastx};
 use crate::format::{
     default_compression_level, infer_format_from_path, is_fasta_output, output_alignment_format,
     OutputEncoding,
@@ -89,6 +89,16 @@ pub struct Reads {
     #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
     pub frac: Option<f32>,
 
+    /// Read the input exactly once, keeping each read independently with probability --frac,
+    /// instead of measuring the input first for an exact result
+    ///
+    /// Only supported for a single-end FASTA/Q --frac target: the number of reads kept is
+    /// approximate (binomially distributed around --frac), not exact, so it cannot be combined
+    /// with --strict, and it is not available for --num/--bases/--coverage targets, which need an
+    /// exact count or the input's total base count up front.
+    #[clap(short = '1', long = "one-pass")]
+    pub one_pass: bool,
+
     /// Exit with an error if the requested coverage/bases/reads is not possible
     #[clap(short = 'e', long)]
     pub strict: bool,
@@ -159,11 +169,109 @@ impl Reads {
             _ => Ok(()),
         }
     }
+
+    /// Checks that `--one-pass` is only combined with options it supports.
+    fn validate_one_pass_combination(&self) -> Result<()> {
+        if !self.one_pass {
+            return Ok(());
+        }
+        if self.frac.is_none() {
+            // `--num`/`--bases`/`--coverage` can't be one-pass: `--num` needs an exact read
+            // count up front, and `--bases`/`--coverage` need the input's total base count to
+            // compute a rate - both require the measuring pass one-pass mode skips.
+            return Err(anyhow::anyhow!(
+                "--one-pass requires --frac: it is not available for --num, --bases, or \
+                 --coverage targets, which need an exact count or the input's total base count \
+                 up front"
+            ));
+        }
+        if self.strict {
+            return Err(anyhow::anyhow!(
+                "--one-pass cannot be combined with --strict: one-pass sampling is probabilistic \
+                 and makes no guarantee about how many reads are kept, so there is nothing for \
+                 --strict to enforce"
+            ));
+        }
+        if self.input.len() != 1 {
+            return Err(anyhow::anyhow!(
+                "--one-pass only supports a single input file (single-end FASTA/Q)"
+            ));
+        }
+        if infer_format_from_path(&self.input[0]).is_some() {
+            return Err(anyhow::anyhow!(
+                "--one-pass only supports FASTA/FASTQ input, not SAM/BAM/CRAM"
+            ));
+        }
+        Ok(())
+    }
+
+    /// The path used to infer FASTA-vs-FASTQ output format when no explicit `--output-format`
+    /// is given: the `idx`-th `--output` path if one was provided, else the `idx`-th input path.
+    fn fallback_format_path(&self, idx: usize) -> &PathBuf {
+        self.output.get(idx).unwrap_or(&self.input[idx])
+    }
+
+    /// Builds the primary (first/only) output sink: stdout (optionally compressed) if no
+    /// `--output` path was given, otherwise the first `--output` file.
+    fn create_primary_output_handle(&self) -> Result<Box<dyn std::io::Write>> {
+        match self.output.len() {
+            0 => Ok(match self.compress_type {
+                None => Box::new(BufWriter::new(stdout().lock())) as Box<dyn std::io::Write>,
+                Some(fmt) => {
+                    let lvl = default_compression_level(fmt);
+                    niffler::basic::get_writer(Box::new(BufWriter::new(stdout().lock())), fmt, lvl)?
+                }
+            }),
+            _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
+                .context("unable to create the first output file"),
+        }
+    }
+
+    /// Streams a single-pass, probabilistic fraction subsample: reads the input exactly once,
+    /// keeping each read independently with probability `self.frac`, and writing it immediately -
+    /// so output is in input order and peak memory doesn't grow with input size. See
+    /// [`Fastx::subsample_one_pass`] for the sampling itself.
+    fn run_one_pass(&self) -> Result<()> {
+        let fraction = self
+            .frac
+            .expect("Runner::run calls validate_one_pass_combination, which rejects --one-pass without --frac, before run_one_pass");
+
+        let fasta = is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0));
+
+        let mut output_handle = self.create_primary_output_handle()?;
+
+        let fastx = Fastx::from_path(&self.input[0]);
+        let stats = fastx.subsample_one_pass(fraction, self.seed, &mut *output_handle, fasta)?;
+
+        if stats.reads_kept == 0 {
+            warn!(
+                "Kept 0 reads out of {} seen (requested fraction: {:.4})",
+                stats.reads_seen, fraction
+            );
+        }
+
+        info!(
+            "Kept {} of {} reads seen (requested fraction: {:.4}, realised fraction: {:.4})",
+            stats.reads_kept,
+            stats.reads_seen,
+            fraction,
+            stats.realised_fraction()
+        );
+
+        info!("Done 🎉");
+        Ok(())
+    }
 }
 
 impl Runner for Reads {
     fn run(&mut self) -> Result<()> {
         self.validate_input_output_combination()?;
+        self.validate_one_pass_combination()?;
+
+        if self.one_pass {
+            return self.run_one_pass();
+        }
+
         let is_paired = self.input.len() == 2;
         if is_paired {
             info!("Two input files given. Assuming paired Illumina...")
@@ -197,17 +305,7 @@ impl Runner for Reads {
             check_conversion(second_input_format, self.output.get(1))?;
         }
 
-        let mut output_handle = match self.output.len() {
-            0 => match self.compress_type {
-                None => Box::new(BufWriter::new(stdout().lock())) as Box<dyn std::io::Write>,
-                Some(fmt) => {
-                    let lvl = default_compression_level(fmt);
-                    niffler::basic::get_writer(Box::new(BufWriter::new(stdout().lock())), fmt, lvl)?
-                }
-            },
-            _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
-                .context("unable to create the first output file")?,
-        };
+        let mut output_handle = self.create_primary_output_handle()?;
 
         let second_input_source = if is_paired {
             Some(determine_record_source(&self.input[1], self.threads))
@@ -392,16 +490,9 @@ impl Reads {
 
         let encoding_1 = match output_format_1 {
             Some(fmt) => OutputEncoding::Alignment(fmt),
-            None => {
-                let fallback_path = if self.output.is_empty() {
-                    &self.input[0]
-                } else {
-                    &self.output[0]
-                };
-                OutputEncoding::Fastx {
-                    fasta: is_fasta_output(self.output_format.as_ref(), fallback_path),
-                }
-            }
+            None => OutputEncoding::Fastx {
+                fasta: is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0)),
+            },
         };
 
         let mut total_kept_bases = input_source.filter_reads_into(
@@ -430,16 +521,12 @@ impl Reads {
 
             let encoding_2 = match output_format_2 {
                 Some(fmt) => OutputEncoding::Alignment(fmt),
-                None => {
-                    let fallback_path = if self.output.len() < 2 {
-                        &self.input[1]
-                    } else {
-                        &self.output[1]
-                    };
-                    OutputEncoding::Fastx {
-                        fasta: is_fasta_output(self.output_format.as_ref(), fallback_path),
-                    }
-                }
+                None => OutputEncoding::Fastx {
+                    fasta: is_fasta_output(
+                        self.output_format.as_ref(),
+                        self.fallback_format_path(1),
+                    ),
+                },
             };
 
             total_kept_bases += second_input_source.filter_reads_into(
@@ -525,6 +612,7 @@ mod tests {
             bases: None,
             num: None,
             frac: None,
+            one_pass: false,
             strict: false,
             seed: Some(1),
             verbose: false,
