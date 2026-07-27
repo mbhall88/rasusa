@@ -45,7 +45,7 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         if: steps.guard.outputs.skip != 'true'
         with:
           path: |
@@ -59,7 +59,7 @@ jobs:
 
       - name: Cache downloaded benchmark datasets
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: data/download-cache
           key: bench-datasets-v1
