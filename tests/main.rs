@@ -778,3 +778,216 @@ fn one_pass_preserves_input_order_at_cli_level() -> Result<(), Box<dyn std::erro
 
     Ok(())
 }
+
+#[test]
+fn probability_shorthand_matches_frac_and_one_pass_output() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temp_dir = tempfile::tempdir().unwrap();
+    let long_form_out = temp_dir.path().join("long_form.fastq");
+    let shorthand_out = temp_dir.path().join("shorthand.fastq");
+
+    let mut long_form_cmd = Command::cargo_bin(BIN)?;
+    long_form_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        long_form_out.to_str().unwrap(),
+    ]);
+    long_form_cmd.assert().success();
+
+    let mut shorthand_cmd = Command::cargo_bin(BIN)?;
+    shorthand_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        shorthand_out.to_str().unwrap(),
+    ]);
+    shorthand_cmd.assert().success();
+
+    let long_form_content = fs::read(&long_form_out).unwrap();
+    let shorthand_content = fs::read(&shorthand_out).unwrap();
+    assert_eq!(long_form_content, shorthand_content);
+
+    Ok(())
+}
+
+#[test]
+fn probability_shorthand_interprets_values_over_one_as_percentages(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let percentage_out = temp_dir.path().join("percentage.fastq");
+    let fraction_out = temp_dir.path().join("fraction.fastq");
+
+    let mut percentage_cmd = Command::cargo_bin(BIN)?;
+    percentage_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "50",
+        "-s",
+        "7",
+        "-o",
+        percentage_out.to_str().unwrap(),
+    ]);
+    percentage_cmd.assert().success();
+
+    let mut fraction_cmd = Command::cargo_bin(BIN)?;
+    fraction_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        fraction_out.to_str().unwrap(),
+    ]);
+    fraction_cmd.assert().success();
+
+    let percentage_content = fs::read(&percentage_out).unwrap();
+    let fraction_content = fs::read(&fraction_out).unwrap();
+    assert_eq!(percentage_content, fraction_content);
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_frac_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-f",
+        "0.5",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_num_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-n",
+        "5",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_bases_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-b",
+        "100",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_genome_size_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    // `-c` is also passed so this fails specifically because `-g` conflicts with `-p`, not
+    // because `-g` is missing its required `-c` companion.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-g",
+        "5m",
+        "-c",
+        "10",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_coverage_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-c",
+        "10",
+        "-g",
+        "5m",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_strict_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "--strict",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_alone_does_not_require_genome_size_or_coverage(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![READS, "tests/cases/seed.fastq", "-p", "0.5"]);
+
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn probability_help_text_documents_the_equivalence_and_approximation(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![READS, "--help"]);
+
+    cmd.assert().success().stdout(
+        predicate::str::contains("--frac <FLOAT> --one-pass")
+            .and(predicate::str::contains("is approximate")),
+    );
+
+    Ok(())
+}

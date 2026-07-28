@@ -50,10 +50,10 @@ pub struct Reads {
     #[clap(
     short,
     long,
-    required_unless_present_any = &["bases", "num", "frac"],
+    required_unless_present_any = &["bases", "num", "frac", "probability"],
     requires = "coverage",
     value_name = "size|faidx",
-    conflicts_with_all = &["num", "frac"]
+    conflicts_with_all = &["num", "frac", "probability"]
     )]
     pub genome_size: Option<GenomeSize>,
 
@@ -64,29 +64,29 @@ pub struct Reads {
     short,
     long,
     value_name = "FLOAT",
-    required_unless_present_any = &["bases", "num", "frac"],
+    required_unless_present_any = &["bases", "num", "frac", "probability"],
     requires = "genome_size",
-    conflicts_with_all = &["num", "frac"]
+    conflicts_with_all = &["num", "frac", "probability"]
     )]
     pub coverage: Option<Coverage>,
 
     /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
     ///
     /// If this option is given, --coverage and --genome-size are ignored
-    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac"])]
+    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac", "probability"])]
     pub bases: Option<GenomeSize>,
 
     /// Subsample to a specific number of reads
     ///
     /// If paired-end reads are passed, this is the number of (matched) reads from EACH file.
     /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
-    #[clap(short, long, value_name = "INT", conflicts_with = "frac")]
+    #[clap(short, long, value_name = "INT", conflicts_with_all = &["frac", "probability"])]
     pub num: Option<GenomeSize>,
 
     /// Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
     ///
     /// Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
-    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
+    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with_all = &["num", "probability"])]
     pub frac: Option<f32>,
 
     /// Read the input exactly once, keeping each read independently with probability --frac,
@@ -98,6 +98,23 @@ pub struct Reads {
     /// exact count or the input's total base count up front.
     #[clap(short = '1', long = "one-pass")]
     pub one_pass: bool,
+
+    /// Keep each read independently with this probability, streaming the input once
+    ///
+    /// Shorthand for `--frac <FLOAT> --one-pass`: both spellings behave identically, including
+    /// producing byte-identical output for the same seed. Values >1 and <=100 will be
+    /// automatically converted, the same as --frac - e.g., 25 => 0.25.
+    ///
+    /// The result is approximate (binomially distributed around the requested probability), not
+    /// an exact fraction of the input.
+    #[clap(
+    short = 'p',
+    long = "probability",
+    value_name = "FLOAT",
+    value_parser = parse_fraction,
+    conflicts_with_all = &["frac", "num", "bases", "coverage", "strict"]
+    )]
+    pub probability: Option<f32>,
 
     /// Exit with an error if the requested coverage/bases/reads is not possible
     #[clap(short = 'e', long)]
@@ -167,6 +184,15 @@ impl Reads {
                 "Got {in_len} --input but {out_len} --output"
             ))),
             _ => Ok(()),
+        }
+    }
+
+    /// Expands `--probability` into its equivalent `--frac`/`--one-pass` pair, so the rest of
+    /// the pipeline only ever has to reason about one representation.
+    fn apply_probability_shorthand(&mut self) {
+        if let Some(p) = self.probability {
+            self.frac = Some(p);
+            self.one_pass = true;
         }
     }
 
@@ -265,6 +291,7 @@ impl Reads {
 
 impl Runner for Reads {
     fn run(&mut self) -> Result<()> {
+        self.apply_probability_shorthand();
         self.validate_input_output_combination()?;
         self.validate_one_pass_combination()?;
 
@@ -613,6 +640,7 @@ mod tests {
             num: None,
             frac: None,
             one_pass: false,
+            probability: None,
             strict: false,
             seed: Some(1),
             verbose: false,
@@ -649,6 +677,27 @@ mod tests {
         let result = reads.subsample(&source, None, &mut output);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn apply_probability_shorthand_sets_frac_and_one_pass() {
+        let mut reads = default_reads(vec![PathBuf::from("irrelevant.fq")]);
+        reads.probability = Some(0.3);
+
+        reads.apply_probability_shorthand();
+
+        assert_eq!(reads.frac, Some(0.3));
+        assert!(reads.one_pass);
+    }
+
+    #[test]
+    fn apply_probability_shorthand_is_a_no_op_when_unset() {
+        let mut reads = default_reads(vec![PathBuf::from("irrelevant.fq")]);
+
+        reads.apply_probability_shorthand();
+
+        assert_eq!(reads.frac, None);
+        assert!(!reads.one_pass);
     }
 
     #[test]
