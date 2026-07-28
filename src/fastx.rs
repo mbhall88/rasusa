@@ -43,6 +43,18 @@ pub enum FastxError {
     #[error("Alignment read error: {source}")]
     AlignmentReadError { source: std::io::Error },
 
+    /// Indicates that a paired one-pass run's two input files disagreed on read count, detected
+    /// as soon as one reader ran out of records before the other.
+    #[error(
+        "Paired FASTA/Q inputs have different numbers of reads: after {matched} matched read \
+         pair(s), the {longer} input had more. Paired Illumina files are assumed to have the \
+         same number of reads."
+    )]
+    PairedCountMismatch {
+        matched: usize,
+        longer: &'static str,
+    },
+
     /// Indicates that a mapped read was detected in the input alignment file.
     #[error("Error: Mapped read detected, please use `rasusa aln` for aligned data")]
     MappedReadDetected,
@@ -127,6 +139,82 @@ impl Fastx {
                     rec.qual(),
                     fasta,
                     &rec.line_ending().to_bytes(),
+                )?;
+                stats.reads_kept += 1;
+            }
+        }
+
+        Ok(stats)
+    }
+
+    /// Reads two paired FASTA/Q files once, advancing both readers in lockstep: a read and its
+    /// mate (a "template") are decided by a single shared random draw, so they are always kept
+    /// or dropped together, never split.
+    ///
+    /// Neither file is buffered - both are read one record at a time - so peak memory stays
+    /// constant in input size, the same as [`Fastx::subsample_one_pass`]. If the two files
+    /// disagree on read count, that's detected the moment one reader runs out before the other,
+    /// i.e. mid-stream, before either output is completely written - see
+    /// [`FastxError::PairedCountMismatch`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn subsample_one_pass_paired(
+        &self,
+        mate: &Fastx,
+        fraction: f32,
+        seed: Option<u64>,
+        write_to: &mut dyn Write,
+        mate_write_to: &mut dyn Write,
+        fasta: bool,
+        mate_fasta: bool,
+    ) -> Result<OnePassStats, FastxError> {
+        let mut rng = seeded_rng(seed);
+
+        let mut reader = self.open_reader()?;
+        let mut mate_reader = mate.open_reader()?;
+
+        let mut stats = OnePassStats::default();
+
+        loop {
+            let record = reader.as_mut().and_then(|r| r.next());
+            let mate_record = mate_reader.as_mut().and_then(|r| r.next());
+
+            let (record, mate_record) = match (record, mate_record) {
+                (None, None) => break,
+                (Some(record), Some(mate_record)) => (record, mate_record),
+                (Some(_), None) => {
+                    return Err(FastxError::PairedCountMismatch {
+                        matched: stats.reads_seen,
+                        longer: "first",
+                    })
+                }
+                (None, Some(_)) => {
+                    return Err(FastxError::PairedCountMismatch {
+                        matched: stats.reads_seen,
+                        longer: "second",
+                    })
+                }
+            };
+
+            let rec = record.map_err(|source| FastxError::ParseError { source })?;
+            let mate_rec = mate_record.map_err(|source| FastxError::ParseError { source })?;
+            stats.reads_seen += 1;
+
+            if rng.random_bool(fraction as f64) {
+                crate::record::write_fastx_record(
+                    write_to,
+                    rec.id(),
+                    &rec.seq(),
+                    rec.qual(),
+                    fasta,
+                    &rec.line_ending().to_bytes(),
+                )?;
+                crate::record::write_fastx_record(
+                    mate_write_to,
+                    mate_rec.id(),
+                    &mate_rec.seq(),
+                    mate_rec.qual(),
+                    mate_fasta,
+                    &mate_rec.line_ending().to_bytes(),
                 )?;
                 stats.reads_kept += 1;
             }
@@ -694,5 +782,153 @@ mod tests {
         };
         assert_eq!(stats.realised_fraction(), 0.25);
         assert_eq!(OnePassStats::default().realised_fraction(), 0.0);
+    }
+
+    #[test]
+    fn one_pass_paired_fraction_one_keeps_every_template() {
+        let r1 = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
+        let r2 = "@read1\nTTTT\n+\n!!!!\n@read2\nGGGG\n+\n$$$$\n";
+        let (_in1, fastx1) = temp_fastx(r1);
+        let (_in2, fastx2) = temp_fastx(r2);
+
+        let mut out1: Vec<u8> = Vec::new();
+        let mut out2: Vec<u8> = Vec::new();
+        let stats = fastx1
+            .subsample_one_pass_paired(&fastx2, 1.0, Some(1), &mut out1, &mut out2, false, false)
+            .unwrap();
+
+        assert_eq!(stats.reads_seen, 2);
+        assert_eq!(stats.reads_kept, 2);
+        assert_eq!(String::from_utf8(out1).unwrap(), r1);
+        assert_eq!(String::from_utf8(out2).unwrap(), r2);
+    }
+
+    #[test]
+    fn one_pass_paired_fraction_zero_keeps_no_templates() {
+        let r1 = "@read1\nACGT\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n";
+        let r2 = "@read1\nTTTT\n+\n!!!!\n@read2\nGGGG\n+\n$$$$\n";
+        let (_in1, fastx1) = temp_fastx(r1);
+        let (_in2, fastx2) = temp_fastx(r2);
+
+        let mut out1: Vec<u8> = Vec::new();
+        let mut out2: Vec<u8> = Vec::new();
+        let stats = fastx1
+            .subsample_one_pass_paired(&fastx2, 0.0, Some(1), &mut out1, &mut out2, false, false)
+            .unwrap();
+
+        assert_eq!(stats.reads_seen, 2);
+        assert_eq!(stats.reads_kept, 0);
+        assert!(out1.is_empty());
+        assert!(out2.is_empty());
+    }
+
+    #[test]
+    fn one_pass_paired_keeps_mates_together() {
+        let r1 = "@read1\nAAAA\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nGGGG\n+\n####\n@read4\nTTTT\n+\n^^^^\n@read5\nAAAA\n+\n%%%%\n";
+        let r2 = "@read1\nAAAA\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nGGGG\n+\n####\n@read4\nTTTT\n+\n^^^^\n@read5\nAAAA\n+\n%%%%\n";
+        let (_in1, fastx1) = temp_fastx(r1);
+        let (_in2, fastx2) = temp_fastx(r2);
+
+        let mut out1: Vec<u8> = Vec::new();
+        let mut out2: Vec<u8> = Vec::new();
+        let stats = fastx1
+            .subsample_one_pass_paired(&fastx2, 0.6, Some(7), &mut out1, &mut out2, false, false)
+            .unwrap();
+
+        let ids1: Vec<String> = String::from_utf8(out1)
+            .unwrap()
+            .lines()
+            .filter(|l| l.starts_with('@'))
+            .map(str::to_owned)
+            .collect();
+        let ids2: Vec<String> = String::from_utf8(out2)
+            .unwrap()
+            .lines()
+            .filter(|l| l.starts_with('@'))
+            .map(str::to_owned)
+            .collect();
+
+        assert_eq!(ids1, ids2);
+        assert_eq!(stats.reads_kept, ids1.len());
+        assert!(!ids1.is_empty());
+    }
+
+    #[test]
+    fn one_pass_paired_same_seed_gives_same_pair_selection() {
+        let text = "@read1\nAAAA\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nGGGG\n+\n####\n@read4\nTTTT\n+\n^^^^\n";
+        let (_in1, fastx1) = temp_fastx(text);
+        let (_in2, fastx2) = temp_fastx(text);
+        let (_in1b, fastx1b) = temp_fastx(text);
+        let (_in2b, fastx2b) = temp_fastx(text);
+
+        let mut out1a: Vec<u8> = Vec::new();
+        let mut out2a: Vec<u8> = Vec::new();
+        let stats_a = fastx1
+            .subsample_one_pass_paired(&fastx2, 0.5, Some(42), &mut out1a, &mut out2a, false, false)
+            .unwrap();
+
+        let mut out1b: Vec<u8> = Vec::new();
+        let mut out2b: Vec<u8> = Vec::new();
+        let stats_b = fastx1b
+            .subsample_one_pass_paired(
+                &fastx2b,
+                0.5,
+                Some(42),
+                &mut out1b,
+                &mut out2b,
+                false,
+                false,
+            )
+            .unwrap();
+
+        assert_eq!(stats_a, stats_b);
+        assert_eq!(out1a, out1b);
+        assert_eq!(out2a, out2b);
+    }
+
+    #[test]
+    fn one_pass_paired_read_count_mismatch_is_detected_mid_stream() {
+        let r1 = "@read1\nAAAA\n+\n!!!!\n@read2\nCCCC\n+\n$$$$\n@read3\nGGGG\n+\n####\n";
+        let r2 = "@read1\nAAAA\n+\n!!!!\n";
+        let (_in1, fastx1) = temp_fastx(r1);
+        let (_in2, fastx2) = temp_fastx(r2);
+
+        let mut out1: Vec<u8> = Vec::new();
+        let mut out2: Vec<u8> = Vec::new();
+        // fraction 0.0 so nothing gets written, isolating the mismatch detection itself
+        let result = fastx1.subsample_one_pass_paired(
+            &fastx2,
+            0.0,
+            Some(1),
+            &mut out1,
+            &mut out2,
+            false,
+            false,
+        );
+
+        let err = result.expect_err("mismatched paired read counts should be an error");
+        assert!(matches!(
+            err,
+            FastxError::PairedCountMismatch {
+                matched: 1,
+                longer: "first"
+            }
+        ));
+    }
+
+    #[test]
+    fn one_pass_paired_both_empty_returns_zeroed_stats() {
+        let (_in1, fastx1) = temp_fastx("");
+        let (_in2, fastx2) = temp_fastx("");
+
+        let mut out1: Vec<u8> = Vec::new();
+        let mut out2: Vec<u8> = Vec::new();
+        let stats = fastx1
+            .subsample_one_pass_paired(&fastx2, 0.5, Some(1), &mut out1, &mut out2, false, false)
+            .unwrap();
+
+        assert_eq!(stats, OnePassStats::default());
+        assert!(out1.is_empty());
+        assert!(out2.is_empty());
     }
 }

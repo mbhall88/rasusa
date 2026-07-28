@@ -92,10 +92,11 @@ pub struct Reads {
     /// Read the input exactly once, keeping each read independently with probability --frac,
     /// instead of measuring the input first for an exact result
     ///
-    /// Only supported for a single-end FASTA/Q --frac target: the number of reads kept is
-    /// approximate (binomially distributed around --frac), not exact, so it cannot be combined
-    /// with --strict, and it is not available for --num/--bases/--coverage targets, which need an
-    /// exact count or the input's total base count up front.
+    /// Only supported for a --frac target on FASTA/Q input (single-end or paired - paired mates
+    /// are always kept or dropped together): the number of reads kept is approximate (binomially
+    /// distributed around --frac), not exact, so it cannot be combined with --strict, and it is
+    /// not available for --num/--bases/--coverage targets, which need an exact count or the
+    /// input's total base count up front.
     #[clap(short = '1', long = "one-pass")]
     pub one_pass: bool,
 
@@ -218,12 +219,11 @@ impl Reads {
                  --strict to enforce"
             ));
         }
-        if self.input.len() != 1 {
-            return Err(anyhow::anyhow!(
-                "--one-pass only supports a single input file (single-end FASTA/Q)"
-            ));
-        }
-        if infer_format_from_path(&self.input[0]).is_some() {
+        if self
+            .input
+            .iter()
+            .any(|p| infer_format_from_path(p).is_some())
+        {
             return Err(anyhow::anyhow!(
                 "--one-pass only supports FASTA/FASTQ input, not SAM/BAM/CRAM"
             ));
@@ -253,10 +253,18 @@ impl Reads {
         }
     }
 
+    /// Builds the second (paired-mode) output sink, always file-backed at `self.output[1]`.
+    fn create_second_output_handle(&self) -> Result<Box<dyn std::io::Write>> {
+        create_output_writer(&self.output[1], self.compress_level, self.compress_type)
+            .context("unable to create the second output file")
+    }
+
     /// Streams a single-pass, probabilistic fraction subsample: reads the input exactly once,
-    /// keeping each read independently with probability `self.frac`, and writing it immediately -
-    /// so output is in input order and peak memory doesn't grow with input size. See
-    /// [`Fastx::subsample_one_pass`] for the sampling itself.
+    /// keeping each read (or, for paired input, each template - a read and its mate, always
+    /// together) independently with probability `self.frac`, and writing it immediately - so
+    /// output is in input order and peak memory doesn't grow with input size. See
+    /// [`Fastx::subsample_one_pass`] and [`Fastx::subsample_one_pass_paired`] for the sampling
+    /// itself.
     fn run_one_pass(&self) -> Result<()> {
         let fraction = self
             .frac
@@ -267,7 +275,25 @@ impl Reads {
         let mut output_handle = self.create_primary_output_handle()?;
 
         let fastx = Fastx::from_path(&self.input[0]);
-        let stats = fastx.subsample_one_pass(fraction, self.seed, &mut *output_handle, fasta)?;
+
+        let stats = if self.input.len() == 2 {
+            let mate_fastx = Fastx::from_path(&self.input[1]);
+            let mate_fasta =
+                is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(1));
+            let mut mate_output_handle = self.create_second_output_handle()?;
+
+            fastx.subsample_one_pass_paired(
+                &mate_fastx,
+                fraction,
+                self.seed,
+                &mut *output_handle,
+                &mut mate_output_handle,
+                fasta,
+                mate_fasta,
+            )?
+        } else {
+            fastx.subsample_one_pass(fraction, self.seed, &mut *output_handle, fasta)?
+        };
 
         if stats.reads_kept == 0 {
             warn!(
@@ -533,9 +559,7 @@ impl Reads {
         if let Some(second_input_source) = second_input_source {
             let second_input_format = infer_format_from_path(&self.input[1]);
 
-            let mut second_output_handle =
-                create_output_writer(&self.output[1], self.compress_level, self.compress_type)
-                    .context("unable to create the second output file")?;
+            let mut second_output_handle = self.create_second_output_handle()?;
 
             let output_format_2 =
                 output_alignment_format(self.output_format.as_ref()).or_else(|| {

@@ -636,7 +636,8 @@ fn one_pass_with_strict_raises_explanatory_error() -> Result<(), Box<dyn std::er
 }
 
 #[test]
-fn one_pass_with_paired_input_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+fn one_pass_paired_read_count_mismatch_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    // file1.fq.gz has 1 read, r2.fq.gz has 2 - a real count mismatch, detected mid-stream.
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         READS,
@@ -646,14 +647,82 @@ fn one_pass_with_paired_input_raises_error() -> Result<(), Box<dyn std::error::E
         "-f",
         "0.5",
         "-o",
-        "/tmp/one_pass_paired_out1.fq",
+        "/tmp/one_pass_paired_mismatch_out1.fq",
         "-o",
-        "/tmp/one_pass_paired_out2.fq",
+        "/tmp/one_pass_paired_mismatch_out2.fq",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("different numbers of reads"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_bam_paired_input_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_ubam.bam",
+        "tests/cases/ubam/single_ubam.bam",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-o",
+        "/tmp/one_pass_bam_paired_out1.fq",
+        "-o",
+        "/tmp/one_pass_bam_paired_out2.fq",
     ]);
 
     cmd.assert().failure().stderr(predicate::str::contains(
-        "--one-pass only supports a single input file",
+        "--one-pass only supports FASTA/FASTQ input",
     ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_paired_keeps_mates_together_and_reports_once() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out1 = temp_dir.path().join("out1.fastq");
+    let out2 = temp_dir.path().join("out2.fastq");
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/r1.fq.gz",
+        "tests/cases/r2.fq.gz",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "1",
+        "-o",
+        out1.to_str().unwrap(),
+        "-o",
+        out2.to_str().unwrap(),
+    ]);
+
+    let stderr_output = cmd.output().unwrap().stderr;
+    let stderr = String::from_utf8(stderr_output).unwrap();
+    // reported once for the pair, not once per file
+    assert_eq!(stderr.matches("reads seen").count(), 1);
+
+    // r1/r2 use "/1" and "/2" mate-suffixed read names, so strip those before comparing - the
+    // same *template* (read number) should be kept in both files, in the same order.
+    let strip_mate_suffix = |content: String| -> Vec<String> {
+        content
+            .lines()
+            .filter(|l| l.starts_with('@'))
+            .map(|l| l.trim_end_matches("/1").trim_end_matches("/2").to_owned())
+            .collect()
+    };
+    let ids1 = strip_mate_suffix(fs::read_to_string(&out1).unwrap());
+    let ids2 = strip_mate_suffix(fs::read_to_string(&out2).unwrap());
+
+    assert_eq!(ids1, ids2);
+    assert!(!ids1.is_empty());
 
     Ok(())
 }
@@ -816,6 +885,60 @@ fn probability_shorthand_matches_frac_and_one_pass_output() -> Result<(), Box<dy
     let long_form_content = fs::read(&long_form_out).unwrap();
     let shorthand_content = fs::read(&shorthand_out).unwrap();
     assert_eq!(long_form_content, shorthand_content);
+
+    Ok(())
+}
+
+#[test]
+fn probability_shorthand_matches_frac_and_one_pass_output_for_paired_input(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let long_form_out1 = temp_dir.path().join("long_form_r1.fastq");
+    let long_form_out2 = temp_dir.path().join("long_form_r2.fastq");
+    let shorthand_out1 = temp_dir.path().join("shorthand_r1.fastq");
+    let shorthand_out2 = temp_dir.path().join("shorthand_r2.fastq");
+
+    let mut long_form_cmd = Command::cargo_bin(BIN)?;
+    long_form_cmd.args(vec![
+        READS,
+        "tests/cases/seed_r1.fastq",
+        "tests/cases/seed_r2.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        long_form_out1.to_str().unwrap(),
+        "-o",
+        long_form_out2.to_str().unwrap(),
+    ]);
+    long_form_cmd.assert().success();
+
+    let mut shorthand_cmd = Command::cargo_bin(BIN)?;
+    shorthand_cmd.args(vec![
+        READS,
+        "tests/cases/seed_r1.fastq",
+        "tests/cases/seed_r2.fastq",
+        "-p",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        shorthand_out1.to_str().unwrap(),
+        "-o",
+        shorthand_out2.to_str().unwrap(),
+    ]);
+    shorthand_cmd.assert().success();
+
+    assert_eq!(
+        fs::read(&long_form_out1).unwrap(),
+        fs::read(&shorthand_out1).unwrap()
+    );
+    assert_eq!(
+        fs::read(&long_form_out2).unwrap(),
+        fs::read(&shorthand_out2).unwrap()
+    );
 
     Ok(())
 }
