@@ -660,29 +660,6 @@ fn one_pass_paired_read_count_mismatch_raises_error() -> Result<(), Box<dyn std:
 }
 
 #[test]
-fn one_pass_with_bam_paired_input_raises_error() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin(BIN)?;
-    cmd.args(vec![
-        READS,
-        "tests/cases/ubam/single_ubam.bam",
-        "tests/cases/ubam/single_ubam.bam",
-        "--one-pass",
-        "-f",
-        "0.5",
-        "-o",
-        "/tmp/one_pass_bam_paired_out1.fq",
-        "-o",
-        "/tmp/one_pass_bam_paired_out2.fq",
-    ]);
-
-    cmd.assert().failure().stderr(predicate::str::contains(
-        "--one-pass only supports FASTA/FASTQ input",
-    ));
-
-    Ok(())
-}
-
-#[test]
 fn one_pass_paired_keeps_mates_together_and_reports_once() -> Result<(), Box<dyn std::error::Error>>
 {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -728,19 +705,140 @@ fn one_pass_paired_keeps_mates_together_and_reports_once() -> Result<(), Box<dyn
 }
 
 #[test]
-fn one_pass_with_bam_input_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+fn one_pass_with_two_bam_input_files_raises_error() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
     cmd.args(vec![
         READS,
         "tests/cases/ubam/single_ubam.bam",
+        "tests/cases/ubam/single_ubam.bam",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-o",
+        "/tmp/one_pass_two_bam_out1.fq",
+        "-o",
+        "/tmp/one_pass_two_bam_out2.fq",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--one-pass does not support two separate SAM/BAM/CRAM input files",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_single_unsegmented_bam_input_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_usam.sam",
+        "--one-pass",
+        "-f",
+        "1.0",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    // no segmented records - the guard is bypassed without scanning, and every record is its
+    // own template.
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 30);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_query_grouped_input_keeps_mates_together(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_interleave_usam.sam",
+        "--one-pass",
+        "-f",
+        "1.0",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    // consecutive records sharing a name - accepted without needing a header declaration, and
+    // with -f 1.0 every one of the 50 records in the fixture is kept.
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 50);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_query_grouped_cram_input_keeps_mates_together(
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Same fixture content as `one_pass_alignment_query_grouped_input_keeps_mates_together`, but
+    // CRAM - the acceptance criteria for --one-pass explicitly cover SAM/BAM/CRAM, and CRAM's
+    // block-based records take a different path through the name-grouped guard's scan (see
+    // `check_name_grouped`'s doc comment in src/source.rs) than SAM/BAM's lazily-decoded ones.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_interleave_ucram.cram",
+        "--one-pass",
+        "-f",
+        "1.0",
+        "-O",
+        "sam",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 50);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_coordinate_sorted_input_raises_error(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_sorted_usam.sam",
         "--one-pass",
         "-f",
         "0.5",
     ]);
 
-    cmd.assert().failure().stderr(predicate::str::contains(
-        "--one-pass only supports FASTA/FASTQ input",
-    ));
+    let output = cmd.output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr)?;
+    assert!(stderr.contains("does not appear to be grouped by read name"));
+    assert!(stderr.contains("collate"));
+    // rejected before any output is written
+    assert!(output.stdout.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_header_declaring_query_grouping_bypasses_scan(
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Same (coordinate-sorted, not actually grouped) records as
+    // `one_pass_alignment_coordinate_sorted_input_raises_error`, but with a `GO:query` header -
+    // the guard trusts the header and skips scanning, so this succeeds where the header-less
+    // version fails.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_sorted_with_query_grouped_header.sam",
+        "--one-pass",
+        "-f",
+        "1.0",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 50);
 
     Ok(())
 }

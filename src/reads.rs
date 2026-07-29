@@ -92,11 +92,20 @@ pub struct Reads {
     /// Read the input exactly once, keeping each read independently with probability --frac,
     /// instead of measuring the input first for an exact result
     ///
-    /// Only supported for a --frac target on FASTA/Q input (single-end or paired - paired mates
-    /// are always kept or dropped together): the number of reads kept is approximate (binomially
+    /// Only supported for a --frac target: the number of reads kept is approximate (binomially
     /// distributed around --frac), not exact, so it cannot be combined with --strict, and it is
     /// not available for --num/--bases/--coverage targets, which need an exact count or the
     /// input's total base count up front.
+    ///
+    /// Supports FASTA/Q (single-end or paired - paired mates are always kept or dropped
+    /// together) and a single unaligned SAM/BAM/CRAM file (two separate SAM/BAM/CRAM files are
+    /// not supported). For SAM/BAM/CRAM, a segmented read's records are grouped into one
+    /// template by comparing each record only to the one immediately before it, which is only
+    /// correct if the input is grouped by read name - name-sorted/grouped input (SO:queryname or
+    /// GO:query in the header) is accepted outright, and anything else is checked by scanning
+    /// the first 50 records for evidence of grouping (rejected if that scan finds a name that
+    /// reappears after a different one; not a guarantee beyond those 50 records - collate the
+    /// input first, e.g. with `samtools collate`, if in doubt).
     #[clap(short = '1', long = "one-pass")]
     pub one_pass: bool,
 
@@ -219,13 +228,15 @@ impl Reads {
                  --strict to enforce"
             ));
         }
-        if self
-            .input
-            .iter()
-            .any(|p| infer_format_from_path(p).is_some())
+        if self.input.len() == 2
+            && self
+                .input
+                .iter()
+                .any(|p| infer_format_from_path(p).is_some())
         {
             return Err(anyhow::anyhow!(
-                "--one-pass only supports FASTA/FASTQ input, not SAM/BAM/CRAM"
+                "--one-pass does not support two separate SAM/BAM/CRAM input files - a single \
+                 SAM/BAM/CRAM file containing paired/segmented records is supported instead"
             ));
         }
         Ok(())
@@ -260,39 +271,69 @@ impl Reads {
     }
 
     /// Streams a single-pass, probabilistic fraction subsample: reads the input exactly once,
-    /// keeping each read (or, for paired input, each template - a read and its mate, always
-    /// together) independently with probability `self.frac`, and writing it immediately - so
-    /// output is in input order and peak memory doesn't grow with input size. See
-    /// [`Fastx::subsample_one_pass`] and [`Fastx::subsample_one_pass_paired`] for the sampling
-    /// itself.
+    /// keeping each read (or, for paired/segmented input, each template - a read and its
+    /// mate(s), always together) independently with probability `self.frac`, and writing it
+    /// immediately - so output is in input order and peak memory doesn't grow with input size.
+    /// See [`Fastx::subsample_one_pass`], [`Fastx::subsample_one_pass_paired`], and
+    /// [`crate::source::AlignmentSource::subsample_one_pass`] for the sampling itself.
     fn run_one_pass(&self) -> Result<()> {
         let fraction = self
             .frac
             .expect("Runner::run calls validate_one_pass_combination, which rejects --one-pass without --frac, before run_one_pass");
 
-        let fasta = is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0));
+        let input_format = infer_format_from_path(&self.input[0]);
 
-        let mut output_handle = self.create_primary_output_handle()?;
+        let stats = if let Some(_alignment_format) = input_format {
+            let source = crate::source::AlignmentSource::new(&self.input[0], self.threads);
+            // Run the name-grouped guard before creating (and possibly truncating) the output
+            // file, so a rejection doesn't leave an empty output file behind.
+            source.check_name_grouped()?;
+            let mut output_handle = self.create_primary_output_handle()?;
 
-        let fastx = Fastx::from_path(&self.input[0]);
+            let output_format =
+                output_alignment_format(self.output_format.as_ref()).or_else(|| {
+                    if self.output.is_empty() {
+                        input_format
+                    } else {
+                        infer_format_from_path(&self.output[0])
+                    }
+                });
+            let encoding = match output_format {
+                Some(fmt) => OutputEncoding::Alignment(fmt),
+                None => OutputEncoding::Fastx {
+                    fasta: is_fasta_output(
+                        self.output_format.as_ref(),
+                        self.fallback_format_path(0),
+                    ),
+                },
+            };
 
-        let stats = if self.input.len() == 2 {
-            let mate_fastx = Fastx::from_path(&self.input[1]);
-            let mate_fasta =
-                is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(1));
-            let mut mate_output_handle = self.create_second_output_handle()?;
-
-            fastx.subsample_one_pass_paired(
-                &mate_fastx,
-                fraction,
-                self.seed,
-                &mut *output_handle,
-                &mut mate_output_handle,
-                fasta,
-                mate_fasta,
-            )?
+            source.subsample_one_pass(fraction, self.seed, &mut *output_handle, encoding)?
         } else {
-            fastx.subsample_one_pass(fraction, self.seed, &mut *output_handle, fasta)?
+            let fasta = is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0));
+
+            let mut output_handle = self.create_primary_output_handle()?;
+
+            let fastx = Fastx::from_path(&self.input[0]);
+
+            if self.input.len() == 2 {
+                let mate_fastx = Fastx::from_path(&self.input[1]);
+                let mate_fasta =
+                    is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(1));
+                let mut mate_output_handle = self.create_second_output_handle()?;
+
+                fastx.subsample_one_pass_paired(
+                    &mate_fastx,
+                    fraction,
+                    self.seed,
+                    &mut *output_handle,
+                    &mut mate_output_handle,
+                    fasta,
+                    mate_fasta,
+                )?
+            } else {
+                fastx.subsample_one_pass(fraction, self.seed, &mut *output_handle, fasta)?
+            }
         };
 
         if stats.reads_kept == 0 {

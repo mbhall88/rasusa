@@ -58,6 +58,18 @@ pub enum FastxError {
     /// Indicates that a mapped read was detected in the input alignment file.
     #[error("Error: Mapped read detected, please use `rasusa aln` for aligned data")]
     MappedReadDetected,
+
+    /// Indicates that one-pass SAM/BAM/CRAM subsampling's name-grouped guard found evidence
+    /// that the input is not grouped by read name, so streaming template-grouping (which only
+    /// compares each record to the one immediately before it) cannot be trusted not to split
+    /// mates apart.
+    #[error(
+        "Input does not appear to be grouped by read name: a paired/segmented read's records \
+         must be adjacent for one-pass subsampling. Please collate the input first (e.g. \
+         `samtools collate`), or mark it as name-grouped/name-sorted in the header (GO:query or \
+         SO:queryname) if it already is."
+    )]
+    UngroupedAlignmentInput,
 }
 
 /// A `Struct` used for seamlessly dealing with either compressed or uncompressed fasta/fastq files.
