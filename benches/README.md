@@ -85,16 +85,17 @@ Alignment scenarios use the small, already-committed BAM fixtures under
 
 ### Scenarios
 
-| Scenario           | Command                                                           |
-|---------------------|--------------------------------------------------------------------|
-| `reads-num`         | `reads` on generated single-end FASTQ, `-n <count>`                 |
-| `reads-frac`        | `reads` on generated single-end FASTQ, `-f 0.25`                    |
-| `reads-coverage`    | `reads` on generated single-end FASTQ, `-c 30 -g <genome size>`     |
-| `reads-paired`      | `reads` on generated paired-end FASTQ, `-n <count>`                  |
-| `reads-num-sparse`  | `reads` on a larger generated single-end FASTQ, `-n <small count>`   |
-| `aln-stream`        | `aln` on `tests/cases/test.bam`, `--strategy stream`                 |
-| `aln-fetch`         | `aln` on `tests/cases/test.bam`, `--strategy fetch`                   |
-| `aln-paired`        | `aln` on `tests/cases/test.paired.bam` (paired-end alignment)         |
+| Scenario             | Command                                                              |
+|----------------------|-----------------------------------------------------------------------|
+| `reads-num`          | `reads` on generated single-end FASTQ, `-n <count>`                   |
+| `reads-frac`         | `reads` on generated single-end FASTQ, `-f 0.25`                      |
+| `reads-frac-one-pass`| `reads` on generated single-end FASTQ, `-f 0.25 --one-pass`           |
+| `reads-coverage`     | `reads` on generated single-end FASTQ, `-c 30 -g <genome size>`       |
+| `reads-paired`       | `reads` on generated paired-end FASTQ, `-n <count>`                   |
+| `reads-num-sparse`   | `reads` on a larger generated single-end FASTQ, `-n <small count>`    |
+| `aln-stream`         | `aln` on `tests/cases/test.bam`, `--strategy stream`                  |
+| `aln-fetch`          | `aln` on `tests/cases/test.bam`, `--strategy fetch`                   |
+| `aln-paired`         | `aln` on `tests/cases/test.paired.bam` (paired-end alignment)         |
 
 `reads-num-sparse` exists specifically to exercise `SubsampleMode::ByReads`'s `O(k)`
 selection (`rand::seq::index::sample`, see the S10 PR) in the regime it targets: a much
@@ -103,6 +104,13 @@ larger read count (`BENCH_SPARSE_READS`, default 10M) with a tiny, fixed number 
 (default 1M) with `k` a sizeable fraction of `n` (25-50%) - realistic for everyday use,
 but too small/too high a keep-fraction for the `O(n)` vs `O(k)` difference to be
 visible against I/O noise.
+
+`reads-frac-one-pass` uses the same fixture and fraction as `reads-frac`, differing only
+in `--one-pass`, so the two are directly comparable: `reads-frac`'s wall time is the
+two-pass baseline, `reads-frac-one-pass`'s is the streaming/probabilistic one-pass
+figure. On compressed input the two-pass strategy's first pass only decompresses while
+its second pass decompresses and writes, so the expected saving from skipping that first
+pass is smaller than a straight halving.
 
 All scenarios use a fixed `--seed 42` (or `142857` internally for paired fixture
 generation) so results are reproducible run-to-run modulo real timing/memory noise.
