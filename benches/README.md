@@ -145,6 +145,42 @@ generation) so results are reproducible run-to-run modulo real timing/memory noi
 }
 ```
 
+## One-pass fraction sampling: how close does it land?
+
+`rasusa reads --frac <p> --one-pass` decides whether to keep each read with an
+independent coin flip weighted by `p`, as it streams through the file once. That's
+what makes it fast (see `reads-frac-one-pass` above), but it also means the number of
+reads it actually keeps is not exactly `p * total_reads` the way the default two-pass
+mode's is - it's a random outcome that lands *close to* the target, the same way
+flipping a coin 100 times doesn't always land exactly 50 heads. The more reads you
+start with, the closer the outcome tends to land: quadruple the input size and the
+typical miss roughly halves.
+
+`benches/one_pass_accuracy.py` measures this directly: it runs the real `rasusa`
+binary hundreds of times at different input sizes and requested fractions, and
+records how far the fraction it actually kept strayed from what was asked for.
+
+```shell
+cargo build --release --bin rasusa
+benches/one_pass_accuracy.py   # ~1 minute at the defaults (1,200 runs)
+```
+
+Measured results (5 input sizes x 8 fractions x 30 runs each, requesting `p = 0.5`):
+
+| reads in the input | worst miss seen across 30 runs                              |
+|---------------------|-----------------------------------------------------------------|
+| 100                 | up to 15 percentage points (e.g. asked for 50%, got 35-65%)  |
+| 1,000               | up to 4 points                                               |
+| 10,000              | up to 1 point                                                |
+| 100,000             | up to 0.4 points                                             |
+| 1,000,000           | up to 0.14 points                                            |
+
+In short: if you're subsampling a handful of reads, `--one-pass` can visibly miss the
+requested fraction - use the default two-pass mode there. At the scale of a real
+sequencing run (hundreds of thousands of reads or more), the miss is a small fraction
+of a percentage point and safe to ignore. See `one_pass_accuracy.py`'s own results
+table (printed to stdout when run) for the full breakdown across other fractions.
+
 ## `update_readme.sh`
 
 See the top-level `README.md` [Benchmark](../README.md#benchmark) section for what this
