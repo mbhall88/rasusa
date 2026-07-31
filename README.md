@@ -787,10 +787,10 @@ hyperfine --warmup 3 --runs 10 --export-markdown results-single.md \
 <!-- BENCH:single:START -->
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `filtlong --target_bases 220576600 tb.fq` | 32.032 ± 0.082 | 31.922 | 32.155 | 51.95 ± 0.43 |
-| `/home/runner/work/rasusa/rasusa/target/release/rasusa reads tb.fq -c 50 -g 4411532 -s 1 -o /dev/null` | 0.617 ± 0.005 | 0.608 | 0.622 | 1.00 |
+| `filtlong --target_bases 220576600 tb.fq` | 19.774 ± 0.315 | 19.359 | 20.366 | 27.87 ± 0.47 |
+| `/home/runner/work/rasusa/rasusa/target/release/rasusa reads tb.fq -c 50 -g 4411532 -s 1 -o /dev/null` | 0.709 ± 0.004 | 0.705 | 0.717 | 1.00 |
 
-**Summary**: `rasusa` ran 51.95 ± 0.43 times faster than `filtlong`.
+**Summary**: `rasusa` ran 27.87 ± 0.47 times faster than `filtlong`.
 <!-- BENCH:single:END -->
 
 ### Paired-end input
@@ -818,13 +818,13 @@ hyperfine --warmup 10 --runs 100 --export-markdown results-paired.md \
 #### Results
 
 <!-- BENCH:paired:START -->
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `seqtk sample -s 1 r1.fq 140000 > /tmp/tmp.u9aulQzBnc/o1.fq; seqtk sample -s 1 r2.fq 140000 > /tmp/tmp.u9aulQzBnc/o2.fq;` | 597.3 ± 6.9 | 578.4 | 625.6 | 1.38 ± 0.09 |
-| `seqtk sample -2 -s 1 r1.fq 140000 > /tmp/tmp.u9aulQzBnc/o1.fq; seqtk sample -2 -s 1 r2.fq 140000 > /tmp/tmp.u9aulQzBnc/o2.fq;` | 456.9 ± 5.4 | 447.1 | 482.3 | 1.06 ± 0.07 |
-| `/home/runner/work/rasusa/rasusa/target/release/rasusa reads r1.fq r2.fq -n 140000 -s 1 -o /tmp/tmp.u9aulQzBnc/o1.fq -o /tmp/tmp.u9aulQzBnc/o2.fq` | 432.1 ± 26.3 | 333.8 | 536.8 | 1.00 |
+| `seqtk sample -s 1 r1.fq 140000 > /tmp/tmp.mOTcySuXjV/o1.fq; seqtk sample -s 1 r2.fq 140000 > /tmp/tmp.mOTcySuXjV/o2.fq;` | 1.174 ± 0.104 | 1.069 | 1.638 | 1.14 ± 0.14 |
+| `seqtk sample -2 -s 1 r1.fq 140000 > /tmp/tmp.mOTcySuXjV/o1.fq; seqtk sample -2 -s 1 r2.fq 140000 > /tmp/tmp.mOTcySuXjV/o2.fq;` | 1.028 ± 0.089 | 0.908 | 1.501 | 1.00 |
+| `/home/runner/work/rasusa/rasusa/target/release/rasusa reads r1.fq r2.fq -n 140000 -s 1 -o /tmp/tmp.mOTcySuXjV/o1.fq -o /tmp/tmp.mOTcySuXjV/o2.fq` | 1.116 ± 0.171 | 0.768 | 1.855 | 1.09 ± 0.19 |
 
-**Summary**: `rasusa reads` ran 1.38 times faster than `seqtk` (1-pass) and 1.06 times faster than `seqtk` (2-pass)
+**Summary**: `rasusa reads` ran 1.05 times faster than `seqtk` (1-pass) and 0.92 times faster than `seqtk` (2-pass)
 <!-- BENCH:paired:END -->
 
 So, `rasusa reads` is faster than `seqtk` but doesn't require a fixed number of reads -
