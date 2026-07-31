@@ -1,12 +1,43 @@
 use std::borrow::Cow;
 
 use noodles::sam::header::record::value::{
-    map::{program::tag, Program},
+    map::{
+        header::{group_order, sort_order, tag as header_tag},
+        program::tag,
+        Program,
+    },
     Map,
 };
 use noodles::sam::Header;
 
 const RASUSA: &str = "rasusa";
+
+/// Whether `header` declares its records as name-grouped: either explicitly grouped (`GO:query`)
+/// or sorted by name (`SO:queryname`), either of which guarantees a template's records are
+/// adjacent.
+///
+/// One-pass streaming for SAM/BAM/CRAM groups a template by comparing each record only to the
+/// one immediately before it - correct for name-grouped input, but silently wrong (mates split
+/// apart) on anything else. A header that already declares grouping/sorting is trusted outright;
+/// otherwise the caller falls back to scanning the first few records for positive evidence of
+/// grouping (see [`crate::source::AlignmentSource`]).
+pub fn is_query_grouped(header: &Header) -> bool {
+    let Some(hdr) = header.header() else {
+        return false;
+    };
+
+    let is_group_order_query = hdr
+        .other_fields()
+        .get(&header_tag::GROUP_ORDER)
+        .is_some_and(|v| v == group_order::QUERY);
+
+    let is_queryname_sorted = hdr
+        .other_fields()
+        .get(&header_tag::SORT_ORDER)
+        .is_some_and(|v| v == sort_order::QUERY_NAME);
+
+    is_group_order_query || is_queryname_sorted
+}
 
 /// Generates a rasusa program entry from a SAM header. Shared by every code path that writes an
 /// alignment header (the `aln` subcommand and `reads`' [`crate::source::AlignmentSource`]), so
@@ -68,6 +99,30 @@ pub fn make_program_id_unique<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_query_grouped_true_for_go_query() {
+        let header: Header = "@HD\tVN:1.6\tGO:query\n".parse().unwrap();
+        assert!(is_query_grouped(&header));
+    }
+
+    #[test]
+    fn is_query_grouped_true_for_so_queryname() {
+        let header: Header = "@HD\tVN:1.6\tSO:queryname\n".parse().unwrap();
+        assert!(is_query_grouped(&header));
+    }
+
+    #[test]
+    fn is_query_grouped_false_for_coordinate_sort() {
+        let header: Header = "@HD\tVN:1.6\tSO:coordinate\n".parse().unwrap();
+        assert!(!is_query_grouped(&header));
+    }
+
+    #[test]
+    fn is_query_grouped_false_with_no_header_line() {
+        let header = Header::default();
+        assert!(!is_query_grouped(&header));
+    }
 
     #[test]
     fn test_make_program_id_unique_no_program() {

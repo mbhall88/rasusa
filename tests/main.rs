@@ -579,3 +579,636 @@ fn reads_format_combinations() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn one_pass_without_frac_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-n",
+        "5",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("--one-pass requires --frac"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_bases_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-b",
+        "100",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("--one-pass requires --frac"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_strict_raises_explanatory_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "--strict",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--one-pass cannot be combined with --strict",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_paired_read_count_mismatch_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    // file1.fq.gz has 1 read, r2.fq.gz has 2 - a real count mismatch, detected mid-stream.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/file1.fq.gz",
+        "tests/cases/r2.fq.gz",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-o",
+        "/tmp/one_pass_paired_mismatch_out1.fq",
+        "-o",
+        "/tmp/one_pass_paired_mismatch_out2.fq",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("different numbers of reads"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_paired_keeps_mates_together_and_reports_once() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out1 = temp_dir.path().join("out1.fastq");
+    let out2 = temp_dir.path().join("out2.fastq");
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/r1.fq.gz",
+        "tests/cases/r2.fq.gz",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "1",
+        "-o",
+        out1.to_str().unwrap(),
+        "-o",
+        out2.to_str().unwrap(),
+    ]);
+
+    let stderr_output = cmd.output().unwrap().stderr;
+    let stderr = String::from_utf8(stderr_output).unwrap();
+    // reported once for the pair, not once per file
+    assert_eq!(stderr.matches("reads seen").count(), 1);
+
+    // r1/r2 use "/1" and "/2" mate-suffixed read names, so strip those before comparing - the
+    // same *template* (read number) should be kept in both files, in the same order.
+    let strip_mate_suffix = |content: String| -> Vec<String> {
+        content
+            .lines()
+            .filter(|l| l.starts_with('@'))
+            .map(|l| l.trim_end_matches("/1").trim_end_matches("/2").to_owned())
+            .collect()
+    };
+    let ids1 = strip_mate_suffix(fs::read_to_string(&out1).unwrap());
+    let ids2 = strip_mate_suffix(fs::read_to_string(&out2).unwrap());
+
+    assert_eq!(ids1, ids2);
+    assert!(!ids1.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_with_two_bam_input_files_raises_error() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_ubam.bam",
+        "tests/cases/ubam/single_ubam.bam",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-o",
+        "/tmp/one_pass_two_bam_out1.fq",
+        "-o",
+        "/tmp/one_pass_two_bam_out2.fq",
+    ]);
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "--one-pass does not support two separate SAM/BAM/CRAM input files",
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_single_unsegmented_bam_input_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/single_usam.sam",
+        "--one-pass",
+        "-f",
+        "1.0",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    // no segmented records - the guard is bypassed without scanning, and every record is its
+    // own template.
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 30);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_query_grouped_input_keeps_mates_together(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_interleave_usam.sam",
+        "--one-pass",
+        "-f",
+        "1.0",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    // consecutive records sharing a name - accepted without needing a header declaration, and
+    // with -f 1.0 every one of the 50 records in the fixture is kept.
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 50);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_query_grouped_cram_input_keeps_mates_together(
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Same fixture content as `one_pass_alignment_query_grouped_input_keeps_mates_together`, but
+    // CRAM - the acceptance criteria for --one-pass explicitly cover SAM/BAM/CRAM, and CRAM's
+    // block-based records take a different path through the name-grouped guard's scan (see
+    // `check_name_grouped`'s doc comment in src/source.rs) than SAM/BAM's lazily-decoded ones.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_interleave_ucram.cram",
+        "--one-pass",
+        "-f",
+        "1.0",
+        "-O",
+        "sam",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 50);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_coordinate_sorted_input_raises_error(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_sorted_usam.sam",
+        "--one-pass",
+        "-f",
+        "0.5",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr)?;
+    assert!(stderr.contains("does not appear to be grouped by read name"));
+    assert!(stderr.contains("collate"));
+    // rejected before any output is written
+    assert!(output.stdout.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_alignment_header_declaring_query_grouping_bypasses_scan(
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Same (coordinate-sorted, not actually grouped) records as
+    // `one_pass_alignment_coordinate_sorted_input_raises_error`, but with a `GO:query` header -
+    // the guard trusts the header and skips scanning, so this succeeds where the header-less
+    // version fails.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/ubam/paired_sorted_with_query_grouped_header.sam",
+        "--one-pass",
+        "-f",
+        "1.0",
+    ]);
+
+    let output = cmd.output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    assert_eq!(stdout.lines().filter(|l| !l.starts_with('@')).count(), 50);
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_keeping_zero_reads_warns_but_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0",
+        "-s",
+        "1",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Kept 0 reads"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_without_seed_logs_chosen_seed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Using seed:"));
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_reports_kept_seen_and_fractions() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.fastq");
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "1",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+
+    cmd.assert().success().stderr(
+        predicate::str::contains("reads seen")
+            .and(predicate::str::contains("requested fraction"))
+            .and(predicate::str::contains("realised fraction")),
+    );
+
+    Ok(())
+}
+
+#[test]
+fn one_pass_preserves_input_order_at_cli_level() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let out = temp_dir.path().join("out.fastq");
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.6",
+        "-s",
+        "7",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+
+    let content = fs::read_to_string(&out).unwrap();
+    let kept_ids: Vec<&str> = content.lines().filter(|l| l.starts_with('@')).collect();
+
+    let input_content = fs::read_to_string("tests/cases/seed.fastq").unwrap();
+    let input_order: Vec<&str> = input_content
+        .lines()
+        .filter(|l| l.starts_with('@'))
+        .collect();
+    // The kept ids, in the order they were written, should be exactly the subsequence of the
+    // input's read order that was kept - not, say, a lexicographic sort of the ids.
+    let expected_order: Vec<&str> = input_order
+        .into_iter()
+        .filter(|id| kept_ids.contains(id))
+        .collect();
+
+    assert_eq!(kept_ids, expected_order);
+    assert!(!kept_ids.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn probability_shorthand_matches_frac_and_one_pass_output() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temp_dir = tempfile::tempdir().unwrap();
+    let long_form_out = temp_dir.path().join("long_form.fastq");
+    let shorthand_out = temp_dir.path().join("shorthand.fastq");
+
+    let mut long_form_cmd = Command::cargo_bin(BIN)?;
+    long_form_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        long_form_out.to_str().unwrap(),
+    ]);
+    long_form_cmd.assert().success();
+
+    let mut shorthand_cmd = Command::cargo_bin(BIN)?;
+    shorthand_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        shorthand_out.to_str().unwrap(),
+    ]);
+    shorthand_cmd.assert().success();
+
+    let long_form_content = fs::read(&long_form_out).unwrap();
+    let shorthand_content = fs::read(&shorthand_out).unwrap();
+    assert_eq!(long_form_content, shorthand_content);
+
+    Ok(())
+}
+
+#[test]
+fn probability_shorthand_matches_frac_and_one_pass_output_for_paired_input(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let long_form_out1 = temp_dir.path().join("long_form_r1.fastq");
+    let long_form_out2 = temp_dir.path().join("long_form_r2.fastq");
+    let shorthand_out1 = temp_dir.path().join("shorthand_r1.fastq");
+    let shorthand_out2 = temp_dir.path().join("shorthand_r2.fastq");
+
+    let mut long_form_cmd = Command::cargo_bin(BIN)?;
+    long_form_cmd.args(vec![
+        READS,
+        "tests/cases/seed_r1.fastq",
+        "tests/cases/seed_r2.fastq",
+        "--one-pass",
+        "-f",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        long_form_out1.to_str().unwrap(),
+        "-o",
+        long_form_out2.to_str().unwrap(),
+    ]);
+    long_form_cmd.assert().success();
+
+    let mut shorthand_cmd = Command::cargo_bin(BIN)?;
+    shorthand_cmd.args(vec![
+        READS,
+        "tests/cases/seed_r1.fastq",
+        "tests/cases/seed_r2.fastq",
+        "-p",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        shorthand_out1.to_str().unwrap(),
+        "-o",
+        shorthand_out2.to_str().unwrap(),
+    ]);
+    shorthand_cmd.assert().success();
+
+    assert_eq!(
+        fs::read(&long_form_out1).unwrap(),
+        fs::read(&shorthand_out1).unwrap()
+    );
+    assert_eq!(
+        fs::read(&long_form_out2).unwrap(),
+        fs::read(&shorthand_out2).unwrap()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn probability_shorthand_interprets_values_over_one_as_percentages(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let percentage_out = temp_dir.path().join("percentage.fastq");
+    let fraction_out = temp_dir.path().join("fraction.fastq");
+
+    let mut percentage_cmd = Command::cargo_bin(BIN)?;
+    percentage_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "50",
+        "-s",
+        "7",
+        "-o",
+        percentage_out.to_str().unwrap(),
+    ]);
+    percentage_cmd.assert().success();
+
+    let mut fraction_cmd = Command::cargo_bin(BIN)?;
+    fraction_cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-s",
+        "7",
+        "-o",
+        fraction_out.to_str().unwrap(),
+    ]);
+    fraction_cmd.assert().success();
+
+    let percentage_content = fs::read(&percentage_out).unwrap();
+    let fraction_content = fs::read(&fraction_out).unwrap();
+    assert_eq!(percentage_content, fraction_content);
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_frac_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-f",
+        "0.5",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_num_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-n",
+        "5",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_bases_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-b",
+        "100",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_genome_size_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    // `-c` is also passed so this fails specifically because `-g` conflicts with `-p`, not
+    // because `-g` is missing its required `-c` companion.
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-g",
+        "5m",
+        "-c",
+        "10",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_coverage_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "-c",
+        "10",
+        "-g",
+        "5m",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_and_strict_not_allowed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![
+        READS,
+        "tests/cases/seed.fastq",
+        "-p",
+        "0.5",
+        "--strict",
+    ]);
+
+    cmd.assert().failure();
+
+    Ok(())
+}
+
+#[test]
+fn probability_alone_does_not_require_genome_size_or_coverage(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![READS, "tests/cases/seed.fastq", "-p", "0.5"]);
+
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn probability_help_text_documents_the_equivalence_and_approximation(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.args(vec![READS, "--help"]);
+
+    cmd.assert().success().stdout(
+        predicate::str::contains("--frac <FLOAT> --one-pass")
+            .and(predicate::str::contains("is approximate")),
+    );
+
+    Ok(())
+}

@@ -85,16 +85,17 @@ Alignment scenarios use the small, already-committed BAM fixtures under
 
 ### Scenarios
 
-| Scenario           | Command                                                           |
-|---------------------|--------------------------------------------------------------------|
-| `reads-num`         | `reads` on generated single-end FASTQ, `-n <count>`                 |
-| `reads-frac`        | `reads` on generated single-end FASTQ, `-f 0.25`                    |
-| `reads-coverage`    | `reads` on generated single-end FASTQ, `-c 30 -g <genome size>`     |
-| `reads-paired`      | `reads` on generated paired-end FASTQ, `-n <count>`                  |
-| `reads-num-sparse`  | `reads` on a larger generated single-end FASTQ, `-n <small count>`   |
-| `aln-stream`        | `aln` on `tests/cases/test.bam`, `--strategy stream`                 |
-| `aln-fetch`         | `aln` on `tests/cases/test.bam`, `--strategy fetch`                   |
-| `aln-paired`        | `aln` on `tests/cases/test.paired.bam` (paired-end alignment)         |
+| Scenario             | Command                                                              |
+|----------------------|-----------------------------------------------------------------------|
+| `reads-num`          | `reads` on generated single-end FASTQ, `-n <count>`                   |
+| `reads-frac`         | `reads` on generated single-end FASTQ, `-f 0.25`                      |
+| `reads-frac-one-pass`| `reads` on generated single-end FASTQ, `-f 0.25 --one-pass`           |
+| `reads-coverage`     | `reads` on generated single-end FASTQ, `-c 30 -g <genome size>`       |
+| `reads-paired`       | `reads` on generated paired-end FASTQ, `-n <count>`                   |
+| `reads-num-sparse`   | `reads` on a larger generated single-end FASTQ, `-n <small count>`    |
+| `aln-stream`         | `aln` on `tests/cases/test.bam`, `--strategy stream`                  |
+| `aln-fetch`          | `aln` on `tests/cases/test.bam`, `--strategy fetch`                   |
+| `aln-paired`         | `aln` on `tests/cases/test.paired.bam` (paired-end alignment)         |
 
 `reads-num-sparse` exists specifically to exercise `SubsampleMode::ByReads`'s `O(k)`
 selection (`rand::seq::index::sample`, see the S10 PR) in the regime it targets: a much
@@ -103,6 +104,13 @@ larger read count (`BENCH_SPARSE_READS`, default 10M) with a tiny, fixed number 
 (default 1M) with `k` a sizeable fraction of `n` (25-50%) - realistic for everyday use,
 but too small/too high a keep-fraction for the `O(n)` vs `O(k)` difference to be
 visible against I/O noise.
+
+`reads-frac-one-pass` uses the same fixture and fraction as `reads-frac`, differing only
+in `--one-pass`, so the two are directly comparable: `reads-frac`'s wall time is the
+two-pass baseline, `reads-frac-one-pass`'s is the streaming/probabilistic one-pass
+figure. On compressed input the two-pass strategy's first pass only decompresses while
+its second pass decompresses and writes, so the expected saving from skipping that first
+pass is smaller than a straight halving.
 
 All scenarios use a fixed `--seed 42` (or `142857` internally for paired fixture
 generation) so results are reproducible run-to-run modulo real timing/memory noise.
@@ -136,6 +144,42 @@ generation) so results are reproducible run-to-run modulo real timing/memory noi
   }
 }
 ```
+
+## One-pass fraction sampling: how close does it land?
+
+`rasusa reads --frac <p> --one-pass` decides whether to keep each read with an
+independent coin flip weighted by `p`, as it streams through the file once. That's
+what makes it fast (see `reads-frac-one-pass` above), but it also means the number of
+reads it actually keeps is not exactly `p * total_reads` the way the default two-pass
+mode's is - it's a random outcome that lands *close to* the target, the same way
+flipping a coin 100 times doesn't always land exactly 50 heads. The more reads you
+start with, the closer the outcome tends to land: quadruple the input size and the
+typical miss roughly halves.
+
+`benches/one_pass_accuracy.py` measures this directly: it runs the real `rasusa`
+binary hundreds of times at different input sizes and requested fractions, and
+records how far the fraction it actually kept strayed from what was asked for.
+
+```shell
+cargo build --release --bin rasusa
+benches/one_pass_accuracy.py   # ~1 minute at the defaults (1,200 runs)
+```
+
+Measured results (5 input sizes x 8 fractions x 30 runs each, requesting `p = 0.5`):
+
+| reads in the input | worst miss seen across 30 runs                              |
+|---------------------|-----------------------------------------------------------------|
+| 100                 | up to 15 percentage points (e.g. asked for 50%, got 35-65%)  |
+| 1,000               | up to 4 points                                               |
+| 10,000              | up to 1 point                                                |
+| 100,000             | up to 0.4 points                                             |
+| 1,000,000           | up to 0.14 points                                            |
+
+In short: if you're subsampling a handful of reads, `--one-pass` can visibly miss the
+requested fraction - use the default two-pass mode there. At the scale of a real
+sequencing run (hundreds of thousands of reads or more), the miss is a small fraction
+of a percentage point and safe to ignore. See `one_pass_accuracy.py`'s own results
+table (printed to stdout when run) for the full breakdown across other fractions.
 
 ## `update_readme.sh`
 

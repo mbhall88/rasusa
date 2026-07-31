@@ -132,6 +132,9 @@ scenario_cmd_str() {
     reads-frac)
         printf '%q ' "$bin" reads "$DATA_DIR/reads.fq" -f 0.25 -s 42 -o /dev/null
         ;;
+    reads-frac-one-pass)
+        printf '%q ' "$bin" reads "$DATA_DIR/reads.fq" -f 0.25 -s 42 -1 -o /dev/null
+        ;;
     reads-coverage)
         printf '%q ' "$bin" reads "$DATA_DIR/reads.fq" -c 30 -g "$META_GENOME_SIZE" -s 42 -o /dev/null
         ;;
@@ -158,7 +161,7 @@ scenario_cmd_str() {
 }
 
 scenario_names() {
-    echo "reads-num reads-frac reads-coverage reads-paired reads-num-sparse aln-stream aln-fetch aln-paired"
+    echo "reads-num reads-frac reads-frac-one-pass reads-coverage reads-paired reads-num-sparse aln-stream aln-fetch aln-paired"
 }
 
 run_one_scenario() {

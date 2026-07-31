@@ -2,7 +2,7 @@ use crate::cli::{
     check_path_exists, parse_compression_format, parse_fraction, parse_level, CliError, Coverage,
     GenomeSize,
 };
-use crate::fastx::create_output_writer;
+use crate::fastx::{create_output_writer, Fastx};
 use crate::format::{
     default_compression_level, infer_format_from_path, is_fasta_output, output_alignment_format,
     OutputEncoding,
@@ -50,10 +50,10 @@ pub struct Reads {
     #[clap(
     short,
     long,
-    required_unless_present_any = &["bases", "num", "frac"],
+    required_unless_present_any = &["bases", "num", "frac", "probability"],
     requires = "coverage",
     value_name = "size|faidx",
-    conflicts_with_all = &["num", "frac"]
+    conflicts_with_all = &["num", "frac", "probability"]
     )]
     pub genome_size: Option<GenomeSize>,
 
@@ -64,30 +64,67 @@ pub struct Reads {
     short,
     long,
     value_name = "FLOAT",
-    required_unless_present_any = &["bases", "num", "frac"],
+    required_unless_present_any = &["bases", "num", "frac", "probability"],
     requires = "genome_size",
-    conflicts_with_all = &["num", "frac"]
+    conflicts_with_all = &["num", "frac", "probability"]
     )]
     pub coverage: Option<Coverage>,
 
     /// Explicitly set the number of bases required e.g., 4.3kb, 7Tb, 9000, 4.1MB
     ///
     /// If this option is given, --coverage and --genome-size are ignored
-    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac"])]
+    #[clap(short, long, value_name = "bases", conflicts_with_all = &["num", "frac", "probability"])]
     pub bases: Option<GenomeSize>,
 
     /// Subsample to a specific number of reads
     ///
     /// If paired-end reads are passed, this is the number of (matched) reads from EACH file.
     /// This option accepts the same format as genome size - e.g., 1k will take 1000 reads
-    #[clap(short, long, value_name = "INT", conflicts_with = "frac")]
+    #[clap(short, long, value_name = "INT", conflicts_with_all = &["frac", "probability"])]
     pub num: Option<GenomeSize>,
 
     /// Subsample to a fraction of the reads - e.g., 0.5 samples half the reads
     ///
     /// Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
-    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with = "num")]
+    #[clap(short, long, value_name = "FLOAT", value_parser = parse_fraction, conflicts_with_all = &["num", "probability"])]
     pub frac: Option<f32>,
+
+    /// Read the input exactly once, keeping each read independently with probability --frac,
+    /// instead of measuring the input first for an exact result
+    ///
+    /// Only supported for a --frac target: the number of reads kept is approximate (binomially
+    /// distributed around --frac), not exact, so it cannot be combined with --strict, and it is
+    /// not available for --num/--bases/--coverage targets, which need an exact count or the
+    /// input's total base count up front.
+    ///
+    /// Supports FASTA/Q (single-end or paired - paired mates are always kept or dropped
+    /// together) and a single unaligned SAM/BAM/CRAM file (two separate SAM/BAM/CRAM files are
+    /// not supported). For SAM/BAM/CRAM, a segmented read's records are grouped into one
+    /// template by comparing each record only to the one immediately before it, which is only
+    /// correct if the input is grouped by read name - name-sorted/grouped input (SO:queryname or
+    /// GO:query in the header) is accepted outright, and anything else is checked by scanning
+    /// the first 50 records for evidence of grouping (rejected if that scan finds a name that
+    /// reappears after a different one; not a guarantee beyond those 50 records - collate the
+    /// input first, e.g. with `samtools collate`, if in doubt).
+    #[clap(short = '1', long = "one-pass")]
+    pub one_pass: bool,
+
+    /// Keep each read independently with this probability, streaming the input once
+    ///
+    /// Shorthand for `--frac <FLOAT> --one-pass`: both spellings behave identically, including
+    /// producing byte-identical output for the same seed. Values >1 and <=100 will be
+    /// automatically converted, the same as --frac - e.g., 25 => 0.25.
+    ///
+    /// The result is approximate (binomially distributed around the requested probability), not
+    /// an exact fraction of the input.
+    #[clap(
+    short = 'p',
+    long = "probability",
+    value_name = "FLOAT",
+    value_parser = parse_fraction,
+    conflicts_with_all = &["frac", "num", "bases", "coverage", "strict"]
+    )]
+    pub probability: Option<f32>,
 
     /// Exit with an error if the requested coverage/bases/reads is not possible
     #[clap(short = 'e', long)]
@@ -159,11 +196,176 @@ impl Reads {
             _ => Ok(()),
         }
     }
+
+    /// Expands `--probability` into its equivalent `--frac`/`--one-pass` pair, so the rest of
+    /// the pipeline only ever has to reason about one representation.
+    fn apply_probability_shorthand(&mut self) {
+        if let Some(p) = self.probability {
+            self.frac = Some(p);
+            self.one_pass = true;
+        }
+    }
+
+    /// Checks that `--one-pass` is only combined with options it supports.
+    fn validate_one_pass_combination(&self) -> Result<()> {
+        if !self.one_pass {
+            return Ok(());
+        }
+        if self.frac.is_none() {
+            // `--num`/`--bases`/`--coverage` can't be one-pass: `--num` needs an exact read
+            // count up front, and `--bases`/`--coverage` need the input's total base count to
+            // compute a rate - both require the measuring pass one-pass mode skips.
+            return Err(anyhow::anyhow!(
+                "--one-pass requires --frac: it is not available for --num, --bases, or \
+                 --coverage targets, which need an exact count or the input's total base count \
+                 up front"
+            ));
+        }
+        if self.strict {
+            return Err(anyhow::anyhow!(
+                "--one-pass cannot be combined with --strict: one-pass sampling is probabilistic \
+                 and makes no guarantee about how many reads are kept, so there is nothing for \
+                 --strict to enforce"
+            ));
+        }
+        if self.input.len() == 2
+            && self
+                .input
+                .iter()
+                .any(|p| infer_format_from_path(p).is_some())
+        {
+            return Err(anyhow::anyhow!(
+                "--one-pass does not support two separate SAM/BAM/CRAM input files - a single \
+                 SAM/BAM/CRAM file containing paired/segmented records is supported instead"
+            ));
+        }
+        Ok(())
+    }
+
+    /// The path used to infer FASTA-vs-FASTQ output format when no explicit `--output-format`
+    /// is given: the `idx`-th `--output` path if one was provided, else the `idx`-th input path.
+    fn fallback_format_path(&self, idx: usize) -> &PathBuf {
+        self.output.get(idx).unwrap_or(&self.input[idx])
+    }
+
+    /// Builds the primary (first/only) output sink: stdout (optionally compressed) if no
+    /// `--output` path was given, otherwise the first `--output` file.
+    fn create_primary_output_handle(&self) -> Result<Box<dyn std::io::Write>> {
+        match self.output.len() {
+            0 => Ok(match self.compress_type {
+                None => Box::new(BufWriter::new(stdout().lock())) as Box<dyn std::io::Write>,
+                Some(fmt) => {
+                    let lvl = default_compression_level(fmt);
+                    niffler::basic::get_writer(Box::new(BufWriter::new(stdout().lock())), fmt, lvl)?
+                }
+            }),
+            _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
+                .context("unable to create the first output file"),
+        }
+    }
+
+    /// Builds the second (paired-mode) output sink, always file-backed at `self.output[1]`.
+    fn create_second_output_handle(&self) -> Result<Box<dyn std::io::Write>> {
+        create_output_writer(&self.output[1], self.compress_level, self.compress_type)
+            .context("unable to create the second output file")
+    }
+
+    /// Streams a single-pass, probabilistic fraction subsample: reads the input exactly once,
+    /// keeping each read (or, for paired/segmented input, each template - a read and its
+    /// mate(s), always together) independently with probability `self.frac`, and writing it
+    /// immediately - so output is in input order and peak memory doesn't grow with input size.
+    /// See [`Fastx::subsample_one_pass`], [`Fastx::subsample_one_pass_paired`], and
+    /// [`crate::source::AlignmentSource::subsample_one_pass`] for the sampling itself.
+    fn run_one_pass(&self) -> Result<()> {
+        let fraction = self
+            .frac
+            .expect("Runner::run calls validate_one_pass_combination, which rejects --one-pass without --frac, before run_one_pass");
+
+        let input_format = infer_format_from_path(&self.input[0]);
+
+        let stats = if let Some(_alignment_format) = input_format {
+            let source = crate::source::AlignmentSource::new(&self.input[0], self.threads);
+            // Run the name-grouped guard before creating (and possibly truncating) the output
+            // file, so a rejection doesn't leave an empty output file behind.
+            source.check_name_grouped()?;
+            let mut output_handle = self.create_primary_output_handle()?;
+
+            let output_format =
+                output_alignment_format(self.output_format.as_ref()).or_else(|| {
+                    if self.output.is_empty() {
+                        input_format
+                    } else {
+                        infer_format_from_path(&self.output[0])
+                    }
+                });
+            let encoding = match output_format {
+                Some(fmt) => OutputEncoding::Alignment(fmt),
+                None => OutputEncoding::Fastx {
+                    fasta: is_fasta_output(
+                        self.output_format.as_ref(),
+                        self.fallback_format_path(0),
+                    ),
+                },
+            };
+
+            source.subsample_one_pass(fraction, self.seed, &mut *output_handle, encoding)?
+        } else {
+            let fasta = is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0));
+
+            let mut output_handle = self.create_primary_output_handle()?;
+
+            let fastx = Fastx::from_path(&self.input[0]);
+
+            if self.input.len() == 2 {
+                let mate_fastx = Fastx::from_path(&self.input[1]);
+                let mate_fasta =
+                    is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(1));
+                let mut mate_output_handle = self.create_second_output_handle()?;
+
+                fastx.subsample_one_pass_paired(
+                    &mate_fastx,
+                    fraction,
+                    self.seed,
+                    &mut *output_handle,
+                    &mut mate_output_handle,
+                    fasta,
+                    mate_fasta,
+                )?
+            } else {
+                fastx.subsample_one_pass(fraction, self.seed, &mut *output_handle, fasta)?
+            }
+        };
+
+        if stats.reads_kept == 0 {
+            warn!(
+                "Kept 0 reads out of {} seen (requested fraction: {:.4})",
+                stats.reads_seen, fraction
+            );
+        }
+
+        info!(
+            "Kept {} of {} reads seen (requested fraction: {:.4}, realised fraction: {:.4})",
+            stats.reads_kept,
+            stats.reads_seen,
+            fraction,
+            stats.realised_fraction()
+        );
+
+        info!("Done 🎉");
+        Ok(())
+    }
 }
 
 impl Runner for Reads {
     fn run(&mut self) -> Result<()> {
+        self.apply_probability_shorthand();
         self.validate_input_output_combination()?;
+        self.validate_one_pass_combination()?;
+
+        if self.one_pass {
+            return self.run_one_pass();
+        }
+
         let is_paired = self.input.len() == 2;
         if is_paired {
             info!("Two input files given. Assuming paired Illumina...")
@@ -197,17 +399,7 @@ impl Runner for Reads {
             check_conversion(second_input_format, self.output.get(1))?;
         }
 
-        let mut output_handle = match self.output.len() {
-            0 => match self.compress_type {
-                None => Box::new(BufWriter::new(stdout().lock())) as Box<dyn std::io::Write>,
-                Some(fmt) => {
-                    let lvl = default_compression_level(fmt);
-                    niffler::basic::get_writer(Box::new(BufWriter::new(stdout().lock())), fmt, lvl)?
-                }
-            },
-            _ => create_output_writer(&self.output[0], self.compress_level, self.compress_type)
-                .context("unable to create the first output file")?,
-        };
+        let mut output_handle = self.create_primary_output_handle()?;
 
         let second_input_source = if is_paired {
             Some(determine_record_source(&self.input[1], self.threads))
@@ -392,16 +584,9 @@ impl Reads {
 
         let encoding_1 = match output_format_1 {
             Some(fmt) => OutputEncoding::Alignment(fmt),
-            None => {
-                let fallback_path = if self.output.is_empty() {
-                    &self.input[0]
-                } else {
-                    &self.output[0]
-                };
-                OutputEncoding::Fastx {
-                    fasta: is_fasta_output(self.output_format.as_ref(), fallback_path),
-                }
-            }
+            None => OutputEncoding::Fastx {
+                fasta: is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0)),
+            },
         };
 
         let mut total_kept_bases = input_source.filter_reads_into(
@@ -415,9 +600,7 @@ impl Reads {
         if let Some(second_input_source) = second_input_source {
             let second_input_format = infer_format_from_path(&self.input[1]);
 
-            let mut second_output_handle =
-                create_output_writer(&self.output[1], self.compress_level, self.compress_type)
-                    .context("unable to create the second output file")?;
+            let mut second_output_handle = self.create_second_output_handle()?;
 
             let output_format_2 =
                 output_alignment_format(self.output_format.as_ref()).or_else(|| {
@@ -430,16 +613,12 @@ impl Reads {
 
             let encoding_2 = match output_format_2 {
                 Some(fmt) => OutputEncoding::Alignment(fmt),
-                None => {
-                    let fallback_path = if self.output.len() < 2 {
-                        &self.input[1]
-                    } else {
-                        &self.output[1]
-                    };
-                    OutputEncoding::Fastx {
-                        fasta: is_fasta_output(self.output_format.as_ref(), fallback_path),
-                    }
-                }
+                None => OutputEncoding::Fastx {
+                    fasta: is_fasta_output(
+                        self.output_format.as_ref(),
+                        self.fallback_format_path(1),
+                    ),
+                },
             };
 
             total_kept_bases += second_input_source.filter_reads_into(
@@ -525,6 +704,8 @@ mod tests {
             bases: None,
             num: None,
             frac: None,
+            one_pass: false,
+            probability: None,
             strict: false,
             seed: Some(1),
             verbose: false,
@@ -561,6 +742,27 @@ mod tests {
         let result = reads.subsample(&source, None, &mut output);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn apply_probability_shorthand_sets_frac_and_one_pass() {
+        let mut reads = default_reads(vec![PathBuf::from("irrelevant.fq")]);
+        reads.probability = Some(0.3);
+
+        reads.apply_probability_shorthand();
+
+        assert_eq!(reads.frac, Some(0.3));
+        assert!(reads.one_pass);
+    }
+
+    #[test]
+    fn apply_probability_shorthand_is_a_no_op_when_unset() {
+        let mut reads = default_reads(vec![PathBuf::from("irrelevant.fq")]);
+
+        reads.apply_probability_shorthand();
+
+        assert_eq!(reads.frac, None);
+        assert!(!reads.one_pass);
     }
 
     #[test]

@@ -7,7 +7,7 @@ mod stream;
 mod util;
 
 pub use args::{Alignment, SubsamplingStrategy};
-pub use header::{make_program_id_unique, program_entry};
+pub use header::{is_query_grouped, make_program_id_unique, program_entry};
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;

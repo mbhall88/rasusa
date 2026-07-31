@@ -9,6 +9,7 @@ pub mod cli;
 pub mod fastx;
 pub mod format;
 pub mod reads;
+pub mod record;
 pub mod source;
 pub mod subsampler;
 pub mod threading;
