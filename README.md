@@ -437,6 +437,44 @@ of the reads.
 > [!NOTE]
 > If this option is given, genome size and coverage are not required.
 
+#### One-pass (streaming) fraction subsampling
+
+##### `-1`, `--one-pass`
+
+> `reads` only
+
+By default, `--frac` subsampling reads the input twice: once to measure it, then once
+to subsample to an exact fraction. `--one-pass` instead reads the input exactly once,
+deciding whether to keep each read (or, for paired/segmented input, each read
+pair/template) independently with probability `--frac`, as it streams through. This is
+faster and skips the first pass entirely, but the number of reads kept is only
+approximately `--frac * total_reads`, not exact - see [`benches/README.md`][one-pass-accuracy]
+for how close it lands in practice (close enough to ignore for a real sequencing run;
+worth avoiding if you're subsampling a handful of reads).
+
+> [!NOTE]
+> `--one-pass` requires `--frac` - it isn't available for `--num`/`--bases`/`--coverage`,
+> which need an exact read count or the input's total base count up front. It also
+> cannot be combined with `--strict`, since the result is approximate by design.
+
+For paired FASTA/Q, mates are always kept or dropped together. For a single unaligned
+SAM/BAM/CRAM file, all of a segmented read's records are kept or dropped together as
+one template - this requires the input to be grouped by read name (`samtools collate`,
+not `samtools sort`). Name-sorted/grouped input is detected from the header
+(`SO:queryname` or `GO:query`) where present; otherwise the first 50 records are
+scanned for evidence of grouping, and the input is rejected up front if that scan finds
+evidence it isn't.
+
+#### Probability shorthand
+
+##### `-p`, `--probability`
+
+> `reads` only
+
+Shorthand for `--frac <FLOAT> --one-pass` - `-p 0.1` is identical to `-f 0.1 -1`,
+including producing byte-identical output for the same `--seed`. Values `>1` and `<=100`
+are converted the same way as `--frac` - e.g., `-p 25` means `-p 0.25`.
+
 #### Random seed
 
 ##### `-s`, `--seed`
@@ -569,6 +607,20 @@ Options:
           
           Values >1 and <=100 will be automatically converted - e.g., 25 => 0.25
 
+  -1, --one-pass
+          Read the input exactly once, keeping each read independently with probability --frac, instead of measuring the input first for an exact result
+          
+          Only supported for a --frac target: the number of reads kept is approximate (binomially distributed around --frac), not exact, so it cannot be combined with --strict, and it is not available for --num/--bases/--coverage targets, which need an exact count or the input's total base count up front.
+          
+          Supports FASTA/Q (single-end or paired - paired mates are always kept or dropped together) and a single unaligned SAM/BAM/CRAM file (two separate SAM/BAM/CRAM files are not supported). For SAM/BAM/CRAM, a segmented read's records are grouped into one template by comparing each record only to the one immediately before it, which is only correct if the input is grouped by read name - name-sorted/grouped input (SO:queryname or GO:query in the header) is accepted outright, and anything else is checked by scanning the first 50 records for evidence of grouping (rejected if that scan finds a name that reappears after a different one; not a guarantee beyond those 50 records - collate the input first, e.g. with `samtools collate`, if in doubt).
+
+  -p, --probability <FLOAT>
+          Keep each read independently with this probability, streaming the input once
+          
+          Shorthand for `--frac <FLOAT> --one-pass`: both spellings behave identically, including producing byte-identical output for the same seed. Values >1 and <=100 will be automatically converted, the same as --frac - e.g., 25 => 0.25.
+          
+          The result is approximate (binomially distributed around the requested probability), not an exact fraction of the input.
+
   -e, --strict
           Exit with an error if the requested coverage/bases/reads is not possible
 
@@ -592,6 +644,13 @@ Options:
 
   -l, --compress-level <1-21>
           Compression level to use if compressing output. Uses the default level for the format if not specified
+
+  -@, --threads <INT>
+          Number of threads to use for BAM (de)compression
+          
+          Only relevant for BAM input/output - SAM is uncompressed and CRAM has no multithreaded codec, so this is a no-op for those formats and for FASTA/FASTQ. `--threads 1` is identical to not passing this option. Only BAM *reading* benefits here; writing BAM output remains single-threaded.
+          
+          [default: 1]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -658,6 +717,13 @@ Options:
           Larger values reduce disk seeking, but at the cost of high memory usage. The minimum value is 1,000 bp to avoid small region queries.
           
           [default: 10000]
+
+  -@, --threads <INT>
+          Number of threads to use for BAM (de)compression
+          
+          Only BAM benefits from this - SAM is uncompressed and CRAM has no multithreaded codec, so this is a no-op for those formats. `--threads 1` is identical to not passing this option.
+          
+          [default: 1]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -886,6 +952,8 @@ You can get the following citations by running `rasusa cite`
 [log-lvl]: https://docs.rs/log/0.4.6/log/enum.Level.html#variants
 
 [mgen-ref]: https://doi.org/10.1099/mgen.0.000294
+
+[one-pass-accuracy]: benches/README.md#one-pass-fraction-sampling-how-close-does-it-land
 
 [pr-help]: https://github.com/bioconda/bioconda-recipes/pull/18690
 
