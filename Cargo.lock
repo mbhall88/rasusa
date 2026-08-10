@@ -853,6 +853,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzma-rust2"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "243cb2271683c2855cad62142cbf38199db439b1b1e1ccdd5a011342894dd7cc"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
 name = "lzma-sys"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -920,14 +929,14 @@ dependencies = [
 
 [[package]]
 name = "noodles"
-version = "0.113.0"
+version = "0.115.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03f0a067d8afc481ba06abe5bd924e89368932d664bea15d671bee3559728421"
+checksum = "5ef86cb036ab589c660e76bc6d7741454fe8ff71ba3348f71812936f5c1a43f6"
 dependencies = [
- "noodles-bam",
+ "noodles-bam 0.94.0",
  "noodles-core",
- "noodles-cram",
- "noodles-sam",
+ "noodles-cram 0.98.0",
+ "noodles-sam 0.89.0",
 ]
 
 [[package]]
@@ -939,10 +948,25 @@ dependencies = [
  "bstr",
  "indexmap",
  "memchr",
- "noodles-bgzf",
+ "noodles-bgzf 0.49.0",
  "noodles-core",
- "noodles-csi",
- "noodles-sam",
+ "noodles-csi 0.58.0",
+ "noodles-sam 0.87.0",
+]
+
+[[package]]
+name = "noodles-bam"
+version = "0.94.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e018289a9da86771349be387224f6634ad56ec48eb16a3a29a7670def5d206c2"
+dependencies = [
+ "bstr",
+ "indexmap",
+ "memchr",
+ "noodles-bgzf 0.51.0",
+ "noodles-core",
+ "noodles-csi 0.60.0",
+ "noodles-sam 0.89.0",
 ]
 
 [[package]]
@@ -954,6 +978,18 @@ dependencies = [
  "bytes",
  "crossbeam-channel",
  "libdeflater",
+ "rayon",
+ "zlib-rs",
+]
+
+[[package]]
+name = "noodles-bgzf"
+version = "0.51.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "280d401d0358893ad706fb6094a18e7f9e8f3002630f4960889cb702b6e2714e"
+dependencies = [
+ "bytes",
+ "crossbeam-channel",
  "rayon",
  "zlib-rs",
 ]
@@ -979,12 +1015,32 @@ dependencies = [
  "flate2",
  "indexmap",
  "lexical-core",
- "lzma-rust2",
+ "lzma-rust2 0.16.5",
  "md-5",
- "noodles-bam",
+ "noodles-bam 0.92.0",
  "noodles-core",
- "noodles-fasta",
- "noodles-sam",
+ "noodles-fasta 0.64.0",
+ "noodles-sam 0.87.0",
+]
+
+[[package]]
+name = "noodles-cram"
+version = "0.98.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbf419f7401c3ae4a2fdfb0101ce670680e2ce8f9c0c4e18ca82ff8959c5d4d3"
+dependencies = [
+ "bitflags 2.13.1",
+ "bstr",
+ "bzip2 0.6.1",
+ "flate2",
+ "indexmap",
+ "lexical-core",
+ "lzma-rust2 0.18.1",
+ "md-5",
+ "noodles-bam 0.94.0",
+ "noodles-core",
+ "noodles-fasta 0.66.0",
+ "noodles-sam 0.89.0",
 ]
 
 [[package]]
@@ -996,7 +1052,20 @@ dependencies = [
  "bit-vec",
  "bstr",
  "indexmap",
- "noodles-bgzf",
+ "noodles-bgzf 0.49.0",
+ "noodles-core",
+]
+
+[[package]]
+name = "noodles-csi"
+version = "0.60.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32789eeba9c4001d50de853a4c6a8f0551d586a91d6919c0008dd462231feacb"
+dependencies = [
+ "bit-vec",
+ "bstr",
+ "indexmap",
+ "noodles-bgzf 0.51.0",
  "noodles-core",
 ]
 
@@ -1008,7 +1077,19 @@ checksum = "e057dee8e62fe97d0f0205e6865568fca380b6017d98f7c8a7740a17fa28c654"
 dependencies = [
  "bstr",
  "memchr",
- "noodles-bgzf",
+ "noodles-bgzf 0.49.0",
+ "noodles-core",
+]
+
+[[package]]
+name = "noodles-fasta"
+version = "0.66.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da0263cded3c76c5ddc6d36b805e68e512e6f474a56b9855c7ef37cb69a3fb65"
+dependencies = [
+ "bstr",
+ "memchr",
+ "noodles-bgzf 0.51.0",
  "noodles-core",
 ]
 
@@ -1023,9 +1104,25 @@ dependencies = [
  "indexmap",
  "lexical-core",
  "memchr",
- "noodles-bgzf",
+ "noodles-bgzf 0.49.0",
  "noodles-core",
- "noodles-csi",
+ "noodles-csi 0.58.0",
+]
+
+[[package]]
+name = "noodles-sam"
+version = "0.89.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8063dd9e92825db46ae21813525589d41cff9ce2dcb2a0d25d99af86b274a1c5"
+dependencies = [
+ "bitflags 2.13.1",
+ "bstr",
+ "indexmap",
+ "lexical-core",
+ "memchr",
+ "noodles-bgzf 0.51.0",
+ "noodles-core",
+ "noodles-csi 0.60.0",
 ]
 
 [[package]]
@@ -1036,13 +1133,13 @@ checksum = "567c9ce0176a2c82097de4ea27c4da7395de0447f8df0369d6dfd99c9afdc788"
 dependencies = [
  "bstr",
  "flate2",
- "noodles-bam",
- "noodles-bgzf",
+ "noodles-bam 0.92.0",
+ "noodles-bgzf 0.49.0",
  "noodles-core",
- "noodles-cram",
- "noodles-csi",
- "noodles-fasta",
- "noodles-sam",
+ "noodles-cram 0.96.0",
+ "noodles-csi 0.58.0",
+ "noodles-fasta 0.64.0",
+ "noodles-sam 0.87.0",
 ]
 
 [[package]]
@@ -1245,7 +1342,7 @@ dependencies = [
  "needletail",
  "niffler",
  "noodles",
- "noodles-bgzf",
+ "noodles-bgzf 0.49.0",
  "noodles-util",
  "predicates",
  "rand",
