@@ -1,0 +1,8 @@
+[[project]]
+identities = [
+    "doi:10.46471/gigabyte.180",
+    "doi:10.21105/joss.03941",
+    "github:mbhall88/rasusa",
+    "crates:rasusa",
+    "conda:bioconda/rasusa",
+]
