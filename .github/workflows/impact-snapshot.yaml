@@ -1,0 +1,46 @@
+name: Impact snapshot
+
+on:
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install boast
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            https://github.com/mbhall88/boast/releases/latest/download/boast-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Run boast about
+        run: boast about manifest.toml --snapshot-dir snapshots
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALTMETRIC_KEY: ${{ secrets.ALTMETRIC_KEY }}
+
+      - name: Regenerate the rolling report
+        if: always()
+        run: |
+          set -euo pipefail
+          newest=$(find snapshots -maxdepth 1 -name '*.json' | sort | tail -n1)
+          boast render "$newest" --format markdown > IMPACT.md
+
+      - name: Commit snapshot and report
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add snapshots IMPACT.md
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: monthly impact snapshot"
+          git push
