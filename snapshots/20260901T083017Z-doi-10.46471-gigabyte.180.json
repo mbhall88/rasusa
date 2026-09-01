@@ -1,0 +1,809 @@
+{
+  "schema_version": 3,
+  "tool": "boast",
+  "tool_version": "0.6.0",
+  "created_at": "2026-09-01T08:30:17.441866633Z",
+  "identities": [
+    "doi:10.46471/gigabyte.180",
+    "doi:10.21105/joss.03941",
+    "github:mbhall88/rasusa",
+    "crates:rasusa",
+    "conda:bioconda/rasusa"
+  ],
+  "results": [
+    {
+      "provider": "openalex",
+      "identity": "doi:10.46471/gigabyte.180",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 1
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.346969473Z",
+            "source": "https://api.openalex.org/works/doi:10.46471/gigabyte.180"
+          },
+          {
+            "name": "fwci",
+            "category": "citations",
+            "value": {
+              "type": "real",
+              "value": 3.0979
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.346969473Z",
+            "source": "https://api.openalex.org/works/doi:10.46471/gigabyte.180",
+            "note": "field-weighted citation impact; 1.0 = world average"
+          },
+          {
+            "name": "citation_percentile",
+            "category": "citations",
+            "value": {
+              "type": "real",
+              "value": 91.08660499999999
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.346969473Z",
+            "source": "https://api.openalex.org/works/doi:10.46471/gigabyte.180",
+            "note": "top 10% in its field, year, and type"
+          },
+          {
+            "name": "open_access",
+            "category": "attention",
+            "value": {
+              "type": "text",
+              "value": "gold"
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.346969473Z",
+            "source": "https://api.openalex.org/works/doi:10.46471/gigabyte.180",
+            "note": "OpenAlex open-access status; \"closed\" means no open-access copy found"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "crossref",
+      "identity": "doi:10.46471/gigabyte.180",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 1
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "crossref",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.363887435Z",
+            "source": "https://api.crossref.org/works/10.46471/gigabyte.180",
+            "note": "times referenced, per Crossref"
+          }
+        ],
+        "metadata": {
+          "identity": "doi:10.46471/gigabyte.180",
+          "title": "Efficient downsampling of genome alignments with Rasusa",
+          "authors": [
+            "Achmad Dimas Cahyaning Furqon",
+            "Leah W. Roberts",
+            "Michael B. Hall"
+          ],
+          "container": "Gigabyte",
+          "year": 2026,
+          "provider": "crossref",
+          "source": "https://api.crossref.org/works/10.46471/gigabyte.180"
+        }
+      }
+    },
+    {
+      "provider": "dimensions",
+      "identity": "doi:10.46471/gigabyte.180",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 1
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "dimensions",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.20530964Z",
+            "source": "https://metrics-api.dimensions.ai/doi/10.46471/gigabyte.180",
+            "note": "This data has been sourced via the Dimensions Metrics API, use of which is subject to the terms at https://dimensions.ai/policies/terms/metrics/. Any use by an unregistered organization is not authorized. Please contact info@dimensions.ai for further information."
+          },
+          {
+            "name": "recent_citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 1
+            },
+            "window": {
+              "kind": "periodic",
+              "label": "last two calendar years"
+            },
+            "provider": "dimensions",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.20530964Z",
+            "source": "https://metrics-api.dimensions.ai/doi/10.46471/gigabyte.180",
+            "note": "resets each 1 January; not a rolling 24-month window"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "europe_pmc",
+      "identity": "doi:10.46471/gigabyte.180",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 1
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "europe_pmc",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.882177661Z",
+            "source": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:10.46471/gigabyte.180&format=json",
+            "note": "citation count from Europe PMC"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "wikipedia",
+      "identity": "doi:10.46471/gigabyte.180",
+      "category": "attention",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "wikipedia_mentions",
+            "category": "attention",
+            "value": {
+              "type": "count",
+              "value": 0
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "wikipedia",
+            "identity": "doi:10.46471/gigabyte.180",
+            "as_of": "2026-09-01T08:30:10.671157248Z",
+            "source": "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=%2210.46471%2Fgigabyte.180%22",
+            "note": "English Wikipedia full-text search hits for this DOI; other-language Wikipedias are not counted"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "altmetric",
+      "identity": "doi:10.46471/gigabyte.180",
+      "category": "attention",
+      "outcome": {
+        "status": "not_applicable",
+        "note": "Altmetric attention data not collected: no Details Page API key (ALTMETRIC_KEY). An institutional licence or Altmetric's SRAD program provides one."
+      }
+    },
+    {
+      "provider": "openalex",
+      "identity": "doi:10.21105/joss.03941",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 165
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.445017456Z",
+            "source": "https://api.openalex.org/works/doi:10.21105/joss.03941"
+          },
+          {
+            "name": "fwci",
+            "category": "citations",
+            "value": {
+              "type": "real",
+              "value": 10.8223
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.445017456Z",
+            "source": "https://api.openalex.org/works/doi:10.21105/joss.03941",
+            "note": "field-weighted citation impact; 1.0 = world average"
+          },
+          {
+            "name": "citation_percentile",
+            "category": "citations",
+            "value": {
+              "type": "real",
+              "value": 99.211611
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.445017456Z",
+            "source": "https://api.openalex.org/works/doi:10.21105/joss.03941",
+            "note": "top 1% in its field, year, and type"
+          },
+          {
+            "name": "open_access",
+            "category": "attention",
+            "value": {
+              "type": "text",
+              "value": "diamond"
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.445017456Z",
+            "source": "https://api.openalex.org/works/doi:10.21105/joss.03941",
+            "note": "OpenAlex open-access status; \"closed\" means no open-access copy found"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "crossref",
+      "identity": "doi:10.21105/joss.03941",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 174
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "crossref",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.46514925Z",
+            "source": "https://api.crossref.org/works/10.21105/joss.03941",
+            "note": "times referenced, per Crossref"
+          }
+        ],
+        "metadata": {
+          "identity": "doi:10.21105/joss.03941",
+          "title": "Rasusa: Randomly subsample sequencing reads to a specified coverage",
+          "authors": [
+            "Michael Hall"
+          ],
+          "container": "Journal of Open Source Software",
+          "year": 2022,
+          "provider": "crossref",
+          "source": "https://api.crossref.org/works/10.21105/joss.03941"
+        }
+      }
+    },
+    {
+      "provider": "dimensions",
+      "identity": "doi:10.21105/joss.03941",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 181
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "dimensions",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.289006646Z",
+            "source": "https://metrics-api.dimensions.ai/doi/10.21105/joss.03941",
+            "note": "This data has been sourced via the Dimensions Metrics API, use of which is subject to the terms at https://dimensions.ai/policies/terms/metrics/. Any use by an unregistered organization is not authorized. Please contact info@dimensions.ai for further information."
+          },
+          {
+            "name": "recent_citations",
+            "category": "citations",
+            "value": {
+              "type": "count",
+              "value": 89
+            },
+            "window": {
+              "kind": "periodic",
+              "label": "last two calendar years"
+            },
+            "provider": "dimensions",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.289006646Z",
+            "source": "https://metrics-api.dimensions.ai/doi/10.21105/joss.03941",
+            "note": "resets each 1 January; not a rolling 24-month window"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "europe_pmc",
+      "identity": "doi:10.21105/joss.03941",
+      "category": "citations",
+      "outcome": {
+        "status": "not_applicable",
+        "note": "not found in Europe PMC"
+      }
+    },
+    {
+      "provider": "wikipedia",
+      "identity": "doi:10.21105/joss.03941",
+      "category": "attention",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "wikipedia_mentions",
+            "category": "attention",
+            "value": {
+              "type": "count",
+              "value": 0
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "wikipedia",
+            "identity": "doi:10.21105/joss.03941",
+            "as_of": "2026-09-01T08:30:10.821213731Z",
+            "source": "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=%2210.21105%2Fjoss.03941%22",
+            "note": "English Wikipedia full-text search hits for this DOI; other-language Wikipedias are not counted"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "altmetric",
+      "identity": "doi:10.21105/joss.03941",
+      "category": "attention",
+      "outcome": {
+        "status": "not_applicable",
+        "note": "Altmetric attention data not collected: no Details Page API key (ALTMETRIC_KEY). An institutional licence or Altmetric's SRAD program provides one."
+      }
+    },
+    {
+      "provider": "openalex",
+      "identity": "github:mbhall88/rasusa",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "mentions",
+            "category": "attention",
+            "value": {
+              "type": "count",
+              "value": 15
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "openalex",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.627339392Z",
+            "source": "https://api.openalex.org/works?filter=fulltext.search%3A%22github.com%2Fmbhall88%2Frasusa%22%2Ctype%3Aarticle%7Cpreprint&per-page=1&select=id",
+            "note": "indexed full-text search estimate, not a formal citation or verified literal URL count; partial coverage; self-mentions are included; article/preprint versions may be counted separately"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "europe_pmc",
+      "identity": "github:mbhall88/rasusa",
+      "category": "citations",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "mentions",
+            "category": "attention",
+            "value": {
+              "type": "count",
+              "value": 12
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "europe_pmc",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:12.087646375Z",
+            "source": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%22github.com%2Fmbhall88%2Frasusa%22%20AND%20%28SRC%3AMED%20OR%20SRC%3APPR%29&pageSize=1&resultType=idlist&format=json",
+            "note": "indexed full-text search estimate, not a formal citation or verified literal URL count; partial coverage concentrated in life-sciences literature; self-mentions are included; journal article/preprint versions may be counted separately"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "github",
+      "identity": "github:mbhall88/rasusa",
+      "category": "code",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "stars",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 274
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/repos/mbhall88/rasusa"
+          },
+          {
+            "name": "forks",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 20
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/repos/mbhall88/rasusa"
+          },
+          {
+            "name": "watchers",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 3
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/repos/mbhall88/rasusa",
+            "note": "users watching the repo (subscribers)"
+          },
+          {
+            "name": "repo_age_years",
+            "category": "code",
+            "value": {
+              "type": "real",
+              "value": 6.931676141404923
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/repos/mbhall88/rasusa",
+            "note": "since 2019-09-26"
+          },
+          {
+            "name": "contributors",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 9
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/repos/mbhall88/rasusa/contributors?per_page=1&anon=true"
+          },
+          {
+            "name": "release_downloads",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 3597
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/repos/mbhall88/rasusa/releases?per_page=100",
+            "note": "summed across release assets"
+          },
+          {
+            "name": "cohort_rank (alignment)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 60
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:alignment+stars:%3E274&per_page=1",
+            "note": "#60 of 1404 repos tagged 'alignment'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (bam)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 4
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:bam+stars:%3E274&per_page=1",
+            "note": "#4 of 223 repos tagged 'bam'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (bioinformatics)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 223
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:bioinformatics+stars:%3E274&per_page=1",
+            "note": "#223 of 16280 repos tagged 'bioinformatics'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (coverage)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 55
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:coverage+stars:%3E274&per_page=1",
+            "note": "#55 of 2061 repos tagged 'coverage'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (downsample)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 2
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:downsample+stars:%3E274&per_page=1",
+            "note": "#2 of 22 repos tagged 'downsample'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (fasta)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 13
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:fasta+stars:%3E274&per_page=1",
+            "note": "#13 of 583 repos tagged 'fasta'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (fastq)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 8
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:fastq+stars:%3E274&per_page=1",
+            "note": "#8 of 353 repos tagged 'fastq'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (genome-analysis)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 5
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:genome-analysis+stars:%3E274&per_page=1",
+            "note": "#5 of 202 repos tagged 'genome-analysis'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (random)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 49
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:random+stars:%3E274&per_page=1",
+            "note": "#49 of 5625 repos tagged 'random'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (rust)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 3538
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:rust+stars:%3E274&per_page=1",
+            "note": "#3538 of 120385 repos tagged 'rust'; GitHub topics are inconsistently applied"
+          },
+          {
+            "name": "cohort_rank (subsampling)",
+            "category": "code",
+            "value": {
+              "type": "count",
+              "value": 3
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "github",
+            "identity": "github:mbhall88/rasusa",
+            "as_of": "2026-09-01T08:30:10.324851278Z",
+            "source": "https://api.github.com/search/repositories?q=topic:subsampling+stars:%3E274&per_page=1",
+            "note": "#3 of 28 repos tagged 'subsampling'; GitHub topics are inconsistently applied"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "crates.io",
+      "identity": "crates:rasusa",
+      "category": "downloads",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "downloads",
+            "category": "downloads",
+            "value": {
+              "type": "count",
+              "value": 19290
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "crates.io",
+            "identity": "crates:rasusa",
+            "as_of": "2026-09-01T08:30:10.175826063Z",
+            "source": "https://crates.io/api/v1/crates/rasusa"
+          }
+        ]
+      }
+    },
+    {
+      "provider": "anaconda",
+      "identity": "conda:bioconda/rasusa",
+      "category": "downloads",
+      "outcome": {
+        "status": "values",
+        "metrics": [
+          {
+            "name": "downloads",
+            "category": "downloads",
+            "value": {
+              "type": "count",
+              "value": 58032
+            },
+            "window": {
+              "kind": "cumulative"
+            },
+            "provider": "bioconda",
+            "identity": "conda:bioconda/rasusa",
+            "as_of": "2026-09-01T08:30:10.297058711Z",
+            "source": "https://api.anaconda.org/package/bioconda/rasusa"
+          }
+        ]
+      }
+    }
+  ]
+}
