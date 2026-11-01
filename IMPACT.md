@@ -1,6 +1,6 @@
 # boast Report
 
-_boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
+_boast 0.6.0 — as of 2026-11-01T10:17:31.806953086Z_
 
 ## doi:10.46471/gigabyte.180
 
@@ -11,11 +11,11 @@ _boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
 | Metric | Value | Window | Provider | Detail |
 | --- | --- | --- | --- | --- |
 | citations | 1 | all-time | [openalex](https://api.openalex.org/works/doi:10.46471/gigabyte.180) |  |
-| fwci | 2.43 | all-time | [openalex](https://api.openalex.org/works/doi:10.46471/gigabyte.180) | field-weighted citation impact; 1.0 = world average |
-| citation_percentile | 87.96 | all-time | [openalex](https://api.openalex.org/works/doi:10.46471/gigabyte.180) |  |
-| citations | 1 | all-time | [crossref](https://api.crossref.org/works/10.46471/gigabyte.180) | times referenced, per Crossref |
-| citations | 2 | all-time | [dimensions](https://metrics-api.dimensions.ai/doi/10.46471/gigabyte.180) |  |
-| recent_citations | 2 | last two calendar years | [dimensions](https://metrics-api.dimensions.ai/doi/10.46471/gigabyte.180) | resets each 1 January; not a rolling 24-month window |
+| fwci | 2.05 | all-time | [openalex](https://api.openalex.org/works/doi:10.46471/gigabyte.180) | field-weighted citation impact; 1.0 = world average |
+| citation_percentile | 85.24 | all-time | [openalex](https://api.openalex.org/works/doi:10.46471/gigabyte.180) |  |
+| citations | 2 | all-time | [crossref](https://api.crossref.org/works/10.46471/gigabyte.180) | times referenced, per Crossref |
+| citations | 3 | all-time | [dimensions](https://metrics-api.dimensions.ai/doi/10.46471/gigabyte.180) |  |
+| recent_citations | 3 | last two calendar years | [dimensions](https://metrics-api.dimensions.ai/doi/10.46471/gigabyte.180) | resets each 1 January; not a rolling 24-month window |
 | citations | 1 | all-time | [europe_pmc](https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:10.46471/gigabyte.180&format=json) | citation count from Europe PMC |
 
 ### Attention
@@ -34,12 +34,12 @@ _boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
 
 | Metric | Value | Window | Provider | Detail |
 | --- | --- | --- | --- | --- |
-| citations | 168 | all-time | [openalex](https://api.openalex.org/works/doi:10.21105/joss.03941) |  |
-| fwci | 10.74 | all-time | [openalex](https://api.openalex.org/works/doi:10.21105/joss.03941) | field-weighted citation impact; 1.0 = world average |
-| citation_percentile | 99.26 | all-time | [openalex](https://api.openalex.org/works/doi:10.21105/joss.03941) | top 1% in its field, year, and type |
-| citations | 177 | all-time | [crossref](https://api.crossref.org/works/10.21105/joss.03941) | times referenced, per Crossref |
-| citations | 184 | all-time | [dimensions](https://metrics-api.dimensions.ai/doi/10.21105/joss.03941) |  |
-| recent_citations | 92 | last two calendar years | [dimensions](https://metrics-api.dimensions.ai/doi/10.21105/joss.03941) | resets each 1 January; not a rolling 24-month window |
+| citations | 139 | all-time | [openalex](https://api.openalex.org/works/doi:10.21105/joss.03941) |  |
+| fwci | 8.49 | all-time | [openalex](https://api.openalex.org/works/doi:10.21105/joss.03941) | field-weighted citation impact; 1.0 = world average |
+| citation_percentile | 99.01 | all-time | [openalex](https://api.openalex.org/works/doi:10.21105/joss.03941) | top 1% in its field, year, and type |
+| citations | 182 | all-time | [crossref](https://api.crossref.org/works/10.21105/joss.03941) | times referenced, per Crossref |
+| citations | 195 | all-time | [dimensions](https://metrics-api.dimensions.ai/doi/10.21105/joss.03941) |  |
+| recent_citations | 100 | last two calendar years | [dimensions](https://metrics-api.dimensions.ai/doi/10.21105/joss.03941) | resets each 1 January; not a rolling 24-month window |
 | europe_pmc | N/A |  |  | not found in Europe PMC |
 
 ### Attention
@@ -56,29 +56,29 @@ _boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
 
 | Metric | Value | Window | Provider | Detail |
 | --- | --- | --- | --- | --- |
-| stars | 274 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa) |  |
+| stars | 279 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa) |  |
 | forks | 20 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa) |  |
 | watchers | 3 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa) | users watching the repo (subscribers) |
-| repo_age_years | 7.01 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa) | since 2019-09-26 |
+| repo_age_years | 7.10 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa) | since 2019-09-26 |
 | contributors | 9 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa/contributors?per_page=1&anon=true) |  |
-| release_downloads | 3741 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa/releases?per_page=100) | summed across release assets |
-| cohort_rank (alignment) | 61 | all-time | [github](https://api.github.com/search/repositories?q=topic:alignment+stars:%3E274&per_page=1) | #61 of 1464 repos tagged 'alignment'; GitHub topics are inconsistently applied |
-| cohort_rank (bam) | 4 | all-time | [github](https://api.github.com/search/repositories?q=topic:bam+stars:%3E274&per_page=1) | #4 of 223 repos tagged 'bam'; GitHub topics are inconsistently applied |
-| cohort_rank (bioinformatics) | 229 | all-time | [github](https://api.github.com/search/repositories?q=topic:bioinformatics+stars:%3E274&per_page=1) |  |
-| cohort_rank (coverage) | 55 | all-time | [github](https://api.github.com/search/repositories?q=topic:coverage+stars:%3E274&per_page=1) | #55 of 2085 repos tagged 'coverage'; GitHub topics are inconsistently applied |
-| cohort_rank (downsample) | 2 | all-time | [github](https://api.github.com/search/repositories?q=topic:downsample+stars:%3E274&per_page=1) | #2 of 22 repos tagged 'downsample'; GitHub topics are inconsistently applied |
-| cohort_rank (fasta) | 13 | all-time | [github](https://api.github.com/search/repositories?q=topic:fasta+stars:%3E274&per_page=1) | #13 of 606 repos tagged 'fasta'; GitHub topics are inconsistently applied |
-| cohort_rank (fastq) | 8 | all-time | [github](https://api.github.com/search/repositories?q=topic:fastq+stars:%3E274&per_page=1) | #8 of 370 repos tagged 'fastq'; GitHub topics are inconsistently applied |
-| cohort_rank (genome-analysis) | 5 | all-time | [github](https://api.github.com/search/repositories?q=topic:genome-analysis+stars:%3E274&per_page=1) |  |
-| cohort_rank (random) | 49 | all-time | [github](https://api.github.com/search/repositories?q=topic:random+stars:%3E274&per_page=1) | #49 of 5669 repos tagged 'random'; GitHub topics are inconsistently applied |
-| cohort_rank (rust) | 3631 | all-time | [github](https://api.github.com/search/repositories?q=topic:rust+stars:%3E274&per_page=1) | #3631 of 129843 repos tagged 'rust'; GitHub topics are inconsistently applied |
-| cohort_rank (subsampling) | 3 | all-time | [github](https://api.github.com/search/repositories?q=topic:subsampling+stars:%3E274&per_page=1) | #3 of 29 repos tagged 'subsampling'; GitHub topics are inconsistently applied |
+| release_downloads | 3898 | all-time | [github](https://api.github.com/repos/mbhall88/rasusa/releases?per_page=100) | summed across release assets |
+| cohort_rank (alignment) | 61 | all-time | [github](https://api.github.com/search/repositories?q=topic:alignment+stars:%3E279&per_page=1) | #61 of 1522 repos tagged 'alignment'; GitHub topics are inconsistently applied |
+| cohort_rank (bam) | 4 | all-time | [github](https://api.github.com/search/repositories?q=topic:bam+stars:%3E279&per_page=1) | #4 of 226 repos tagged 'bam'; GitHub topics are inconsistently applied |
+| cohort_rank (bioinformatics) | 225 | all-time | [github](https://api.github.com/search/repositories?q=topic:bioinformatics+stars:%3E279&per_page=1) |  |
+| cohort_rank (coverage) | 53 | all-time | [github](https://api.github.com/search/repositories?q=topic:coverage+stars:%3E279&per_page=1) | #53 of 2123 repos tagged 'coverage'; GitHub topics are inconsistently applied |
+| cohort_rank (downsample) | 2 | all-time | [github](https://api.github.com/search/repositories?q=topic:downsample+stars:%3E279&per_page=1) | #2 of 22 repos tagged 'downsample'; GitHub topics are inconsistently applied |
+| cohort_rank (fasta) | 13 | all-time | [github](https://api.github.com/search/repositories?q=topic:fasta+stars:%3E279&per_page=1) | #13 of 636 repos tagged 'fasta'; GitHub topics are inconsistently applied |
+| cohort_rank (fastq) | 8 | all-time | [github](https://api.github.com/search/repositories?q=topic:fastq+stars:%3E279&per_page=1) | #8 of 392 repos tagged 'fastq'; GitHub topics are inconsistently applied |
+| cohort_rank (genome-analysis) | 5 | all-time | [github](https://api.github.com/search/repositories?q=topic:genome-analysis+stars:%3E279&per_page=1) |  |
+| cohort_rank (random) | 48 | all-time | [github](https://api.github.com/search/repositories?q=topic:random+stars:%3E279&per_page=1) | #48 of 5725 repos tagged 'random'; GitHub topics are inconsistently applied |
+| cohort_rank (rust) | 3742 | all-time | [github](https://api.github.com/search/repositories?q=topic:rust+stars:%3E279&per_page=1) | #3742 of 146619 repos tagged 'rust'; GitHub topics are inconsistently applied |
+| cohort_rank (subsampling) | 3 | all-time | [github](https://api.github.com/search/repositories?q=topic:subsampling+stars:%3E279&per_page=1) | #3 of 29 repos tagged 'subsampling'; GitHub topics are inconsistently applied |
 
 ### Attention
 
 | Metric | Value | Window | Provider | Detail |
 | --- | --- | --- | --- | --- |
-| mentions | 17 | all-time | [openalex](https://api.openalex.org/works?filter=fulltext.search%3A%22github.com%2Fmbhall88%2Frasusa%22%2Ctype%3Aarticle%7Cpreprint&per-page=1&select=id) |  |
+| mentions | 13 | all-time | [openalex](https://api.openalex.org/works?filter=fulltext.search%3A%22github.com%2Fmbhall88%2Frasusa%22%2Ctype%3Aarticle%7Cpreprint&per-page=1&select=id) |  |
 | mentions | 12 | all-time | [europe_pmc](https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%22github.com%2Fmbhall88%2Frasusa%22%20AND%20%28SRC%3AMED%20OR%20SRC%3APPR%29&pageSize=1&resultType=idlist&format=json) |  |
 
 ## crates:rasusa
@@ -87,7 +87,7 @@ _boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
 
 | Metric | Value | Window | Provider | Detail |
 | --- | --- | --- | --- | --- |
-| downloads | 19334 | all-time | [crates.io](https://crates.io/api/v1/crates/rasusa) |  |
+| downloads | 19405 | all-time | [crates.io](https://crates.io/api/v1/crates/rasusa) |  |
 
 ## conda:bioconda/rasusa
 
@@ -95,11 +95,11 @@ _boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
 
 | Metric | Value | Window | Provider | Detail |
 | --- | --- | --- | --- | --- |
-| downloads | 59207 | all-time | [bioconda](https://api.anaconda.org/package/bioconda/rasusa) |  |
+| downloads | 60775 | all-time | [bioconda](https://api.anaconda.org/package/bioconda/rasusa) |  |
 
 ## Downloads Rollup (derived — see channels above)
 
-- **82282** all-time = github:mbhall88/rasusa (3741) + crates:rasusa (19334) + conda:bioconda/rasusa (59207)
+- **84078** all-time = github:mbhall88/rasusa (3898) + crates:rasusa (19405) + conda:bioconda/rasusa (60775)
 
 ## Notices
 
@@ -107,8 +107,8 @@ _boast 0.6.0 — as of 2026-10-01T09:58:24.899290469Z_
 - English Wikipedia full-text search hits for this DOI; other-language Wikipedias are not counted
 - indexed full-text search estimate, not a formal citation or verified literal URL count; partial coverage; self-mentions are included; article/preprint versions may be counted separately
 - indexed full-text search estimate, not a formal citation or verified literal URL count; partial coverage concentrated in life-sciences literature; self-mentions are included; journal article/preprint versions may be counted separately
-- #229 of 17223 repos tagged 'bioinformatics'; GitHub topics are inconsistently applied
-- #5 of 206 repos tagged 'genome-analysis'; GitHub topics are inconsistently applied
+- #225 of 18503 repos tagged 'bioinformatics'; GitHub topics are inconsistently applied
+- #5 of 208 repos tagged 'genome-analysis'; GitHub topics are inconsistently applied
 
 ## Provider Notes
 
