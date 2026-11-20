@@ -327,6 +327,64 @@ fn reads_bam_to_sam() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Runs `rasusa reads` and returns what it wrote to stdout.
+fn reads_stdout(args: &[&str]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin(BIN)?;
+    cmd.arg(READS).args(args);
+    Ok(cmd.assert().success().get_output().stdout.clone())
+}
+
+#[test]
+fn reads_alignment_explicit_fastx_output_format_to_stdout() -> Result<(), Box<dyn std::error::Error>>
+{
+    let inputs = [
+        "tests/cases/ubam/single_usam.sam",
+        "tests/cases/ubam/single_ubam.bam",
+        "tests/cases/ubam/single_ucram.cram",
+        "tests/cases/ubam/paired_interleave_ubam.bam",
+    ];
+    let targets: [&[&str]; 2] = [&["-p", "0.5"], &["-f", "0.5"]]; // one-pass, two-pass
+    for input in inputs {
+        for target in targets {
+            for format in ["fastq", "fasta"] {
+                let mut args = vec![input, "-s", "1", "-O", format];
+                args.extend_from_slice(target);
+                let out = reads_stdout(&args)?;
+                let lines: Vec<&[u8]> = out.split(|&b| b == b'\n').collect();
+                let is_expected_format = match format {
+                    "fastq" => {
+                        lines[0].starts_with(b"@")
+                            && lines.get(2).is_some_and(|l| l.starts_with(b"+"))
+                    }
+                    _ => lines[0].starts_with(b">"),
+                };
+                assert!(
+                    is_expected_format,
+                    "{input} {target:?} -O {format}: expected {format} on stdout, got {:?}",
+                    String::from_utf8_lossy(&out[..out.len().min(40)])
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn reads_alignment_without_output_format_to_stdout_keeps_input_format(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let sam = reads_stdout(&["tests/cases/ubam/single_usam.sam", "-p", "0.5", "-s", "1"])?;
+    let header_tags: [&[u8]; 5] = [b"@HD\t", b"@SQ\t", b"@RG\t", b"@PG\t", b"@CO\t"];
+    assert!(
+        header_tags.iter().any(|tag| sam.starts_with(tag)),
+        "expected a SAM header on stdout"
+    );
+
+    // BAM is BGZF-compressed, which starts with the gzip magic bytes.
+    let bam = reads_stdout(&["tests/cases/ubam/single_ubam.bam", "-f", "0.5", "-s", "1"])?;
+    assert!(bam.starts_with(&[0x1f, 0x8b]), "expected BAM on stdout");
+    Ok(())
+}
+
 #[test]
 fn reads_reproducibility() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin(BIN)?;
