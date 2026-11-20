@@ -248,6 +248,31 @@ impl Reads {
         self.output.get(idx).unwrap_or(&self.input[idx])
     }
 
+    /// How to encode output `idx`: as an alignment format, or as FASTA/FASTQ.
+    ///
+    /// An explicit `--output-format` always wins. Without one, the format is inferred from the
+    /// output path's extension, or, when writing to stdout, follows the input's format.
+    fn output_encoding_for(
+        &self,
+        idx: usize,
+        input_format: Option<noodles_util::alignment::io::Format>,
+    ) -> OutputEncoding {
+        let alignment_format = if self.output_format.is_some() {
+            output_alignment_format(self.output_format.as_ref())
+        } else {
+            match self.output.get(idx) {
+                Some(path) => infer_format_from_path(path),
+                None => input_format,
+            }
+        };
+        match alignment_format {
+            Some(fmt) => OutputEncoding::Alignment(fmt),
+            None => OutputEncoding::Fastx {
+                fasta: is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(idx)),
+            },
+        }
+    }
+
     /// Builds the primary (first/only) output sink: stdout (optionally compressed) if no
     /// `--output` path was given, otherwise the first `--output` file.
     fn create_primary_output_handle(&self) -> Result<Box<dyn std::io::Write>> {
@@ -290,23 +315,7 @@ impl Reads {
             source.check_name_grouped()?;
             let mut output_handle = self.create_primary_output_handle()?;
 
-            let output_format =
-                output_alignment_format(self.output_format.as_ref()).or_else(|| {
-                    if self.output.is_empty() {
-                        input_format
-                    } else {
-                        infer_format_from_path(&self.output[0])
-                    }
-                });
-            let encoding = match output_format {
-                Some(fmt) => OutputEncoding::Alignment(fmt),
-                None => OutputEncoding::Fastx {
-                    fasta: is_fasta_output(
-                        self.output_format.as_ref(),
-                        self.fallback_format_path(0),
-                    ),
-                },
-            };
+            let encoding = self.output_encoding_for(0, input_format);
 
             source.subsample_one_pass(fraction, self.seed, &mut *output_handle, encoding)?
         } else {
@@ -574,20 +583,7 @@ impl Reads {
             );
         }
 
-        let output_format_1 = output_alignment_format(self.output_format.as_ref()).or_else(|| {
-            if self.output.is_empty() {
-                input_format
-            } else {
-                infer_format_from_path(&self.output[0])
-            }
-        });
-
-        let encoding_1 = match output_format_1 {
-            Some(fmt) => OutputEncoding::Alignment(fmt),
-            None => OutputEncoding::Fastx {
-                fasta: is_fasta_output(self.output_format.as_ref(), self.fallback_format_path(0)),
-            },
-        };
+        let encoding_1 = self.output_encoding_for(0, input_format);
 
         let mut total_kept_bases = input_source.filter_reads_into(
             &reads_to_keep,
@@ -602,24 +598,7 @@ impl Reads {
 
             let mut second_output_handle = self.create_second_output_handle()?;
 
-            let output_format_2 =
-                output_alignment_format(self.output_format.as_ref()).or_else(|| {
-                    if self.output.len() < 2 {
-                        second_input_format
-                    } else {
-                        infer_format_from_path(&self.output[1])
-                    }
-                });
-
-            let encoding_2 = match output_format_2 {
-                Some(fmt) => OutputEncoding::Alignment(fmt),
-                None => OutputEncoding::Fastx {
-                    fasta: is_fasta_output(
-                        self.output_format.as_ref(),
-                        self.fallback_format_path(1),
-                    ),
-                },
-            };
+            let encoding_2 = self.output_encoding_for(1, second_input_format);
 
             total_kept_bases += second_input_source.filter_reads_into(
                 &reads_to_keep,
