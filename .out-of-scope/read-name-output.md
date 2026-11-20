@@ -11,12 +11,12 @@ Rasusa already provides two ways to recover the kept reads' names, so a dedicate
 
    ```sh
    hifiasm -o asm <(
-     rasusa reads -p 0.5 -s 12345 -o /dev/stdout -O fastq reads.bam \
+     rasusa reads -p 0.5 -s 12345 -O fastq reads.bam \
        | tee >(awk 'NR % 4 == 1 { print substr($1, 2) }' > kept.reads.list)
    )
    ```
 
-   (`-o /dev/stdout` is only needed until #238 is fixed; after that `-O fastq` alone is enough.)
+   (Rasusa before 5.1.1 also needs `-o /dev/stdout` here: see #238.)
 
 A dedicated `--read-names <FILE>` flag would add CLI surface and would have to be threaded through every place Rasusa writes output (FASTX two-pass, one-pass single-end and paired, and alignment-source two-pass and one-pass). It would also need defined semantics for paired templates. For a need these workarounds already cover, that cost is not justified.
 
